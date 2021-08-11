@@ -84,12 +84,13 @@ namespace {
             throw runtime_error("Wallet is not initialized yet");
         }
 
-        bool ready;
-        if (!wallet->multisig(&ready)) {
+        tools::wallet2::multisig_status status{wallet->get_multisig_status()};
+
+        if (!status.is_multisig) {
             throw runtime_error("Wallet is not multisig");
         }
 
-        if (!ready) {
+        if (!status.is_ready) {
             throw runtime_error("Multisig wallet is not finalized yet");
         }
     }
@@ -102,12 +103,13 @@ namespace {
             throw runtime_error("Wallet is not initialized yet");
         }
 
-        bool ready;
-        if (!wallet->multisig(&ready)) {
+        tools::wallet2::multisig_status status{wallet->get_multisig_status()};
+
+        if (!status.is_multisig) {
             throw runtime_error("Wallet is not multisig");
         }
 
-        if (ready) {
+        if (status.is_ready) {
             throw runtime_error("Multisig wallet is already finalized");
         }
     }
@@ -1324,7 +1326,12 @@ void WalletImpl::setSubaddressLabel(uint32_t accountIndex, uint32_t addressIndex
 
 MultisigState WalletImpl::multisig() const {
     MultisigState state;
-    state.isMultisig = m_wallet->multisig(&state.isReady, &state.threshold, &state.total);
+    tools::wallet2::multisig_status status{m_wallet->get_multisig_status()};
+
+    state.isMultisig = status.is_multisig;
+    state.isReady = status.is_ready;
+    state.threshold = status.threshold;
+    state.total = status.total;
 
     return state;
 }
@@ -1345,7 +1352,7 @@ string WalletImpl::makeMultisig(const vector<string>& info, const uint32_t thres
     try {
         clearStatus();
 
-        if (m_wallet->multisig()) {
+        if (m_wallet->get_multisig_status().is_multisig) {
             throw runtime_error("Wallet is already multisig");
         }
 
@@ -2080,8 +2087,8 @@ std::string WalletImpl::signMultisigParticipant(const std::string &message) cons
 {
     clearStatus();
 
-    bool ready = false;
-    if (!m_wallet->multisig(&ready) || !ready) {
+    tools::wallet2::multisig_status status{m_wallet->get_multisig_status()};
+    if (!status.is_multisig || !status.is_ready) {
         m_status = Status_Error;
         m_errorString = tr("The wallet must be in multisig ready state");
         return {};

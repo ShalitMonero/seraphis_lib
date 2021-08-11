@@ -188,9 +188,7 @@ static void make_wallets(std::vector<tools::wallet2>& wallets, unsigned int M)
 
   // wallets should not be multisig yet
   for (const auto &wallet: wallets)
-  {
-    ASSERT_FALSE(wallet.multisig());
-  }
+    ASSERT_FALSE(wallet.get_multisig_status().is_multisig);
 
   // make wallets multisig, get second round kex messages (if appropriate)
   std::vector<std::string> intermediate_infos(wallets.size());
@@ -204,11 +202,11 @@ static void make_wallets(std::vector<tools::wallet2>& wallets, unsigned int M)
 
   // perform kex rounds until kex is complete
   bool ready;
-  wallets[0].multisig(&ready);
-  while (!ready)
+  tools::wallet2::multisig_status status{wallets[0].get_multisig_status()};
+  while (!status.is_ready)
   {
     intermediate_infos = exchange_round(wallets, intermediate_infos);
-    wallets[0].multisig(&ready);
+    status = wallets[0].get_multisig_status();
 
     ++rounds_complete;
   }

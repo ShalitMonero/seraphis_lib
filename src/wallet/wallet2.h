@@ -309,6 +309,14 @@ private:
       END_SERIALIZE()
     };
 
+    struct multisig_status
+    {
+      bool is_multisig{false};
+      bool is_ready{false};
+      std::uint32_t threshold{0};
+      std::uint32_t total{0};
+    };
+
     struct tx_scan_info_t
     {
       cryptonote::keypair in_ephemeral;
@@ -982,7 +990,7 @@ private:
 
     cryptonote::network_type nettype() const { return m_nettype; }
     bool watch_only() const { return m_watch_only; }
-    bool multisig(bool *ready = NULL, uint32_t *threshold = NULL, uint32_t *total = NULL) const;
+    multisig_status get_multisig_status() const;
     bool has_multisig_partial_key_images() const;
     bool has_unknown_key_images() const;
     bool get_multisig_seed(epee::wipeable_string& seed, const epee::wipeable_string &passphrase = std::string(), bool raw = true) const;

@@ -2385,7 +2385,7 @@ namespace wallet_rpc
     };
     typedef epee::misc_utils::struct_init<response_t> response;
   };
-  
+
   struct COMMAND_RPC_IS_MULTISIG
   {
     struct request_t

@@ -1400,14 +1400,14 @@ bool wallet2::get_seed(epee::wipeable_string& electrum_words, const epee::wipeab
 //----------------------------------------------------------------------------------------------------
 bool wallet2::get_multisig_seed(epee::wipeable_string& seed, const epee::wipeable_string &passphrase, bool raw) const
 {
-  bool ready;
-  uint32_t threshold, total;
-  if (!multisig(&ready, &threshold, &total))
+  wallet2::multisig_status status{get_multisig_status()};
+
+  if (!status.is_multisig)
   {
     std::cout << "This is not a multisig wallet" << std::endl;
     return false;
   }
-  if (!ready)
+  if (!status.is_ready)
   {
     std::cout << "This multisig wallet is not yet finalized" << std::endl;
     return false;
@@ -1422,8 +1422,8 @@ bool wallet2::get_multisig_seed(epee::wipeable_string& seed, const epee::wipeabl
   crypto::public_key pkey;
   const account_keys &keys = get_account().get_keys();
   epee::wipeable_string data;
-  data.append((const char*)&threshold, sizeof(uint32_t));
-  data.append((const char*)&total, sizeof(uint32_t));
+  data.append((const char*)&status.threshold, sizeof(uint32_t));
+  data.append((const char*)&status.total, sizeof(uint32_t));
   skey = keys.m_spend_secret_key;
   data.append((const char*)&skey, sizeof(skey));
   pkey = keys.m_account_address.m_spend_public_key;
@@ -5094,9 +5094,9 @@ std::string wallet2::make_multisig(const epee::wipeable_string &password,
 std::string wallet2::exchange_multisig_keys(const epee::wipeable_string &password,
   const std::vector<std::string> &kex_messages)
 {
-  bool ready{false};
-  CHECK_AND_ASSERT_THROW_MES(multisig(&ready), "The wallet is not multisig");
-  CHECK_AND_ASSERT_THROW_MES(!ready, "Multisig wallet creation process has already been finished");
+  wallet2::multisig_status status{get_multisig_status()};
+  CHECK_AND_ASSERT_THROW_MES(status.is_multisig, "The wallet is not multisig");
+  CHECK_AND_ASSERT_THROW_MES(!status.is_ready, "Multisig wallet creation process has already been finished");
   CHECK_AND_ASSERT_THROW_MES(kex_messages.size() > 0, "No key exchange messages passed in.");
 
   // decrypt account keys
@@ -5216,20 +5216,27 @@ std::string wallet2::get_multisig_first_kex_msg() const
   return multisig_account.get_next_kex_round_msg();
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet2::multisig(bool *ready, uint32_t *threshold, uint32_t *total) const
+wallet2::multisig_status wallet2::get_multisig_status() const
 {
-  if (!m_multisig)
-    return false;
-  if (threshold)
-    *threshold = m_multisig_threshold;
-  if (total)
-    *total = m_multisig_signers.size();
-  if (ready)
+  multisig_status ret;
+
+  if (m_multisig)
   {
-    *ready = !(get_account().get_keys().m_account_address.m_spend_public_key == rct::rct2pk(rct::identity())) &&
+    ret.is_multisig = true;
+    ret.threshold = m_multisig_threshold;
+    ret.total = m_multisig_signers.size();
+    ret.is_ready = !(get_account().get_keys().m_account_address.m_spend_public_key == rct::rct2pk(rct::identity())) &&
       (m_multisig_rounds_passed == multisig::multisig_kex_rounds_required(m_multisig_signers.size(), m_multisig_threshold) + 1);
   }
-  return true;
+  else
+  {
+    ret.is_multisig = false;
+    ret.threshold = 0;
+    ret.total = 0;
+    ret.is_ready = false;
+  }
+
+  return ret;
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet2::has_multisig_partial_key_images() const
@@ -14013,9 +14020,12 @@ void wallet2::generate_genesis(cryptonote::block& b) const {
 //----------------------------------------------------------------------------------------------------
 mms::multisig_wallet_state wallet2::get_multisig_wallet_state() const
 {
+  wallet2::multisig_status status{get_multisig_status()};
+
   mms::multisig_wallet_state state;
   state.nettype = m_nettype;
-  state.multisig = multisig(&state.multisig_is_ready);
+  state.multisig = status.is_multisig;
+  state.multisig_is_ready = status.is_ready;
   state.has_multisig_partial_key_images = has_multisig_partial_key_images();
   state.multisig_rounds_passed = m_multisig_rounds_passed;
   state.num_transfer_details = m_transfers.size();
