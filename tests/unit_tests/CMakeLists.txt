@@ -115,6 +115,7 @@ target_link_libraries(unit_tests
     daemon_rpc_server
     blockchain_db
     lmdb_lib
+    math
     rpc
     net
     serialization

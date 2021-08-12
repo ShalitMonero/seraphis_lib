@@ -48,6 +48,7 @@ target_link_libraries(blockchain_db
   PUBLIC
     common
     cncrypto
+    math
     ringct
     ${LMDB_LIBRARY}
     ${Boost_FILESYSTEM_LIBRARY}

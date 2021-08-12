@@ -33,6 +33,8 @@
 #include "rolling_median.h"
 #include "crypto/crypto.h"
 
+using namespace cryptonote;
+
 TEST(rolling_median, one)
 {
   rolling_median_t<uint64_t> m(1);
