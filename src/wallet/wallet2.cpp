@@ -1400,14 +1400,14 @@ bool wallet2::get_seed(epee::wipeable_string& electrum_words, const epee::wipeab
 //----------------------------------------------------------------------------------------------------
 bool wallet2::get_multisig_seed(epee::wipeable_string& seed, const epee::wipeable_string &passphrase, bool raw) const
 {
-  wallet2::multisig_status status{get_multisig_status()};
+  const multisig::multisig_account_status ms_status{get_multisig_status()};
 
-  if (!status.is_multisig)
+  if (!ms_status.multisig_is_active)
   {
     std::cout << "This is not a multisig wallet" << std::endl;
     return false;
   }
-  if (!status.is_ready)
+  if (!ms_status.is_ready)
   {
     std::cout << "This multisig wallet is not yet finalized" << std::endl;
     return false;
@@ -1422,8 +1422,8 @@ bool wallet2::get_multisig_seed(epee::wipeable_string& seed, const epee::wipeabl
   crypto::public_key pkey;
   const account_keys &keys = get_account().get_keys();
   epee::wipeable_string data;
-  data.append((const char*)&status.threshold, sizeof(uint32_t));
-  data.append((const char*)&status.total, sizeof(uint32_t));
+  data.append((const char*)&ms_status.threshold, sizeof(uint32_t));
+  data.append((const char*)&ms_status.total, sizeof(uint32_t));
   skey = keys.m_spend_secret_key;
   data.append((const char*)&skey, sizeof(skey));
   pkey = keys.m_account_address.m_spend_public_key;
@@ -5094,9 +5094,9 @@ std::string wallet2::make_multisig(const epee::wipeable_string &password,
 std::string wallet2::exchange_multisig_keys(const epee::wipeable_string &password,
   const std::vector<std::string> &kex_messages)
 {
-  wallet2::multisig_status status{get_multisig_status()};
-  CHECK_AND_ASSERT_THROW_MES(status.is_multisig, "The wallet is not multisig");
-  CHECK_AND_ASSERT_THROW_MES(!status.is_ready, "Multisig wallet creation process has already been finished");
+  const multisig::multisig_account_status ms_status{get_multisig_status()};
+  CHECK_AND_ASSERT_THROW_MES(ms_status.multisig_is_active, "The wallet is not multisig");
+  CHECK_AND_ASSERT_THROW_MES(!ms_status.is_ready, "Multisig wallet creation process has already been finished");
   CHECK_AND_ASSERT_THROW_MES(kex_messages.size() > 0, "No key exchange messages passed in.");
 
   // decrypt account keys
@@ -5216,13 +5216,13 @@ std::string wallet2::get_multisig_first_kex_msg() const
   return multisig_account.get_next_kex_round_msg();
 }
 //----------------------------------------------------------------------------------------------------
-wallet2::multisig_status wallet2::get_multisig_status() const
+multisig::multisig_account_status wallet2::get_multisig_status() const
 {
-  multisig_status ret;
+  multisig::multisig_account_status ret;
 
   if (m_multisig)
   {
-    ret.is_multisig = true;
+    ret.multisig_is_active = true;
     ret.threshold = m_multisig_threshold;
     ret.total = m_multisig_signers.size();
     ret.is_ready = !(get_account().get_keys().m_account_address.m_spend_public_key == rct::rct2pk(rct::identity())) &&
@@ -5230,7 +5230,7 @@ wallet2::multisig_status wallet2::get_multisig_status() const
   }
   else
   {
-    ret.is_multisig = false;
+    ret.multisig_is_active = false;
     ret.threshold = 0;
     ret.total = 0;
     ret.is_ready = false;
@@ -14020,12 +14020,12 @@ void wallet2::generate_genesis(cryptonote::block& b) const {
 //----------------------------------------------------------------------------------------------------
 mms::multisig_wallet_state wallet2::get_multisig_wallet_state() const
 {
-  wallet2::multisig_status status{get_multisig_status()};
+  const multisig::multisig_account_status ms_status{get_multisig_status()};
 
   mms::multisig_wallet_state state;
   state.nettype = m_nettype;
-  state.multisig = status.is_multisig;
-  state.multisig_is_ready = status.is_ready;
+  state.multisig = ms_status.multisig_is_active;
+  state.multisig_is_ready = ms_status.is_ready;
   state.has_multisig_partial_key_images = has_multisig_partial_key_images();
   state.multisig_rounds_passed = m_multisig_rounds_passed;
   state.num_transfer_details = m_transfers.size();

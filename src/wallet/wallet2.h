@@ -57,6 +57,8 @@
 #include "common/util.h"
 #include "crypto/chacha.h"
 #include "crypto/hash.h"
+#include "multisig/multisig.h"
+#include "multisig/multisig_account.h"
 #include "ringct/rctTypes.h"
 #include "ringct/rctOps.h"
 #include "checkpoints/checkpoints.h"
@@ -307,14 +309,6 @@ private:
         FIELD(m_LR)
         FIELD(m_partial_key_images)
       END_SERIALIZE()
-    };
-
-    struct multisig_status
-    {
-      bool is_multisig{false};
-      bool is_ready{false};
-      std::uint32_t threshold{0};
-      std::uint32_t total{0};
     };
 
     struct tx_scan_info_t
@@ -990,7 +984,7 @@ private:
 
     cryptonote::network_type nettype() const { return m_nettype; }
     bool watch_only() const { return m_watch_only; }
-    multisig_status get_multisig_status() const;
+    multisig::multisig_account_status get_multisig_status() const;
     bool has_multisig_partial_key_images() const;
     bool has_unknown_key_images() const;
     bool get_multisig_seed(epee::wipeable_string& seed, const epee::wipeable_string &passphrase = std::string(), bool raw = true) const;
