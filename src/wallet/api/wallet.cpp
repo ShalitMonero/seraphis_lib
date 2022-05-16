@@ -38,7 +38,7 @@
 #include "subaddress_account.h"
 #include "common_defines.h"
 #include "common/util.h"
-#include "multisig/multisig.h"
+#include "multisig/multisig_account.h"
 
 #include "mnemonics/electrum-words.h"
 #include "mnemonics/english.h"
@@ -1330,6 +1330,7 @@ MultisigState WalletImpl::multisig() const {
     const multisig::multisig_account_status ms_status{m_wallet->get_multisig_status()};
 
     state.isMultisig = ms_status.multisig_is_active;
+    state.kexIsDone = ms_status.kex_is_done;
     state.isReady = ms_status.is_ready;
     state.threshold = ms_status.threshold;
     state.total = ms_status.total;

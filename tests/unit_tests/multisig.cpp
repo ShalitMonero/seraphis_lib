@@ -123,6 +123,7 @@ static void check_results(const std::vector<std::string> &intermediate_infos,
     EXPECT_TRUE(!intermediate_infos[i].empty());
     const multisig::multisig_account_status ms_status{wallets[i].get_multisig_status()};
     EXPECT_TRUE(ms_status.multisig_is_active);
+    EXPECT_TRUE(ms_status.kex_is_done);
     EXPECT_TRUE(ms_status.is_ready);
     EXPECT_TRUE(ms_status.threshold == M);
     EXPECT_TRUE(ms_status.total == wallets.size());

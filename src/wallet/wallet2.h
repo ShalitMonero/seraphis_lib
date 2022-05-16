@@ -57,7 +57,6 @@
 #include "common/util.h"
 #include "crypto/chacha.h"
 #include "crypto/hash.h"
-#include "multisig/multisig.h"
 #include "multisig/multisig_account.h"
 #include "ringct/rctTypes.h"
 #include "ringct/rctOps.h"

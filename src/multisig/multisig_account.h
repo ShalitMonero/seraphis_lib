@@ -44,6 +44,8 @@ namespace multisig
   {
     // is the multisig account active/initialized?
     bool multisig_is_active{false};
+    // has the multisig account completed the main key exchange rounds?
+    bool kex_is_done{false};
     // is the multisig account ready to use?
     bool is_ready{false};
     // multisig is: M-of-N

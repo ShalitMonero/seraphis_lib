@@ -47,7 +47,7 @@
 // advance which version they will stop working with
 // Don't go over 32767 for any of these
 #define WALLET_RPC_VERSION_MAJOR 1
-#define WALLET_RPC_VERSION_MINOR 25
+#define WALLET_RPC_VERSION_MINOR 26
 #define MAKE_WALLET_RPC_VERSION(major,minor) (((major)<<16)|(minor))
 #define WALLET_RPC_VERSION MAKE_WALLET_RPC_VERSION(WALLET_RPC_VERSION_MAJOR, WALLET_RPC_VERSION_MINOR)
 namespace tools
@@ -2385,7 +2385,7 @@ namespace wallet_rpc
     };
     typedef epee::misc_utils::struct_init<response_t> response;
   };
-
+  
   struct COMMAND_RPC_IS_MULTISIG
   {
     struct request_t
@@ -2398,12 +2398,14 @@ namespace wallet_rpc
     struct response_t
     {
       bool multisig;
+      bool kex_is_done;
       bool ready;
       uint32_t threshold;
       uint32_t total;
 
       BEGIN_KV_SERIALIZE_MAP()
         KV_SERIALIZE(multisig)
+        KV_SERIALIZE(kex_is_done)
         KV_SERIALIZE(ready)
         KV_SERIALIZE(threshold)
         KV_SERIALIZE(total)

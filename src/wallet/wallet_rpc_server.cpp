@@ -3918,6 +3918,7 @@ namespace tools
     const multisig::multisig_account_status ms_status{m_wallet->get_multisig_status()};
 
     res.multisig = ms_status.multisig_is_active;
+    res.kex_is_done = ms_status.kex_is_done;
     res.ready = ms_status.is_ready;
     res.threshold = ms_status.threshold;
     res.total = ms_status.total;

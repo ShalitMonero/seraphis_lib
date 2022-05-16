@@ -5222,17 +5222,23 @@ multisig::multisig_account_status wallet2::get_multisig_status() const
 
   if (m_multisig)
   {
+    const std::size_t kex_rounds_required{
+        multisig::multisig_kex_rounds_required(m_multisig_signers.size(), m_multisig_threshold)
+      };
+
     ret.multisig_is_active = true;
     ret.threshold = m_multisig_threshold;
     ret.total = m_multisig_signers.size();
-    ret.is_ready = !(get_account().get_keys().m_account_address.m_spend_public_key == rct::rct2pk(rct::identity())) &&
-      (m_multisig_rounds_passed == multisig::multisig_kex_rounds_required(m_multisig_signers.size(), m_multisig_threshold) + 1);
+    ret.kex_is_done = !(get_account().get_keys().m_account_address.m_spend_public_key == rct::rct2pk(rct::identity())) &&
+      (m_multisig_rounds_passed >= kex_rounds_required);
+    ret.is_ready = ret.kex_is_done && (m_multisig_rounds_passed == kex_rounds_required + 1);
   }
   else
   {
     ret.multisig_is_active = false;
     ret.threshold = 0;
     ret.total = 0;
+    ret.kex_is_done = false;
     ret.is_ready = false;
   }
 
@@ -14026,6 +14032,7 @@ mms::multisig_wallet_state wallet2::get_multisig_wallet_state() const
   state.nettype = m_nettype;
   state.multisig = ms_status.multisig_is_active;
   state.multisig_is_ready = ms_status.is_ready;
+  state.multisig_kex_is_done = ms_status.kex_is_done;
   state.has_multisig_partial_key_images = has_multisig_partial_key_images();
   state.multisig_rounds_passed = m_multisig_rounds_passed;
   state.num_transfer_details = m_transfers.size();
