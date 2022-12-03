@@ -27,12 +27,7 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 set(seraphis_sources
-<<<<<<< HEAD
-=======
-  bulletproofs_plus2.cpp
-  grootle.cpp
   jamtis_account.cpp
->>>>>>> poor prototype to generate/store/load a wallet working without checksum
   jamtis_address_tag_utils.cpp
   jamtis_address_utils.cpp
   jamtis_core_utils.cpp

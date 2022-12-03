@@ -73,6 +73,12 @@ using namespace std;
 namespace sp {
 namespace jamtis {
 
+
+static const std::vector<int64_t> GEN{0x7a46a12681, 0xf48d424822, 0xab58143444,
+                               0x1eb0286888, 0x377244f510};
+static const int64_t M = 0xffeffffeff;
+static const std::string alphabet = "ybndrfg8ejkmcpqxot1uwis2a345h769";
+
 //-----------------------------------------------------------------
 static void derive_key(const crypto::chacha_key &base_key,
                        crypto::chacha_key &key) {
@@ -147,7 +153,7 @@ std::string account_base::get_address_tag(const crypto::secret_key sk,
   std::string m_k_et_tag = std::string(sk.data, 32);
   m_k_et_tag.append(tag);
 
-  unsigned char *hash_out;
+  unsigned char hash_out[8];
   size_t outlen = 8;
   std::string address_tag;
 
@@ -159,20 +165,51 @@ std::string account_base::get_address_tag(const crypto::secret_key sk,
   return base32::encode(address_tag);
 }
 
-std::string account_base::get_checksum(const std::string addr) {
-  // Should we use blake2b or something else?
-  using base32 = cppcodec::base32_z;
-  unsigned char *hash_out;
-  size_t outlen = 8;
-  std::string checksum;
+int64_t account_base::jamtis_polymod(const std::vector<int> data) {
+  int64_t c = 1;
+  int64_t b = 0;
+  for (const auto v : data) {
+    b = (c >> 35);
+    c = ((c & 0x07ffffffff) << 5) ^ v;
+    for (int64_t j = 0; j < 5; j++) {
+      if ((b >> j) & 1) {
+        c ^= GEN[j];
+      } else {
+        c ^= 0;
+      }
+    }
+  }
+  return c;
+}
 
-  blake2b(hash_out, outlen, addr.data(), addr.size(), nullptr, 0);
+bool account_base::jamtis_verify_checksum(const std::string data) {
+  std::vector<int> addr_data;
+  for (auto x : data) {
+    addr_data.push_back(alphabet.find(x));
+  }
+  return jamtis_polymod(addr_data) == M;
+}
 
-  char *hash_data = reinterpret_cast<char *>(hash_out);
-  checksum = std::string(hash_data, outlen);
+std::string account_base::get_checksum(const std::string addr_without_checksum) {
 
-  std::string checksum_encoded = base32::encode(checksum);
-  return checksum_encoded;
+  std::vector<int> addr_data;
+  for (auto x : addr_without_checksum) {
+    addr_data.push_back(alphabet.find(x));
+  }
+
+  std::vector<int> data_extended{addr_data};
+  data_extended.resize(addr_data.size() + 8);
+  int64_t polymod = jamtis_polymod(data_extended) ^ M;
+  for (int64_t i = 0; i < 8; i++) {
+    data_extended[addr_data.size() + i] = ((polymod >> 5 * (7 - i)) & 31);
+  }
+
+  std::string addr_with_checksum{};
+  for (uint64_t j = 0; j < data_extended.size(); j++) {
+    addr_with_checksum.push_back(alphabet[data_extended[j]]);
+  }
+
+  return addr_with_checksum;
 }
 
 std::string account_base::get_public_address_str() {
@@ -188,7 +225,7 @@ std::string account_base::get_public_address_str() {
       cryptonote::t_serializable_object_to_blob(m_keys.m_account_address);
   std::string address_main = base32::encode(address_main_ser);
   std::string address_tag;
-  std::string address_checksum{};
+  std::string address_checksum;
   std::string address_without_checksum;
 
   address_tag = get_address_tag(m_keys.m_k_et, str_tag);
@@ -197,7 +234,9 @@ std::string account_base::get_public_address_str() {
                              address_network + address_type + address_main +
                              address_tag;
 
-  // address_checksum = get_checksum(address_without_checksum);
+  cout << "Address without checksum: " << address_without_checksum << endl;
+  address_checksum = get_checksum(address_without_checksum);
+  cout << "Address with checksum:  " << address_checksum << endl;
 
   cout << "\n---Public keys---" << endl;
   cout << "K1: " << m_keys.m_account_address.K_1 << endl;
@@ -209,7 +248,7 @@ std::string account_base::get_public_address_str() {
 
   cout << "\n***Wallet address***" << endl;
 
-  return address_without_checksum + address_checksum;
+  return address_checksum;
 }
 //-----------------------------------------------------------------
 

@@ -158,23 +158,25 @@ public:
   /**
    * get checksum in base32
    */
-  std::string get_checksum(const std::string addr);
+  std::string get_checksum(const std::string addr_without_checksum);
+  bool jamtis_verify_checksum(const std::string data);
+  int64_t jamtis_polymod(const std::vector<int> data);
 
-  template <class t_archive>
-  inline void serialize(t_archive &a, const unsigned int /*ver*/) {
-    a &m_keys;
-    a &m_creation_timestamp;
-  }
+    template <class t_archive>
+    inline void serialize(t_archive & a, const unsigned int /*ver*/) {
+      a &m_keys;
+      a &m_creation_timestamp;
+    }
 
-  BEGIN_KV_SERIALIZE_MAP()
-  KV_SERIALIZE(m_keys)
-  KV_SERIALIZE(m_creation_timestamp)
-  END_KV_SERIALIZE_MAP()
+    BEGIN_KV_SERIALIZE_MAP()
+    KV_SERIALIZE(m_keys)
+    KV_SERIALIZE(m_creation_timestamp)
+    END_KV_SERIALIZE_MAP()
 
-private:
-  void set_null();
-  jamtis_keys m_keys;
-  uint64_t m_creation_timestamp;
-};
+  private:
+    void set_null();
+    jamtis_keys m_keys;
+    uint64_t m_creation_timestamp;
+  };
 } // namespace jamtis
 } // namespace sp

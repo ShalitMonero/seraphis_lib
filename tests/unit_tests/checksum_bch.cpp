@@ -67,31 +67,38 @@ int64_t jamtis_polymod(const std::vector<int> data) {
   return c;
 }
 
-bool jamtis_verify_checksum(const std::vector<int> data) { return jamtis_polymod(data) == M; }
-
-std::vector<int> jamtis_create_checksum(const std::vector<int> data) {
-  std::vector<int> data_extended{data};
-  data_extended.resize(data.size() + 8);
-  int64_t polymod = jamtis_polymod(data_extended) ^ M;
-  std::vector<int> checksum;
-  for (int64_t i = 0; i < 8; i++) {
-    data_extended[data.size() + i] = ((polymod >> 5 * (7 - i)) & 31);
+bool jamtis_verify_checksum(const std::string data) {
+  std::vector<int> addr_data;
+  for (auto x : data) {
+    addr_data.push_back(alphabet.find(x));
   }
-  return data_extended;
+  return jamtis_polymod(addr_data) == M;
 }
 
-TEST(checksum_bch, simple_test) {
+std::string jamtis_create_checksum(const std::string addr_without_checksum) {
   std::vector<int> addr_data;
-  for (auto x : addr_test) {
+  for (auto x : addr_without_checksum) {
     addr_data.push_back(alphabet.find(x));
   }
 
-  std::vector<int> address_with_checksum = jamtis_create_checksum(addr_data);
-  std::string addr_final{};
-  for (int i = 0; i < address_with_checksum.size(); i++)
-    addr_final.push_back(alphabet[address_with_checksum[i]]);
+  std::vector<int> data_extended{addr_data};
+  data_extended.resize(addr_data.size() + 8);
+  int64_t polymod = jamtis_polymod(data_extended) ^ M;
+  for (int64_t i = 0; i < 8; i++) {
+    data_extended[addr_data.size() + i] = ((polymod >> 5 * (7 - i)) & 31);
+  }
 
-  std::cout << "Final address: " << addr_final << std::endl;
+  std::string addr_with_checksum{};
+  for (int i = 0; i < data_extended.size(); i++)
+    addr_with_checksum.push_back(alphabet[data_extended[i]]);
+
+  std::cout << "Final address: " << addr_with_checksum << std::endl;
+  return addr_with_checksum;
+}
+
+TEST(checksum_bch, simple_test) {
+
+  std::string address_with_checksum = jamtis_create_checksum(addr_test);
 
   bool ver = jamtis_verify_checksum(address_with_checksum);
 

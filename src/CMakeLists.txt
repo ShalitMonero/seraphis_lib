@@ -97,12 +97,9 @@ add_subdirectory(blockchain_db)
 add_subdirectory(mnemonics)
 add_subdirectory(rpc)
 add_subdirectory(seraphis)
-<<<<<<< HEAD
 add_subdirectory(seraphis_crypto)
 add_subdirectory(seraphis_mocks)
-=======
 add_subdirectory(jsp)
->>>>>>> poor prototype to generate/store/load a wallet working without checksum
 if(NOT IOS)
   add_subdirectory(serialization)
 endif()
