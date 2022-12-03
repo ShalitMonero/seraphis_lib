@@ -42,6 +42,7 @@ set(unit_tests_sources
   canonical_amounts.cpp
   chacha.cpp
   checkpoints.cpp
+  checksum_bch.cpp
   command_line.cpp
   crypto.cpp
   decompose_amount_into_digits.cpp
