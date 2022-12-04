@@ -34,36 +34,30 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote
 // developers
 
-#include <fstream>
 
+//paired header
 #include "jamtis_account.h"
 
 // local headers
 #include "crypto/blake2b.h"
-
-#include "common/base32/cppcodec/base32_z.hpp"
 #include "common/base58.h"
-
+#include "common/base32.h"
 #include "include_base_utils.h"
-//#include "account.h"
 #include "crypto/crypto.h"
 #include "warnings.h"
 extern "C" {
 #include "crypto/keccak.h"
 }
-
-// local headers:
 #include "cryptonote_basic/cryptonote_basic_impl.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "cryptonote_config.h"
-//#include "crypto/x25519.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
-//#include "seraphis_config_temp.h"
 
 // standard headers
 #include <iostream>
 #include <string>
+#include <fstream>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "account"
@@ -149,7 +143,6 @@ void account_base::set_null() {
 
 std::string account_base::get_address_tag(const crypto::secret_key sk,
                                           const std::string tag) {
-  using base32 = cppcodec::base32_z;
   std::string m_k_et_tag = std::string(sk.data, 32);
   m_k_et_tag.append(tag);
 
@@ -162,7 +155,7 @@ std::string account_base::get_address_tag(const crypto::secret_key sk,
   char *hash_data = reinterpret_cast<char *>(hash_out);
   address_tag = std::string(hash_data, outlen);
 
-  return base32::encode(address_tag);
+  return tools::base32::encode(address_tag);
 }
 
 int64_t account_base::jamtis_polymod(const std::vector<int> data) {
@@ -213,7 +206,6 @@ std::string account_base::get_checksum(const std::string addr_without_checksum) 
 }
 
 std::string account_base::get_public_address_str() {
-  using base32 = cppcodec::base32_z;
 
   // Fixed parameters for version 1 mainnet anonymous address
   std::string address_prefix = "xmr";
@@ -223,7 +215,7 @@ std::string account_base::get_public_address_str() {
   std::string str_tag = "1";
   std::string address_main_ser =
       cryptonote::t_serializable_object_to_blob(m_keys.m_account_address);
-  std::string address_main = base32::encode(address_main_ser);
+  std::string address_main = tools::base32::encode(address_main_ser);
   std::string address_tag;
   std::string address_checksum;
   std::string address_without_checksum;
@@ -236,7 +228,7 @@ std::string account_base::get_public_address_str() {
 
   cout << "Address without checksum: " << address_without_checksum << endl;
   address_checksum = get_checksum(address_without_checksum);
-  cout << "Address with checksum:  " << address_checksum << endl;
+  cout << "Address with checksum:    " << address_checksum << endl;
 
   cout << "\n---Public keys---" << endl;
   cout << "K1: " << m_keys.m_account_address.K_1 << endl;
