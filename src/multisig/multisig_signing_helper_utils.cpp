@@ -32,6 +32,7 @@
 #include "multisig_signing_helper_utils.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "misc_language.h"
 #include "misc_log_ex.h"
@@ -43,7 +44,6 @@
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 
 //third party headers
 #include <boost/math/special_functions/binomial.hpp>
@@ -56,7 +56,7 @@
 #include <vector>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
-#define MONERO_DEFAULT_LOG_CATEGORY "seraphis"
+#define MONERO_DEFAULT_LOG_CATEGORY "multisig"
 
 namespace multisig
 {
@@ -113,7 +113,7 @@ static void prepare_multisig_init_set_collections_v1(const std::uint32_t thresho
         "validate and prepare multisig inits: the local signer's initializer is invalid.");
 
     // 2. weed out invalid other init set collections
-    sp::for_all_in_map_erase_if(other_init_set_collections,
+    tools::for_all_in_map_erase_if(other_init_set_collections,
             [&](const auto &other_signer_init_set_collection) -> bool
             {
                 auto validation_error = validate_v1_multisig_init_set_collection_v1(
@@ -619,7 +619,7 @@ MultisigSigningErrorVariant validate_v1_multisig_init_set_collection_v1(
     }
 
     // check that the init set collection maps to its internal proof keys correctly
-    if (!sp::keys_match_internal_values(init_set_collection,
+    if (!tools::keys_match_internal_values(init_set_collection,
                 [](const MultisigProofInitSetV1 &init_set) -> const rct::key&
                 {
                     return init_set.m_proof_key;
@@ -718,7 +718,7 @@ void make_v1_multisig_init_set_v1(const std::uint32_t threshold,
                     main_proof_key,
                     filter,
                     proof_base,
-                    sp::add_element(init_set_out.m_inits.back())),
+                    tools::add_element(init_set_out.m_inits.back())),
                 "make multisig proof initializer: could not get nonce pubkeys from nonce record (bug).");
         }
     }

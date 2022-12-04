@@ -34,13 +34,13 @@
 #pragma once
 
 //local headers
+#include "common/variant.h"
 #include "crypto/crypto.h"
 #include "multisig_clsag.h"
 #include "multisig_signer_set_filter.h"
 #include "multisig_nonce_record.h"
 #include "multisig_sp_composition_proof.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_variant.h"
 
 //third party headers
 #include <boost/variant/get.hpp>
@@ -101,7 +101,7 @@ struct MultisigProofInitSetV1 final
 // proof_key_ref(): get the partial signature's main proof key (there may be additional auxilliary proof keys)
 // message_ref(): get the partial signature's signed message
 ///
-using MultisigPartialSigVariant = sp::SpVariant<CLSAGMultisigPartial, SpCompositionProofMultisigPartial>;
+using MultisigPartialSigVariant = tools::variant<CLSAGMultisigPartial, SpCompositionProofMultisigPartial>;
 const rct::key& proof_key_ref(const MultisigPartialSigVariant &variant);
 const rct::key& message_ref(const MultisigPartialSigVariant &variant);
 

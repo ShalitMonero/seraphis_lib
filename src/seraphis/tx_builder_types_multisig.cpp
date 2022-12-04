@@ -32,6 +32,7 @@
 #include "tx_builder_types_multisig.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/subaddress_index.h"
 #include "legacy_core_utils.h"
@@ -39,7 +40,6 @@
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "sp_core_enote_utils.h"
 #include "tx_builder_types.h"
 #include "tx_builder_types_legacy.h"
@@ -198,7 +198,7 @@ void SpMultisigTxProposalV1::get_v1_tx_proposal_v1(const rct::key &legacy_spend_
         multisig_input_proposal.get_input_proposal_v1(legacy_spend_pubkey,
             legacy_subaddress_map,
             legacy_view_privkey,
-            add_element(legacy_input_proposals));
+            tools::add_element(legacy_input_proposals));
     }
 
     // extract seraphis input proposals
@@ -208,7 +208,7 @@ void SpMultisigTxProposalV1::get_v1_tx_proposal_v1(const rct::key &legacy_spend_
     {
         multisig_input_proposal.get_input_proposal_v1(jamtis_spend_pubkey,
             k_view_balance,
-            add_element(sp_input_proposals));
+            tools::add_element(sp_input_proposals));
     }
 
     // extract memo field elements

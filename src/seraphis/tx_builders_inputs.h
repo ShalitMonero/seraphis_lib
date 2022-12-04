@@ -111,7 +111,7 @@ void make_input_images_prefix_v1(const std::vector<LegacyEnoteImageV2> &legacy_e
     const std::vector<SpEnoteImageV1> &sp_enote_images,
     rct::key &input_images_prefix_out);
 //todo
-void check_v1_input_proposal_semantics_v1(const SpInputProposalV1 &input_proposal, const rct::key &sp_spend_pubkey);
+void check_v1_input_proposal_semantics_v1(const SpInputProposalV1 &input_proposal, const rct::key &sp_core_spend_pubkey);
 /**
 * brief: make_input_proposal - make the core of an input proposal
 * param: enote_core -
@@ -125,7 +125,7 @@ void check_v1_input_proposal_semantics_v1(const SpInputProposalV1 &input_proposa
 * param: commitment_mask -
 * outparam: proposal_out -
 */
-void make_input_proposal(const SpEnote &enote_core,
+void make_input_proposal(const SpEnoteCore &enote_core,
     const crypto::key_image &key_image,
     const crypto::secret_key &enote_view_privkey_g,
     const crypto::secret_key &enote_view_privkey_x,
@@ -134,7 +134,7 @@ void make_input_proposal(const SpEnote &enote_core,
     const rct::xmr_amount &input_amount,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
-    SpInputProposal &proposal_out);
+    SpInputProposalCore &proposal_out);
 /**
 * brief: make_v1_input_proposal_v1 - make an input proposal
 * param: enote_record -
@@ -157,7 +157,7 @@ void make_v1_input_proposal_v1(const SpEnoteRecordV1 &enote_record,
 * param: commitment_mask -
 * outparam: proposal_out -
 */
-bool try_make_v1_input_proposal_v1(const SpEnoteV1 &enote,
+bool try_make_v1_input_proposal_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
@@ -176,7 +176,7 @@ void make_standard_input_context_v1(const std::vector<LegacyInputProposalV1> &le
 * param: sp_spend_privkey -
 * outparam: image_proof_out -
 */
-void make_v1_image_proof_v1(const SpInputProposal &input_proposal,
+void make_v1_image_proof_v1(const SpInputProposalCore &input_proposal,
     const rct::key &message,
     const crypto::secret_key &sp_spend_privkey,
     SpImageProofV1 &image_proof_out);
@@ -208,7 +208,7 @@ void make_v1_membership_proof_v1(const std::size_t ref_set_decomp_n,
     SpBinnedReferenceSetV1 binned_reference_set,
     const std::vector<rct::key> &referenced_enotes_squashed,
     const std::size_t real_spend_index_in_set,
-    const SpEnote &real_reference_enote,
+    const SpEnoteCoreVariant &real_reference_enote,
     const crypto::secret_key &image_address_mask,
     const crypto::secret_key &image_commitment_mask,
     SpMembershipProofV1 &membership_proof_out);
@@ -231,13 +231,13 @@ void check_v1_partial_input_semantics_v1(const SpPartialInputV1 &partial_input);
 * param: input_proposal -
 * param: proposal_prefix -
 * param: sp_image_proof -
-* param: sp_spend_pubkey -
+* param: sp_core_spend_pubkey -
 * outparam: partial_input_out -
 */
 void make_v1_partial_input_v1(const SpInputProposalV1 &input_proposal,
     const rct::key &proposal_prefix,
     SpImageProofV1 sp_image_proof,
-    const rct::key &sp_spend_pubkey,
+    const rct::key &sp_core_spend_pubkey,
     SpPartialInputV1 &partial_input_out);
 void make_v1_partial_input_v1(const SpInputProposalV1 &input_proposal,
     const rct::key &proposal_prefix,

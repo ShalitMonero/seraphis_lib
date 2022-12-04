@@ -44,7 +44,9 @@
 #include "seraphis/tx_builders_inputs.h"
 #include "seraphis/tx_builders_legacy_inputs.h"
 #include "seraphis/tx_builders_mixed.h"
+#include "seraphis/tx_builders_outputs.h"
 #include "seraphis/tx_discretized_fee.h"
+#include "seraphis/txtype_coinbase_v1.h"
 #include "seraphis/txtype_squashed_v1.h"
 
 //third party headers
@@ -57,6 +59,66 @@
 
 namespace sp
 {
+//-------------------------------------------------------------------------------------------------------------------
+template <>
+void make_mock_tx<SpTxCoinbaseV1>(const SpTxParamPackV1 &params,
+    const std::vector<rct::xmr_amount> &legacy_in_amounts,
+    const std::vector<rct::xmr_amount> &sp_in_amounts,
+    const std::vector<rct::xmr_amount> &out_amounts,
+    const DiscretizedFee &discretized_transaction_fee,
+    MockLedgerContext &ledger_context_inout,
+    SpTxCoinbaseV1 &tx_out)
+{
+    CHECK_AND_ASSERT_THROW_MES(out_amounts.size() > 0, "SpTxCoinbaseV1: tried to make mock tx without any outputs.");
+    CHECK_AND_ASSERT_THROW_MES(discretized_transaction_fee == rct::xmr_amount{0},
+        "SpTxCoinbaseV1: tried to make mock tx with nonzero fee.");
+
+    // mock semantics version
+    const SpTxCoinbaseV1::SemanticRulesVersion semantic_rules_version{SpTxCoinbaseV1::SemanticRulesVersion::MOCK};
+
+    // set block reward from input amounts
+    rct::xmr_amount block_reward{0};
+
+    for (const rct::xmr_amount &input_amount : legacy_in_amounts)
+        block_reward += input_amount;
+    for (const rct::xmr_amount &input_amount : sp_in_amounts)
+        block_reward += input_amount;
+
+    // make mock outputs
+    std::vector<SpCoinbaseOutputProposalV1> output_proposals{
+            gen_mock_sp_coinbase_output_proposals_v1(out_amounts, params.num_random_memo_elements)
+        };
+
+    // expect amounts to balance
+    CHECK_AND_ASSERT_THROW_MES(balance_check_in_out_amnts_v1(block_reward, output_proposals),
+        "SpTxCoinbaseV1: tried to make mock tx with unbalanced amounts.");
+
+    // make partial memo
+    std::vector<ExtraFieldElement> additional_memo_elements;
+    additional_memo_elements.resize(params.num_random_memo_elements);
+
+    for (ExtraFieldElement &element : additional_memo_elements)
+        element.gen();
+
+    TxExtra partial_memo;
+    make_tx_extra(std::move(additional_memo_elements), partial_memo);
+
+    // extract info from output proposals
+    std::vector<SpCoinbaseEnoteV1> output_enotes;
+    SpTxSupplementV1 tx_supplement;
+    make_v1_coinbase_outputs_v1(output_proposals, output_enotes, tx_supplement.m_output_enote_ephemeral_pubkeys);
+
+    // collect full memo
+    finalize_tx_extra_v1(partial_memo, output_proposals, tx_supplement.m_tx_extra);
+
+    // finish tx
+    make_seraphis_tx_coinbase_v1(semantic_rules_version,
+        ledger_context_inout.chain_height() + 1,  //next block
+        block_reward,
+        std::move(output_enotes),
+        std::move(tx_supplement),
+        tx_out);
+}
 //-------------------------------------------------------------------------------------------------------------------
 template <>
 void make_mock_tx<SpTxSquashedV1>(const SpTxParamPackV1 &params,
@@ -100,7 +162,7 @@ void make_mock_tx<SpTxSquashedV1>(const SpTxParamPackV1 &params,
         output_proposals[1].m_enote_ephemeral_pubkey = output_proposals[0].m_enote_ephemeral_pubkey;
 
     // expect amounts to balance
-    CHECK_AND_ASSERT_THROW_MES(balance_check_in_out_amnts_v1(legacy_input_proposals,
+    CHECK_AND_ASSERT_THROW_MES(balance_check_in_out_amnts_v2(legacy_input_proposals,
             sp_input_proposals,
             output_proposals,
             tx_fee),

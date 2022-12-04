@@ -54,43 +54,105 @@ extern "C"
 namespace sp
 {
 //-------------------------------------------------------------------------------------------------------------------
-bool SpEnote::onetime_address_is_canonical() const
+bool SpCoinbaseEnoteCore::onetime_address_is_canonical() const
 {
     return key_domain_is_prime_subgroup(m_onetime_address);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void append_to_transcript(const SpEnote &container, SpTranscriptBuilder &transcript_inout)
+void SpCoinbaseEnoteCore::gen()
 {
-    transcript_inout.append("Ko", container.m_onetime_address);
-    transcript_inout.append("C", container.m_amount_commitment);
+    // all random
+    m_onetime_address = rct::pkGen();
+    crypto::rand(8, reinterpret_cast<unsigned char*>(&m_amount));
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnote::gen()
+void append_to_transcript(const SpCoinbaseEnoteCore &container, SpTranscriptBuilder &transcript_inout)
+{
+    transcript_inout.append("Ko", container.m_onetime_address);
+    transcript_inout.append("a", container.m_amount);
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool SpEnoteCore::onetime_address_is_canonical() const
+{
+    return key_domain_is_prime_subgroup(m_onetime_address);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void SpEnoteCore::gen()
 {
     // all random
     m_onetime_address = rct::pkGen();
     m_amount_commitment = rct::pkGen();
 }
 //-------------------------------------------------------------------------------------------------------------------
-void append_to_transcript(const SpEnoteImage &container, SpTranscriptBuilder &transcript_inout)
+void append_to_transcript(const SpEnoteCore &container, SpTranscriptBuilder &transcript_inout)
+{
+    transcript_inout.append("Ko", container.m_onetime_address);
+    transcript_inout.append("C", container.m_amount_commitment);
+}
+//-------------------------------------------------------------------------------------------------------------------
+const rct::key& onetime_address_ref(const SpEnoteCoreVariant &variant)
+{
+    struct visitor : public tools::variant_static_visitor<const rct::key&>
+    {
+        using variant_static_visitor::operator();  //for blank overload
+        const rct::key& operator()(const SpCoinbaseEnoteCore &enote) const { return enote.m_onetime_address; }
+        const rct::key& operator()(const SpEnoteCore &enote) const { return enote.m_onetime_address; }
+    };
+
+    return variant.visit(visitor{});
+}
+//-------------------------------------------------------------------------------------------------------------------
+rct::key amount_commitment_ref(const SpEnoteCoreVariant &variant)
+{
+    struct visitor : public tools::variant_static_visitor<rct::key>
+    {
+        using variant_static_visitor::operator();  //for blank overload
+        rct::key operator()(const SpCoinbaseEnoteCore &enote) const { return rct::zeroCommit(enote.m_amount); }
+        rct::key operator()(const SpEnoteCore &enote) const { return enote.m_amount_commitment; }
+    };
+
+    return variant.visit(visitor{});
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool operator==(const SpEnoteCoreVariant &variant1, const SpEnoteCoreVariant &variant2)
+{
+    // check they have the same type
+    if (!SpEnoteCoreVariant::same_type(variant1, variant2))
+        return false;
+
+    // use a visitor to test equality with variant2
+    struct visitor : public tools::variant_static_visitor<bool>
+    {
+        visitor(const SpEnoteCoreVariant &other_ref) : other{other_ref} {}
+        const SpEnoteCoreVariant &other;
+
+        using variant_static_visitor::operator();  //for blank overload
+        bool operator()(const SpCoinbaseEnoteCore &enote) const { return enote == other.unwrap<SpCoinbaseEnoteCore>(); }
+        bool operator()(const SpEnoteCore &enote) const { return enote == other.unwrap<SpEnoteCore>(); }
+    };
+
+    return variant1.visit(visitor{variant2});
+}
+//-------------------------------------------------------------------------------------------------------------------
+void append_to_transcript(const SpEnoteImageCore &container, SpTranscriptBuilder &transcript_inout)
 {
     transcript_inout.append("K_masked", container.m_masked_address);
     transcript_inout.append("C_masked", container.m_masked_commitment);
     transcript_inout.append("KI", container.m_key_image);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpInputProposal::get_squash_prefix(rct::key &squash_prefix_out) const
+void SpInputProposalCore::get_squash_prefix(rct::key &squash_prefix_out) const
 {
     // H_n(Ko,C)
-    make_seraphis_squash_prefix(m_enote_core.m_onetime_address, m_enote_core.m_amount_commitment, squash_prefix_out);
+    make_seraphis_squash_prefix(onetime_address_ref(m_enote_core), amount_commitment_ref(m_enote_core), squash_prefix_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpInputProposal::get_enote_image_core(SpEnoteImage &image_out) const
+void SpInputProposalCore::get_enote_image_core(SpEnoteImageCore &image_out) const
 {
     // K" = t_k G + H_n(Ko,C) Ko
     // C" = t_c G + C
-    make_seraphis_enote_image_masked_keys(m_enote_core.m_onetime_address,
-        m_enote_core.m_amount_commitment,
+    make_seraphis_enote_image_masked_keys(onetime_address_ref(m_enote_core),
+        amount_commitment_ref(m_enote_core),
         m_address_mask,
         m_commitment_mask,
         image_out.m_masked_address,
@@ -100,7 +162,7 @@ void SpInputProposal::get_enote_image_core(SpEnoteImage &image_out) const
     image_out.m_key_image = this->key_image();
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpInputProposal::gen(const crypto::secret_key &sp_spend_privkey, const rct::xmr_amount amount)
+void SpInputProposalCore::gen(const crypto::secret_key &sp_spend_privkey, const rct::xmr_amount amount)
 {
     m_enote_view_privkey_g = rct::rct2sk(rct::skGen());
     m_enote_view_privkey_x = rct::rct2sk(rct::skGen());
@@ -110,28 +172,30 @@ void SpInputProposal::gen(const crypto::secret_key &sp_spend_privkey, const rct:
     make_seraphis_key_image(m_enote_view_privkey_x, sp_spend_privkey_extended, m_key_image);
     m_amount_blinding_factor = rct::rct2sk(rct::skGen());
     m_amount = amount;
+    SpEnoteCore enote_core_temp;
     make_seraphis_enote_core(m_enote_view_privkey_g,
         m_enote_view_privkey_x,
         m_enote_view_privkey_u,
         sp_spend_privkey,
         m_amount_blinding_factor,
         m_amount,
-        m_enote_core);
+        enote_core_temp);
+    m_enote_core = enote_core_temp;
     m_address_mask = rct::rct2sk(rct::skGen());;
     m_commitment_mask = rct::rct2sk(rct::skGen());;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpOutputProposal::onetime_address_is_canonical() const
+bool SpOutputProposalCore::onetime_address_is_canonical() const
 {
     return key_domain_is_prime_subgroup(m_onetime_address);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpOutputProposal::get_enote_core(SpEnote &enote_out) const
+void SpOutputProposalCore::get_enote_core(SpEnoteCore &enote_out) const
 {
     make_seraphis_enote_core(m_onetime_address, m_amount_blinding_factor, m_amount, enote_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpOutputProposal::gen(const rct::xmr_amount amount)
+void SpOutputProposalCore::gen(const rct::xmr_amount amount)
 {
     // all random except amount
     m_onetime_address = rct::pkGen();

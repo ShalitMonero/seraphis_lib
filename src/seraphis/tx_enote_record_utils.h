@@ -61,12 +61,12 @@ namespace sp
 * outparam: basic_record_out -
 * return: true if an extraction succeeded
 */
-bool try_get_basic_enote_record_v1(const SpEnoteV1 &enote,
+bool try_get_basic_enote_record_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const crypto::x25519_pubkey &sender_receiver_DH_derivation,
     SpBasicEnoteRecordV1 &basic_record_out);
-bool try_get_basic_enote_record_v1(const SpEnoteV1 &enote,
+bool try_get_basic_enote_record_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const crypto::x25519_secret_key &xk_find_received,
@@ -84,7 +84,7 @@ bool try_get_basic_enote_record_v1(const SpEnoteV1 &enote,
 * outparam: record_out -
 * return: true if an extraction succeeded
 */
-bool try_get_intermediate_enote_record_v1(const SpEnoteV1 &enote,
+bool try_get_intermediate_enote_record_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
@@ -93,7 +93,7 @@ bool try_get_intermediate_enote_record_v1(const SpEnoteV1 &enote,
     const crypto::secret_key &s_generate_address,
     const jamtis::jamtis_address_tag_cipher_context &cipher_context,
     SpIntermediateEnoteRecordV1 &record_out);
-bool try_get_intermediate_enote_record_v1(const SpEnoteV1 &enote,
+bool try_get_intermediate_enote_record_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
@@ -124,7 +124,7 @@ bool try_get_intermediate_enote_record_v1(const SpBasicEnoteRecordV1 &basic_reco
 * outparam: record_out -
 * return: true if an extraction succeeded
 */
-bool try_get_enote_record_v1_plain(const SpEnoteV1 &enote,
+bool try_get_enote_record_v1_plain(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
@@ -157,7 +157,7 @@ bool try_get_enote_record_v1_plain(const SpIntermediateEnoteRecordV1 &intermedia
 * outparam: record_out -
 * return: true if an extraction succeeded
 */
-bool try_get_enote_record_v1_selfsend_for_type(const SpEnoteV1 &enote,
+bool try_get_enote_record_v1_selfsend_for_type(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
@@ -165,14 +165,14 @@ bool try_get_enote_record_v1_selfsend_for_type(const SpEnoteV1 &enote,
     const crypto::secret_key &s_generate_address,
     const jamtis::JamtisSelfSendType expected_type,
     SpEnoteRecordV1 &record_out);
-bool try_get_enote_record_v1_selfsend(const SpEnoteV1 &enote,
+bool try_get_enote_record_v1_selfsend(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
     const crypto::secret_key &k_view_balance,
     const crypto::secret_key &s_generate_address,
     SpEnoteRecordV1 &record_out);
-bool try_get_enote_record_v1_selfsend(const SpEnoteV1 &enote,
+bool try_get_enote_record_v1_selfsend(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
@@ -188,7 +188,7 @@ bool try_get_enote_record_v1_selfsend(const SpEnoteV1 &enote,
 * outparam: record_out -
 * return: true if an extraction succeeded
 */
-bool try_get_enote_record_v1(const SpEnoteV1 &enote,
+bool try_get_enote_record_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,

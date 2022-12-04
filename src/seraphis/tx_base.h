@@ -48,6 +48,7 @@ namespace sp
 {
     class TxValidationContext;
     class MockLedgerContext;
+    struct SpTxCoinbaseV1;
     struct SpTxSquashedV1;
     struct DiscretizedFee;
 }
@@ -70,7 +71,7 @@ unsigned char tx_structure_version();
 template <typename SpTxType>
 bool validate_tx_semantics(const SpTxType &tx);
 template <typename SpTxType>
-bool validate_tx_linking_tags(const SpTxType &tx, const TxValidationContext &tx_validation_context);
+bool validate_tx_key_images(const SpTxType &tx, const TxValidationContext &tx_validation_context);
 template <typename SpTxType>
 bool validate_tx_amount_balance(const SpTxType &tx);
 template <typename SpTxType>
@@ -87,8 +88,8 @@ constexpr unsigned char TxEraSp{3};
 /// Transaction structure types: tx types within era 'TxEraSp'
 enum class TxStructureVersionSp : unsigned char
 {
-    /// mining transaction (TODO)
-    TxTypeSpMiningV1 = 0,
+    /// coinbase transaction
+    TxTypeSpCoinbaseV1 = 0,
     /// grootle in the squashed enote model + seraphis composition proofs + BP+ range proofs with p > 0 balance proof
     TxTypeSpSquashedV1 = 1
 };
@@ -152,7 +153,7 @@ bool validate_txs_impl(const std::vector<const SpTxType*> &txs, const TxValidati
             if (!validate_tx_semantics(*tx))
                 return false;
 
-            if (!validate_tx_linking_tags(*tx, tx_validation_context))
+            if (!validate_tx_key_images(*tx, tx_validation_context))
                 return false;
 
             if (!validate_tx_amount_balance(*tx))
@@ -171,6 +172,9 @@ bool validate_txs_impl(const std::vector<const SpTxType*> &txs, const TxValidati
     return true;
 }
 
+/// SpTxCoinbaseV1
+bool validate_tx(const SpTxCoinbaseV1 &tx, const TxValidationContext &tx_validation_context);
+bool validate_txs(const std::vector<const SpTxCoinbaseV1*> &txs, const TxValidationContext &tx_validation_context);
 /// SpTxSquashedV1
 bool validate_tx(const SpTxSquashedV1 &tx, const TxValidationContext &tx_validation_context);
 bool validate_txs(const std::vector<const SpTxSquashedV1*> &txs, const TxValidationContext &tx_validation_context);

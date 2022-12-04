@@ -30,39 +30,38 @@
 // Schnorr-like dual-base proof for a pair of vectors: V_1 = {k_1 G1, k_2 G1, ...}, V_2 = {k_1 G2, k_2 G2, ...}
 // - demonstrates knowledge of all k_1, k_2, k_3, ...
 // - demonstrates that members of V_1 have a 1:1 discrete-log equivalence with the members of V_2, across base keys G1, G2
-// - guarantees that V_1 and V_2 are canonical prime-order subgroup group elements (they are stored multiplied by (1/8) then
-//   multiplied by 8 before verification)
+// - guarantees that V_1 and V_2 contain canonical prime-order subgroup group elements (they are stored multiplied by
+//   (1/8) then multiplied by 8 before verification)
 //
 // proof outline
 // 0. preliminaries
-//    H(...)   = keccak(...) -> 32 bytes    hash to 32 bytes
-//    H_n(...) = H(...) mod l               hash to ed25519 scalar
-//    G1, G2: assumed to be ed25519 base keys
+//    H_32(...) = blake2b(...) -> 32 bytes   hash to 32 bytes (domain separated)
+//    H_n(...)  = H_64(...) mod l            hash to ed25519 scalar (domain separated)
+//    G1, G2: assumed to be ed25519 keys
 // 1. proof nonce and challenge
 //    given: m, G_1, G_2, {k}
 //    {V_1} = {k} * G_1
 //    {V_2} = {k} * G_2
-//    mu = H_n(H("domain-sep"), m, G_1, G_2, {V_1}, {V_2})  aggregation coefficient
-//    cm = H(mu)                                            challenge message
-//    a = rand()                                            prover nonce
+//    mu = H_n(m, G_1, G_2, {V_1}, {V_2})  aggregation coefficient
+//    cm = H(mu)                           challenge message
+//    a = rand()                           prover nonce
 //    c = H_n(cm, [a*G1], [a*G2])
 // 2. aggregate response
-//    r = a - sum_i(mu^i * k_i)
+//    r = a - c * sum_i(mu^i * k_i)
 // 3. proof: {m, c, r, {V_1}, {V_2}}
 //
 // verification
 // 1. mu, cm = ...
-// 2. c' = H_n(cm, [r*G1 + sum_i(mu^i*V_1[i])], [r*G2 + sum_i(mu^i*V_2[i])])
+// 2. c' = H_n(cm, [r*G1 + c*sum_i(mu^i*V_1[i])], [r*G2 + c*sum_i(mu^i*V_2[i])])
 // 3. if (c' == c) then the proof is valid
 //
-// note: uses 'concise' technique for smaller proofs, with the powers-of-aggregation coefficient approach from Triptych
+// note: proof are 'concise' using the powers-of-aggregation coefficient approach from Triptych
 //
 // References:
 // - Triptych (Sarang Noether): https://eprint.iacr.org/2020/018
 // - Zero to Monero 2 (koe, Kurt Alonso, Sarang Noether): https://web.getmonero.org/library/Zero-to-Monero-2-0-0.pdf
 //   - informational reference: Sections 3.1 and 3.2
 ///
-
 
 #pragma once
 
@@ -78,7 +77,7 @@
 //forward declarations
 
 
-namespace crypto
+namespace sp
 {
 
 struct DualBaseVectorProof
@@ -95,26 +94,27 @@ struct DualBaseVectorProof
 };
 
 /**
-* brief: dual_base_vector_prove - create a dual base vector proof
+* brief: make_dual_base_vector_proof - create a dual base vector proof
 * param: message - message to insert in Fiat-Shamir transform hash
 * param: G_1 - base key of first vector
-* param: G_2 - base key of second
-* param: k - secret keys k_1, k_2, ...
-* return: proof
+* param: G_2 - base key of second vector
+* param: privkeys - secret keys k_1, k_2, ...
+* outparam: proof_out - the proof
 */
-DualBaseVectorProof dual_base_vector_prove(const rct::key &message,
+void make_dual_base_vector_proof(const rct::key &message,
     const crypto::public_key &G_1,
     const crypto::public_key &G_2,
-    const std::vector<crypto::secret_key> &k);
+    const std::vector<crypto::secret_key> &privkeys,
+    DualBaseVectorProof &proof_out);
 /**
-* brief: dual_base_vector_verify - verify a dual base vector proof
+* brief: verify_dual_base_vector_proof - verify a dual base vector proof
 * param: proof - proof to verify
 * param: G_1 - base key of first vector
 * param: G_2 - base key of second vector
 * return: true/false on verification result
 */
-bool dual_base_vector_verify(const DualBaseVectorProof &proof,
+bool verify_dual_base_vector_proof(const DualBaseVectorProof &proof,
     const crypto::public_key &G_1,
     const crypto::public_key &G_2);
 
-} //namespace crypto
+} //namespace sp

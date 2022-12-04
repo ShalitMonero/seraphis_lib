@@ -32,6 +32,7 @@
 #include "tx_builders_multisig.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "crypto/generators.h"
@@ -53,7 +54,6 @@
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "sp_core_enote_utils.h"
 #include "tx_builder_types.h"
 #include "tx_builder_types_multisig.h"
@@ -174,7 +174,7 @@ static void collect_legacy_clsag_privkeys_for_multisig(const std::vector<LegacyI
     std::vector<crypto::secret_key> &proof_privkeys_k_offset_out,
     std::vector<crypto::secret_key> &proof_privkeys_z)
 {
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(legacy_input_proposals),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(legacy_input_proposals),
         "collect legacy clsag privkeys for multisig: legacy input proposals aren't sorted and unique.");
 
     proof_privkeys_k_offset_out.clear();
@@ -186,8 +186,8 @@ static void collect_legacy_clsag_privkeys_for_multisig(const std::vector<LegacyI
     {
         prepare_legacy_clsag_privkeys_for_multisig(legacy_input_proposal.m_enote_view_privkey,
             legacy_input_proposal.m_commitment_mask,
-            add_element(proof_privkeys_k_offset_out),
-            add_element(proof_privkeys_z));
+            tools::add_element(proof_privkeys_k_offset_out),
+            tools::add_element(proof_privkeys_z));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -226,7 +226,7 @@ static void collect_sp_composition_proof_privkeys_for_multisig(const std::vector
     std::vector<crypto::secret_key> &proof_privkeys_z_offset_out,
     std::vector<crypto::secret_key> &proof_privkeys_z_multiplier_out)
 {
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(sp_input_proposals),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(sp_input_proposals),
         "collect sp composition proof privkeys for multisig: sp input proposals aren't sorted and unique.");
 
     proof_privkeys_x_out.clear();
@@ -250,10 +250,10 @@ static void collect_sp_composition_proof_privkeys_for_multisig(const std::vector
             sp_input_proposal.m_core.m_enote_view_privkey_u,
             sp_input_proposal.m_core.m_address_mask,
             squash_prefix_temp,
-            add_element(proof_privkeys_x_out),
-            add_element(proof_privkeys_y_out),
-            add_element(proof_privkeys_z_offset_out),
-            add_element(proof_privkeys_z_multiplier_out));
+            tools::add_element(proof_privkeys_x_out),
+            tools::add_element(proof_privkeys_y_out),
+            tools::add_element(proof_privkeys_z_offset_out),
+            tools::add_element(proof_privkeys_z_multiplier_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -309,7 +309,7 @@ static bool try_make_v1_legacy_input_v1(const rct::key &tx_proposal_prefix,
 static bool try_make_v1_sp_partial_input_v1(const rct::key &expected_proposal_prefix,
     const SpInputProposalV1 &input_proposal,
     const std::vector<multisig::SpCompositionProofMultisigPartial> &input_proof_partial_sigs,
-    const rct::key &sp_spend_pubkey,
+    const rct::key &sp_core_spend_pubkey,
     SpPartialInputV1 &partial_input_out)
 {
     try
@@ -329,7 +329,7 @@ static bool try_make_v1_sp_partial_input_v1(const rct::key &expected_proposal_pr
         make_v1_partial_input_v1(input_proposal,
             expected_proposal_prefix,
             std::move(sp_image_proof),
-            sp_spend_pubkey,
+            sp_core_spend_pubkey,
             partial_input_out);
 
         // validate semantics to minimize failure modes
@@ -441,7 +441,7 @@ static bool try_make_sp_partial_inputs_for_multisig_v1(const rct::key &tx_propos
     const std::vector<crypto::public_key> &multisig_signers,
     const std::unordered_map<crypto::public_key, std::vector<multisig::MultisigPartialSigSetV1>>
         &sp_input_partial_sigs_per_signer,
-    const rct::key &sp_spend_pubkey,
+    const rct::key &sp_core_spend_pubkey,
     std::list<multisig::MultisigSigningErrorVariant> &multisig_errors_inout,
     std::vector<SpPartialInputV1> &sp_partial_inputs_out)
 {
@@ -486,7 +486,7 @@ static bool try_make_sp_partial_inputs_for_multisig_v1(const rct::key &tx_propos
                     return try_make_v1_sp_partial_input_v1(tx_proposal_prefix,
                         mapped_sp_input_proposals.at(proof_key),
                         partial_sigs,
-                        sp_spend_pubkey,
+                        sp_core_spend_pubkey,
                         sp_partial_input_out);
                 },
                 multisig_errors_inout,
@@ -509,7 +509,7 @@ void check_v1_legacy_multisig_input_proposal_semantics_v1(const LegacyMultisigIn
                 multisig_input_proposal.m_tx_output_index) !=
             multisig_input_proposal.m_reference_set.end(),
         "legacy multisig input proposal: referenced enote index is not in the reference set.");
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(multisig_input_proposal.m_reference_set),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(multisig_input_proposal.m_reference_set),
         "legacy multisig input proposal: reference set indices are not sorted.");
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -559,7 +559,7 @@ void make_v1_legacy_multisig_input_proposal_v1(const LegacyEnoteRecord &enote_re
         proposal_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void make_v1_sp_multisig_input_proposal_v1(const SpEnoteV1 &enote,
+void make_v1_sp_multisig_input_proposal_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const crypto::secret_key &address_mask,
@@ -614,7 +614,7 @@ void check_v1_multisig_tx_proposal_semantics_v1(const SpMultisigTxProposalV1 &mu
 
     // 1. check the multisig input proposal semantics
     // a. legacy
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(multisig_tx_proposal.m_legacy_multisig_input_proposals),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(multisig_tx_proposal.m_legacy_multisig_input_proposals),
         "multisig tx proposal: legacy multisig input proposals are not sorted and unique.");
 
     for (const LegacyMultisigInputProposalV1 &legacy_multisig_input_proposal :
@@ -768,7 +768,7 @@ bool try_simulate_tx_from_multisig_tx_proposal_v1(const SpMultisigTxProposalV1 &
         // make mock legacy and jamtis spend private keys
         const crypto::secret_key legacy_spend_privkey_mock{rct::rct2sk(rct::skGen())};  //k^s (legacy)
         const crypto::secret_key sp_spend_privkey_mock{rct::rct2sk(rct::skGen())};  //k_m (seraphis)
-        const crypto::public_key sp_spend_pubkey_mock{
+        const crypto::public_key sp_core_spend_pubkey_mock{
                 rct::rct2pk(rct::scalarmultKey(rct::pk2rct(crypto::get_U()), rct::sk2rct(sp_spend_privkey_mock)))
             };  //k_m U
 
@@ -865,14 +865,21 @@ bool try_simulate_tx_from_multisig_tx_proposal_v1(const SpMultisigTxProposalV1 &
 
         for (SpInputProposalV1 &sp_input_proposal : sp_input_proposals)
         {
+            // save the amount commitment in a new temporary enote core shuttle variable
+            SpEnoteCore temp_enote_core;
+            temp_enote_core.m_amount_commitment = amount_commitment_ref(sp_input_proposal.m_core.m_enote_core);
+
             // new onetime address
-            seraphis_extended_spendkey_temp = rct::pk2rct(sp_spend_pubkey_mock);
+            seraphis_extended_spendkey_temp = rct::pk2rct(sp_core_spend_pubkey_mock);
             extend_seraphis_spendkey_u(sp_input_proposal.m_core.m_enote_view_privkey_u, seraphis_extended_spendkey_temp);
             seraphis_onetime_address_temp = seraphis_extended_spendkey_temp;
             extend_seraphis_spendkey_x(sp_input_proposal.m_core.m_enote_view_privkey_x, seraphis_onetime_address_temp);
             mask_key(sp_input_proposal.m_core.m_enote_view_privkey_g,
                 seraphis_onetime_address_temp,
-                sp_input_proposal.m_core.m_enote_core.m_onetime_address);
+                temp_enote_core.m_onetime_address);
+
+            // reset the proposal's enote core
+            sp_input_proposal.m_core.m_enote_core = temp_enote_core;
 
             // update key image for new onetime address
             make_seraphis_key_image(sp_input_proposal.m_core.m_enote_view_privkey_x,
@@ -951,7 +958,7 @@ void make_v1_multisig_tx_proposal_v1(std::vector<jamtis::JamtisPaymentProposalV1
     const crypto::secret_key &k_view_balance,
     SpMultisigTxProposalV1 &proposal_out)
 {
-    CHECK_AND_ASSERT_THROW_MES(keys_match_internal_values(legacy_multisig_ring_signature_preps,
+    CHECK_AND_ASSERT_THROW_MES(tools::keys_match_internal_values(legacy_multisig_ring_signature_preps,
             [](const LegacyMultisigRingSignaturePrepV1 &prep) -> const crypto::key_image&
             {
                 return prep.m_key_image;
@@ -970,7 +977,7 @@ void make_v1_multisig_tx_proposal_v1(std::vector<jamtis::JamtisPaymentProposalV1
         legacy_multisig_input_proposal.get_input_proposal_v1(legacy_spend_pubkey,
             legacy_subaddress_map,
             legacy_view_privkey,
-            add_element(legacy_input_proposals));
+            tools::add_element(legacy_input_proposals));
     }
 
     // 3. convert seraphis multisig input proposals to input proposals
@@ -980,7 +987,7 @@ void make_v1_multisig_tx_proposal_v1(std::vector<jamtis::JamtisPaymentProposalV1
     {
         sp_multisig_input_proposal.get_input_proposal_v1(jamtis_spend_pubkey,
             k_view_balance,
-            add_element(sp_input_proposals));
+            tools::add_element(sp_input_proposals));
     }
 
     // 4. make a temporary normal tx proposal
@@ -1041,7 +1048,7 @@ void make_v1_multisig_tx_proposal_v1(std::vector<jamtis::JamtisPaymentProposalV1
             legacy_enote_image_temp.m_key_image,
             auxilliary_key_image_temp,
             legacy_multisig_ring_signature_preps.at(legacy_input_proposal.m_key_image).m_real_reference_index,
-            add_element(proposal_out.m_legacy_input_proof_proposals));
+            tools::add_element(proposal_out.m_legacy_input_proof_proposals));
     }
 
     // 9. prepare composition proof proposals for each seraphis input (note: using the tx proposal ensures proof
@@ -1057,7 +1064,7 @@ void make_v1_multisig_tx_proposal_v1(std::vector<jamtis::JamtisPaymentProposalV1
         multisig::make_sp_composition_multisig_proposal(tx_proposal_prefix,
             sp_enote_image_temp.m_core.m_masked_address,
             sp_enote_image_temp.m_core.m_key_image,
-            add_element(proposal_out.m_sp_input_proof_proposals));
+            tools::add_element(proposal_out.m_sp_input_proof_proposals));
     }
 
     // 10. add miscellaneous components
@@ -1110,7 +1117,7 @@ void make_v1_multisig_tx_proposal_v1(const std::list<LegacyContextualEnoteRecord
             legacy_multisig_ring_signature_preps
                     .at(legacy_contextual_input.key_image())
                     .m_reference_set,  //don't consume, the full prep needs to be consumed later
-            add_element(legacy_multisig_input_proposals));
+            tools::add_element(legacy_multisig_input_proposals));
     }
 
     // 2. convert seraphis inputs to seraphis multisig input proposals (inputs to spend)
@@ -1123,7 +1130,7 @@ void make_v1_multisig_tx_proposal_v1(const std::list<LegacyContextualEnoteRecord
         make_v1_sp_multisig_input_proposal_v1(contextual_input.m_record,
             rct::rct2sk(rct::skGen()),
             rct::rct2sk(rct::skGen()),
-            add_element(sp_multisig_input_proposals));
+            tools::add_element(sp_multisig_input_proposals));
     }
 
     // 3. get memo elements
@@ -1478,14 +1485,14 @@ bool try_make_inputs_for_multisig_v1(const SpMultisigTxProposalV1 &multisig_tx_p
         return false;
 
     // 4. try to make seraphis partial inputs
-    rct::key sp_spend_pubkey{jamtis_spend_pubkey};
-    reduce_seraphis_spendkey_x(k_view_balance, sp_spend_pubkey);
+    rct::key sp_core_spend_pubkey{jamtis_spend_pubkey};
+    reduce_seraphis_spendkey_x(k_view_balance, sp_core_spend_pubkey);
 
     if (!try_make_sp_partial_inputs_for_multisig_v1(tx_proposal_prefix,
             tx_proposal.m_sp_input_proposals,
             multisig_signers,
             sp_input_partial_sigs_per_signer,
-            sp_spend_pubkey,
+            sp_core_spend_pubkey,
             multisig_errors_inout,
             sp_partial_inputs_out))
         return false;

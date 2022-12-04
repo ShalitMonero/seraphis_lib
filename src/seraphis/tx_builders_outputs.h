@@ -70,12 +70,28 @@ enum class OutputProposalSetExtraTypesV1
 };
 
 /**
+* brief: check_v1_coinbase_output_proposal_semantics_v1 - check semantics of a coinbase output proposal
+*   - throws if a check fails
+*   - partial memo should be valid
+* param: output_proposal -
+*/
+void check_v1_coinbase_output_proposal_semantics_v1(const SpCoinbaseOutputProposalV1 &output_proposal);
+/**
 * brief: check_v1_output_proposal_semantics_v1 - check semantics of an output proposal
 *   - throws if a check fails
 *   - partial memo should be valid
 * param: output_proposal -
 */
 void check_v1_output_proposal_semantics_v1(const SpOutputProposalV1 &output_proposal);
+/**
+* brief: check_v1_coinbase_output_proposal_set_semantics_v1 - check semantics of a set of coinbase output proposals
+*   - throws if a check fails
+*   - enote ephemeral pubkeys should be unique
+*   - proposals should be sorted
+*   - proposals should have unique and canonical onetime addresses
+* param: output_proposals -
+*/
+void check_v1_coinbase_output_proposal_set_semantics_v1(const std::vector<SpCoinbaseOutputProposalV1> &output_proposals);
 /**
 * brief: check_v1_output_proposal_set_semantics_v1 - check semantics of a set of output proposals
 *   - throws if a check fails
@@ -89,16 +105,28 @@ void check_v1_output_proposal_set_semantics_v1(const std::vector<SpOutputProposa
 /**
 * brief: check_v1_tx_supplement_semantics_v1 - check semantics of a tx supplement
 *   - throws if a check fails
-*   - if num_outputs == 2, should be 1 enote ephemeral pubkey
-*   - if num_outputs > 2, should be 'num_outputs' enote ephemeral pubkeys
+*   - if num_outputs == 2 and ephemeral_pubkey_optimization is set, should be 1 enote ephemeral pubkey
+*   - otherwise, should be 'num_outputs' enote ephemeral pubkeys
 *   - all enote ephemeral pubkeys should be unique
 * param: tx_supplement -
 * param: num_outputs -
+* param: ephemeral_pubkey_optimization -
 */
-void check_v1_tx_supplement_semantics_v1(const SpTxSupplementV1 &tx_supplement, const std::size_t num_outputs);
+void check_v1_tx_supplement_semantics_v1(const SpTxSupplementV1 &tx_supplement,
+    const std::size_t num_outputs,
+    const bool ephemeral_pubkey_optimization);
+/**
+* brief: make_v1_coinbase_outputs_v1 - make v1 coinbase tx outputs
+* param: output_proposals -
+* outparam: outputs_out -
+* outparam: output_enote_ephemeral_pubkeys_out -
+*/
+void make_v1_coinbase_outputs_v1(const std::vector<SpCoinbaseOutputProposalV1> &output_proposals,
+    std::vector<SpCoinbaseEnoteV1> &outputs_out,
+    std::vector<crypto::x25519_pubkey> &output_enote_ephemeral_pubkeys_out);
 /**
 * brief: make_v1_outputs_v1 - make v1 tx outputs
-* param: destinations -
+* param: output_proposals -
 * outparam: outputs_out -
 * outparam: output_amounts_out -
 * outparam: output_amount_commitment_blinding_factors_out -
@@ -110,6 +138,9 @@ void make_v1_outputs_v1(const std::vector<SpOutputProposalV1> &output_proposals,
     std::vector<crypto::secret_key> &output_amount_commitment_blinding_factors_out,
     std::vector<crypto::x25519_pubkey> &output_enote_ephemeral_pubkeys_out);
 //todo
+void finalize_tx_extra_v1(const TxExtra &partial_memo,
+    const std::vector<SpCoinbaseOutputProposalV1> &output_proposals,
+    TxExtra &tx_extra_out);
 void finalize_tx_extra_v1(const TxExtra &partial_memo,
     const std::vector<SpOutputProposalV1> &output_proposals,
     TxExtra &tx_extra_out);

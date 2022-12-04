@@ -26,10 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 // Core hash functions for Seraphis (note: this implementation satisfies the Jamtis specification).
-
 
 #pragma once
 
@@ -39,7 +36,6 @@
 
 //standard headers
 #include <memory>
-#include <string>
 
 //forward declarations
 
@@ -47,6 +43,13 @@
 namespace sp
 {
 
+/// specialize these for source types that don't have .data() and .size() member functions
+template <typename SourceT>
+static const void* data_source_data(const SourceT &source) { return source.data(); }
+template <typename SourceT>
+static std::size_t data_source_size(const SourceT &source) { return source.size(); }
+
+/// statically polymorphic type-erased data source
 class DataSource final
 {
 //member types
@@ -58,12 +61,6 @@ class DataSource final
         DataSourceConcept& operator=(DataSourceConcept&&) = delete;
         virtual const void* data() const = 0;
         virtual std::size_t size() const = 0;
-
-        /// specialize these for source types that don't have .data() and .size() member functions
-        template <typename SourceT>
-        static const void* get_source_data(const SourceT &source) { return source.data(); }
-        template <typename SourceT>
-        static std::size_t get_source_size(const SourceT &source) { return source.size(); }
     };
 
     /// model: data source
@@ -76,9 +73,9 @@ class DataSource final
         /// disable copy/move (this is a scoped manager [reference wrapper])
         DataSourceModel& operator=(DataSourceModel&&) = delete;
         /// data source's data
-        const void* data() const override { return DataSourceConcept::get_source_data(m_source); }
+        const void* data() const override { return data_source_data(m_source); }
         /// data source's data size
-        std::size_t size() const override { return DataSourceConcept::get_source_size(m_source); }
+        std::size_t size() const override { return data_source_size(m_source); }
 
     private:
         /// underlying data source
@@ -122,11 +119,11 @@ void sp_hash_to_32(const DataSource &data_source, unsigned char *hash_out);
 void sp_hash_to_64(const DataSource &data_source, unsigned char *hash_out);
 /// H_n(x): Ed25519 group scalar output (32 bytes)
 void sp_hash_to_scalar(const DataSource &data_source, unsigned char *hash_out);
-/// H_n[k](x): Ed25519 group scalar output (32 bytes); 32-byte key
+/// H_n[k](x): 32-byte key; Ed25519 group scalar output (32 bytes)
 void sp_derive_key(const unsigned char *derivation_key, const DataSource &data_source, unsigned char *hash_out);
-/// H_32[k](x): 32-byte output; 32-byte key
+/// H_32[k](x): 32-byte key; 32-byte output
 void sp_derive_secret(const unsigned char *derivation_key, const DataSource &data_source, unsigned char *hash_out);
-/// H_n_x25519[k](x): canonical X25519 group scalar output (32 bytes); 32-byte key
+/// H_n_x25519[k](x): 32-byte key; canonical X25519 group scalar output (32 bytes)
 void sp_derive_x25519_key(const unsigned char *derivation_key, const DataSource &data_source, unsigned char *hash_out);
 
 } //namespace sp

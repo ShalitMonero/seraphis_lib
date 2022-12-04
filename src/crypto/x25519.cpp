@@ -26,8 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 //paired header
 #include "x25519.h"
 
@@ -86,13 +84,13 @@ bool x25519_scalar_is_canonical(const x25519_scalar &test_scalar)
 //-------------------------------------------------------------------------------------------------------------------
 void x25519_scmul_base(const x25519_scalar &scalar, x25519_pubkey &result_out)
 {
-    static const mx25519_impl* impl{mx25519_select_impl(mx25519_type::MX25519_TYPE_AUTO)};
+    static const mx25519_impl *impl{mx25519_select_impl(mx25519_type::MX25519_TYPE_AUTO)};
     mx25519_scmul_base(impl, &result_out, &scalar);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void x25519_scmul_key(const x25519_scalar &scalar, const x25519_pubkey &pubkey, x25519_pubkey &result_out)
 {
-    static const mx25519_impl* impl{mx25519_select_impl(mx25519_type::MX25519_TYPE_AUTO)};
+    static const mx25519_impl *impl{mx25519_select_impl(mx25519_type::MX25519_TYPE_AUTO)};
     mx25519_scmul_key(impl, &result_out, &scalar, &pubkey);
 }
 //-------------------------------------------------------------------------------------------------------------------

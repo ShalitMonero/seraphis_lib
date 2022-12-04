@@ -104,23 +104,23 @@ bool address_index_t::operator==(const address_index_t &other_index) const
     return memcmp(this->bytes, other_index.bytes, sizeof(address_index_t)) == 0;
 }
 //-------------------------------------------------------------------------------------------------------------------
-address_tag_MAC_t::address_tag_MAC_t()
+address_tag_hint_t::address_tag_hint_t()
 {
-    std::memset(this->bytes, 0, ADDRESS_TAG_MAC_BYTES);
+    std::memset(this->bytes, 0, ADDRESS_TAG_HINT_BYTES);
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool address_tag_MAC_t::operator==(const address_tag_MAC_t &other_mac) const
+bool address_tag_hint_t::operator==(const address_tag_hint_t &other_hint) const
 {
-    return memcmp(this->bytes, other_mac.bytes, sizeof(address_tag_MAC_t)) == 0;
+    return memcmp(this->bytes, other_hint.bytes, sizeof(address_tag_hint_t)) == 0;
 }
 //-------------------------------------------------------------------------------------------------------------------
 address_tag_t::address_tag_t(const address_index_t &j)
 {
-    const address_tag_MAC_t mac{};
+    const address_tag_hint_t hint{};
 
-    // addr_tag = j || MAC
+    // addr_tag = j || hint
     memcpy(this->bytes, &j, ADDRESS_INDEX_BYTES);
-    memcpy(this->bytes + ADDRESS_INDEX_BYTES, &mac, ADDRESS_TAG_MAC_BYTES);
+    memcpy(this->bytes + ADDRESS_INDEX_BYTES, &hint, ADDRESS_TAG_HINT_BYTES);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool address_tag_t::operator==(const address_tag_t &other_tag) const

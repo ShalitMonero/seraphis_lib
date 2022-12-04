@@ -135,7 +135,7 @@ bool MockOffchainContext::try_get_offchain_chunk_sp_impl(const crypto::x25519_se
             0,
             tx_with_output_contents.first,
             std::get<SpTxSupplementV1>(tx_with_output_contents.second),
-            std::get<std::vector<SpEnoteV1>>(tx_with_output_contents.second),
+            std::get<std::vector<SpEnoteVariant>>(tx_with_output_contents.second),
             SpEnoteOriginStatus::OFFCHAIN,
             chunk_out.m_basic_records_per_tx))
         {
@@ -204,7 +204,13 @@ bool MockOffchainContext::try_add_v1_impl(const std::vector<LegacyEnoteImageV2> 
     m_tx_key_images[input_context] = {std::move(legacy_key_images_collected), std::move(sp_key_images_collected)};
 
     // 2. add tx outputs
-    m_output_contents[input_context] = {tx_supplement, output_enotes};
+    std::vector<SpEnoteVariant> output_enote_variants;
+    output_enote_variants.reserve(output_enotes.size());
+
+    for (const SpEnoteV1 &enote : output_enotes)
+        output_enote_variants.emplace_back(enote);
+
+    m_output_contents[input_context] = {tx_supplement, output_enote_variants};
 
     return true;
 }

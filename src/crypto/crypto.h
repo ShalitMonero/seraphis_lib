@@ -340,10 +340,10 @@ namespace crypto {
 }
 
 // type conversions for easier calls to sc_add(), sc_sub(), hash functions
-inline unsigned char* to_bytes(crypto::ec_scalar &scalar) { return &reinterpret_cast<unsigned char &>(scalar); }
-inline const unsigned char* to_bytes(const crypto::ec_scalar &scalar) { return &reinterpret_cast<const unsigned char &>(scalar); }
-inline unsigned char* to_bytes(crypto::ec_point &point) { return &reinterpret_cast<unsigned char &>(point); }
-inline const unsigned char* to_bytes(const crypto::ec_point &point) { return &reinterpret_cast<const unsigned char &>(point); }
+inline unsigned char* to_bytes(crypto::ec_scalar &scalar) { return &reinterpret_cast<unsigned char&>(scalar); }
+inline const unsigned char* to_bytes(const crypto::ec_scalar &scalar) { return &reinterpret_cast<const unsigned char&>(scalar); }
+inline unsigned char* to_bytes(crypto::ec_point &point) { return &reinterpret_cast<unsigned char&>(point); }
+inline const unsigned char* to_bytes(const crypto::ec_point &point) { return &reinterpret_cast<const unsigned char&>(point); }
 
 CRYPTO_MAKE_HASHABLE(crypto, public_key)
 CRYPTO_MAKE_HASHABLE_CONSTANT_TIME(crypto, secret_key)

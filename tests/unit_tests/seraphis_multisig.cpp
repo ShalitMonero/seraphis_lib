@@ -26,11 +26,12 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "crypto/generators.h"
+#include "cryptonote_basic/account_generators.h"
 #include "cryptonote_basic/subaddress_index.h"
-#include "multisig/account_generator_era.h"
 #include "multisig/multisig.h"
 #include "multisig/multisig_account.h"
 #include "multisig/multisig_account_era_conversion_msg.h"
@@ -73,7 +74,6 @@
 #include "seraphis/txtype_squashed_v1.h"
 #include "seraphis_crypto/sp_composition_proof.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "seraphis_mocks/seraphis_mocks.h"
 
 #include "gtest/gtest.h"
@@ -365,12 +365,12 @@ static bool clsag_multisig_test(const std::uint32_t threshold,
                     proposal.main_proof_key(),
                     filter,
                     rct::G,
-                    sp::add_element(signer_pub_nonces_G)));
+                    tools::add_element(signer_pub_nonces_G)));
                 EXPECT_TRUE(signer_nonce_records[signer_index].try_get_nonce_pubkeys_for_base(proposal.message,
                     proposal.main_proof_key(),
                     filter,
                     rct::ki2rct(KI_base),
-                    sp::add_element(signer_pub_nonces_Hp)));
+                    tools::add_element(signer_pub_nonces_Hp)));
             }
 
             // each signer partially signs for this attempt
@@ -392,7 +392,7 @@ static bool clsag_multisig_test(const std::uint32_t threshold,
                     signer_pub_nonces_Hp,
                     filter,
                     signer_nonce_records[signer_index],
-                    sp::add_element(partial_sigs)));
+                    tools::add_element(partial_sigs)));
             }
 
             // sanity checks
@@ -495,7 +495,7 @@ static bool composition_proof_multisig_test(const std::uint32_t threshold,
                     proposal.K,
                     filter,
                     rct::pk2rct(crypto::get_U()),
-                    sp::add_element(signer_pub_nonces)));
+                    tools::add_element(signer_pub_nonces)));
             }
 
             // each signer partially signs for this attempt
@@ -512,7 +512,7 @@ static bool composition_proof_multisig_test(const std::uint32_t threshold,
                     signer_pub_nonces,
                     filter,
                     signer_nonce_records[signer_index],
-                    sp::add_element(partial_sigs)));
+                    tools::add_element(partial_sigs)));
             }
 
             // sanity checks
@@ -923,7 +923,7 @@ static void seraphis_multisig_tx_v1_test(const std::uint32_t threshold,
     normal_payment_proposals.reserve(out_amounts_normal.size());
 
     for (const rct::xmr_amount out_amount : out_amounts_normal)
-        add_element(normal_payment_proposals).gen(out_amount, 0);
+        tools::add_element(normal_payment_proposals).gen(out_amount, 0);
 
     // - self-send payments
     std::vector<jamtis::JamtisPaymentProposalSelfSendV1> selfsend_payment_proposals;
@@ -1277,10 +1277,6 @@ TEST(seraphis_multisig, composition_proof_multisig)
     EXPECT_TRUE(composition_proof_multisig_test(2, 3, make_secret_key()));
     EXPECT_TRUE(composition_proof_multisig_test(3, 3, make_secret_key()));
     EXPECT_TRUE(composition_proof_multisig_test(2, 4, make_secret_key()));
-
-    // test that setting x to zero works
-    EXPECT_TRUE(composition_proof_multisig_test(2, 2, rct::rct2sk(rct::zero())));
-    EXPECT_TRUE(composition_proof_multisig_test(2, 3, rct::rct2sk(rct::zero())));
 }
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis_multisig, txtype_squashed_v1)

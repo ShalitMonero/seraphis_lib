@@ -35,6 +35,7 @@
 
 //local headers
 #include "crypto/crypto.h"
+#include "jamtis_payment_proposal.h"
 #include "misc_log_ex.h"
 #include "ringct/rctTypes.h"
 #include "sp_core_types.h"
@@ -100,8 +101,8 @@ struct SpTxSquashedV1 final
     /// the transaction fee (discretized representation)
     DiscretizedFee m_tx_fee;
 
-    /// get the tx hash
-    void get_hash(rct::key &tx_hash_out) const;
+    /// get the tx id
+    void get_id(rct::key &tx_id_out) const;
 
     /// get size of a possible tx
     static std::size_t size_bytes(const std::size_t num_legacy_inputs,
@@ -229,7 +230,7 @@ inline void make_versioning_string(const SpTxSquashedV1::SemanticRulesVersion tx
 template <>
 bool validate_tx_semantics<SpTxSquashedV1>(const SpTxSquashedV1 &tx);
 template <>
-bool validate_tx_linking_tags<SpTxSquashedV1>(const SpTxSquashedV1 &tx, const TxValidationContext &tx_validation_context);
+bool validate_tx_key_images<SpTxSquashedV1>(const SpTxSquashedV1 &tx, const TxValidationContext &tx_validation_context);
 template <>
 bool validate_tx_amount_balance<SpTxSquashedV1>(const SpTxSquashedV1 &tx);
 template <>

@@ -32,6 +32,7 @@
 #include "mock_tx_builders_legacy_inputs.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "misc_log_ex.h"
 #include "mock_ledger_context.h"
@@ -44,7 +45,6 @@
 #include "seraphis/tx_component_types_legacy.h"
 #include "seraphis/tx_contextual_enote_record_types.h"
 #include "seraphis/tx_contextual_enote_record_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 
 //third party headers
 
@@ -66,7 +66,7 @@ std::vector<LegacyInputProposalV1> gen_mock_legacy_input_proposals_v1(const cryp
     input_proposals.reserve(input_amounts.size());
 
     for (const rct::xmr_amount in_amount : input_amounts)
-        add_element(input_proposals).gen(legacy_spend_privkey, in_amount);
+        tools::add_element(input_proposals).gen(legacy_spend_privkey, in_amount);
 
     return input_proposals;
 }

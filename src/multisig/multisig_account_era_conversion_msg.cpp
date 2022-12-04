@@ -35,10 +35,11 @@ extern "C"
 {
 #include "crypto/crypto-ops.h"
 }
-#include "dual_base_vector_proof.h"
+#include "cryptonote_basic/account_generators.h"
 #include "include_base_utils.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
+#include "seraphis_crypto/dual_base_vector_proof.h"
 #include "serialization/binary_archive.h"
 #include "serialization/serialization.h"
 
@@ -120,7 +121,7 @@ namespace multisig
   //----------------------------------------------------------------------------------------------------------------------
   // INTERNAL
   //----------------------------------------------------------------------------------------------------------------------
-  static crypto::hash get_signature_msg(const crypto::DualBaseVectorProof &dualbase_proof)
+  static crypto::hash get_signature_msg(const sp::DualBaseVectorProof &dualbase_proof)
   {
     // signature_msg = dualbase_proof_challenge || dualbase_proof_response
     std::string data;
@@ -142,8 +143,8 @@ namespace multisig
   {
     CHECK_AND_ASSERT_THROW_MES(sc_check(to_bytes(signing_privkey)) == 0 &&
       signing_privkey != crypto::null_skey, "Invalid msg signing key.");
-    const rct::key G_1{get_primary_generator(m_old_era)};
-    const rct::key G_2{get_primary_generator(m_new_era)};
+    const rct::key G_1{rct::pk2rct(cryptonote::get_primary_generator(m_old_era))};
+    const rct::key G_2{rct::pk2rct(cryptonote::get_primary_generator(m_new_era))};
     CHECK_AND_ASSERT_THROW_MES(!(G_1 == rct::Z), "Unknown conversion msg old era.");
     CHECK_AND_ASSERT_THROW_MES(!(G_2 == rct::Z), "Unknown conversion msg new era.");
     CHECK_AND_ASSERT_THROW_MES(keyshare_privkeys.size() > 0, "Can't make conversion message with no keys to convert.");
@@ -155,9 +156,8 @@ namespace multisig
     // make dual base vector proof
     rct::key proof_msg;
     get_dualbase_proof_msg(MULTISIG_CONVERSION_MSG_MAGIC_V1, m_signing_pubkey, m_old_era, m_new_era, proof_msg);
-    const crypto::DualBaseVectorProof proof{
-        crypto::dual_base_vector_prove(proof_msg, rct::rct2pk(G_1), rct::rct2pk(G_2), keyshare_privkeys)
-      };
+    sp::DualBaseVectorProof proof;
+    sp::make_dual_base_vector_proof(proof_msg, rct::rct2pk(G_1), rct::rct2pk(G_2), keyshare_privkeys, proof);
 
     // sets message and signing pub key
     this->construct_msg(signing_privkey, proof);
@@ -177,7 +177,7 @@ namespace multisig
   // multisig_account_era_conversion_msg: INTERNAL
   //----------------------------------------------------------------------------------------------------------------------
   void multisig_account_era_conversion_msg::construct_msg(const crypto::secret_key &signing_privkey,
-    const crypto::DualBaseVectorProof &dualbase_proof)
+    const sp::DualBaseVectorProof &dualbase_proof)
   {
     ////
     // msg_to_sign = dualbase_proof_challenge || dualbase_proof_response
@@ -231,7 +231,7 @@ namespace multisig
     binary_archive<false> archived_msg{epee::strspan<std::uint8_t>(msg_no_magic)};
 
     // extract data from the message
-    crypto::DualBaseVectorProof dualbase_proof;
+    sp::DualBaseVectorProof dualbase_proof;
     crypto::signature msg_signature;
 
     multisig_conversion_msg_serializable deserialized_msg;
@@ -249,8 +249,8 @@ namespace multisig
     else CHECK_AND_ASSERT_THROW_MES(false, "Deserializing conversion msg failed.");
 
     // checks
-    const rct::key G_1{get_primary_generator(m_old_era)};
-    const rct::key G_2{get_primary_generator(m_new_era)};
+    const rct::key G_1{rct::pk2rct(cryptonote::get_primary_generator(m_old_era))};
+    const rct::key G_2{rct::pk2rct(cryptonote::get_primary_generator(m_new_era))};
     CHECK_AND_ASSERT_THROW_MES(!(G_1 == rct::Z), "Unknown conversion msg old era.");
     CHECK_AND_ASSERT_THROW_MES(!(G_2 == rct::Z), "Unknown conversion msg new era.");
     CHECK_AND_ASSERT_THROW_MES(dualbase_proof.V_1.size() > 0, "Conversion message has no conversion keys.");
@@ -263,7 +263,7 @@ namespace multisig
 
     // validate dualbase proof
     get_dualbase_proof_msg(MULTISIG_CONVERSION_MSG_MAGIC_V1, m_signing_pubkey, m_old_era, m_new_era, dualbase_proof.m);
-    CHECK_AND_ASSERT_THROW_MES(crypto::dual_base_vector_verify(dualbase_proof, rct::rct2pk(G_1), rct::rct2pk(G_2)),
+    CHECK_AND_ASSERT_THROW_MES(sp::verify_dual_base_vector_proof(dualbase_proof, rct::rct2pk(G_1), rct::rct2pk(G_2)),
       "Conversion message dualbase proof invalid.");
 
     // validate signature

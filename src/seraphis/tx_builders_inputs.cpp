@@ -32,6 +32,7 @@
 #include "tx_builders_inputs.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 extern "C"
@@ -48,7 +49,6 @@ extern "C"
 #include "seraphis_crypto/sp_composition_proof.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
 #include "seraphis_crypto/sp_hash_functions.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "seraphis_crypto/sp_transcript.h"
 #include "sp_core_enote_utils.h"
 #include "tx_binned_reference_set.h"
@@ -215,17 +215,17 @@ void make_input_images_prefix_v1(const std::vector<LegacyEnoteImageV2> &legacy_e
     sp_hash_to_32(transcript, input_images_prefix_out.bytes);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void check_v1_input_proposal_semantics_v1(const SpInputProposalV1 &input_proposal, const rct::key &sp_spend_pubkey)
+void check_v1_input_proposal_semantics_v1(const SpInputProposalV1 &input_proposal, const rct::key &sp_core_spend_pubkey)
 {
     // 1. the onetime address must be reproducible
-    rct::key extended_spendkey{sp_spend_pubkey};
+    rct::key extended_spendkey{sp_core_spend_pubkey};
     extend_seraphis_spendkey_u(input_proposal.m_core.m_enote_view_privkey_u, extended_spendkey);
 
     rct::key onetime_address_reproduced{extended_spendkey};
     extend_seraphis_spendkey_x(input_proposal.m_core.m_enote_view_privkey_x, onetime_address_reproduced);
     mask_key(input_proposal.m_core.m_enote_view_privkey_g, onetime_address_reproduced, onetime_address_reproduced);
 
-    CHECK_AND_ASSERT_THROW_MES(onetime_address_reproduced == input_proposal.m_core.m_enote_core.m_onetime_address,
+    CHECK_AND_ASSERT_THROW_MES(onetime_address_reproduced == onetime_address_ref(input_proposal.m_core.m_enote_core),
         "input proposal v1 semantics check: could not reproduce the one-time address.");
 
     // 2. the key image must be reproducible and canonical
@@ -244,11 +244,11 @@ void check_v1_input_proposal_semantics_v1(const SpInputProposalV1 &input_proposa
             rct::commit(input_proposal.m_core.m_amount, rct::sk2rct(input_proposal.m_core.m_amount_blinding_factor))
         };
 
-    CHECK_AND_ASSERT_THROW_MES(amount_commitment_reproduced == input_proposal.m_core.m_enote_core.m_amount_commitment,
+    CHECK_AND_ASSERT_THROW_MES(amount_commitment_reproduced == amount_commitment_ref(input_proposal.m_core.m_enote_core),
         "input proposal v1 semantics check: could not reproduce the amount commitment.");
 }
 //-------------------------------------------------------------------------------------------------------------------
-void make_input_proposal(const SpEnote &enote_core,
+void make_input_proposal(const SpEnoteCoreVariant &enote_core,
     const crypto::key_image &key_image,
     const crypto::secret_key &enote_view_privkey_g,
     const crypto::secret_key &enote_view_privkey_x,
@@ -257,7 +257,7 @@ void make_input_proposal(const SpEnote &enote_core,
     const rct::xmr_amount &input_amount,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
-    SpInputProposal &proposal_out)
+    SpInputProposalCore &proposal_out)
 {
     // make an input proposal
     proposal_out.m_enote_core             = enote_core;
@@ -277,7 +277,7 @@ void make_v1_input_proposal_v1(const SpEnoteRecordV1 &enote_record,
     SpInputProposalV1 &proposal_out)
 {
     // make input proposal from enote record
-    make_input_proposal(enote_record.m_enote.m_core,
+    make_input_proposal(core_ref(enote_record.m_enote),
         enote_record.m_key_image,
         enote_record.m_enote_view_privkey_g,
         enote_record.m_enote_view_privkey_x,
@@ -289,7 +289,7 @@ void make_v1_input_proposal_v1(const SpEnoteRecordV1 &enote_record,
         proposal_out.m_core);
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool try_make_v1_input_proposal_v1(const SpEnoteV1 &enote,
+bool try_make_v1_input_proposal_v1(const SpEnoteVariant &enote,
     const crypto::x25519_pubkey &enote_ephemeral_pubkey,
     const rct::key &input_context,
     const rct::key &jamtis_spend_pubkey,
@@ -337,7 +337,7 @@ void make_standard_input_context_v1(const std::vector<LegacyInputProposalV1> &le
     jamtis::make_jamtis_input_context_standard(legacy_key_images_collected, sp_key_images_collected, input_context_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void make_v1_image_proof_v1(const SpInputProposal &input_proposal,
+void make_v1_image_proof_v1(const SpInputProposalCore &input_proposal,
     const rct::key &message,
     const crypto::secret_key &sp_spend_privkey,
     SpImageProofV1 &image_proof_out)
@@ -345,18 +345,18 @@ void make_v1_image_proof_v1(const SpInputProposal &input_proposal,
     // make image proof
 
     // 1. the input enote
-    const SpEnote &input_enote_core{input_proposal.enote_core()};
+    const SpEnoteCoreVariant &input_enote_core{input_proposal.enote_core()};
 
     // 2. the input enote image
-    SpEnoteImage input_enote_image_core;
+    SpEnoteImageCore input_enote_image_core;
     input_proposal.get_enote_image_core(input_enote_image_core);
 
     // 3. prepare for proof (squashed enote model): x, y, z
 
     // a. squash prefix: H_n(Ko,C)
     rct::key squash_prefix;
-    make_seraphis_squash_prefix(input_enote_core.m_onetime_address,
-        input_enote_core.m_amount_commitment,
+    make_seraphis_squash_prefix(onetime_address_ref(input_enote_core),
+        amount_commitment_ref(input_enote_core),
         squash_prefix);  // H_n(Ko,C)
 
     // b. x: t_k + H_n(Ko,C) (k_{mask, recipient} + k_{mask, sender})
@@ -374,7 +374,12 @@ void make_v1_image_proof_v1(const SpInputProposal &input_proposal,
     sc_mul(to_bytes(z), squash_prefix.bytes, to_bytes(z));
 
     // 4. make seraphis composition proof
-    make_sp_composition_proof(message, input_enote_image_core.m_masked_address, x, y, z, image_proof_out.m_composition_proof);
+    make_sp_composition_proof(message,
+        input_enote_image_core.m_masked_address,
+        x,
+        y,
+        z,
+        image_proof_out.m_composition_proof);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_v1_image_proofs_v1(const std::vector<SpInputProposalV1> &input_proposals,
@@ -389,14 +394,14 @@ void make_v1_image_proofs_v1(const std::vector<SpInputProposalV1> &input_proposa
     image_proofs_out.reserve(input_proposals.size());
 
     for (const SpInputProposalV1 &input_proposal : input_proposals)
-        make_v1_image_proof_v1(input_proposal.m_core, message, sp_spend_privkey, add_element(image_proofs_out));
+        make_v1_image_proof_v1(input_proposal.m_core, message, sp_spend_privkey, tools::add_element(image_proofs_out));
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_v1_membership_proof_v1(const std::size_t ref_set_decomp_n,
     const std::size_t ref_set_decomp_m,
     SpBinnedReferenceSetV1 binned_reference_set,
     const std::vector<rct::key> &referenced_enotes_squashed,
-    const SpEnote &real_reference_enote,
+    const SpEnoteCoreVariant &real_reference_enote,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
     SpMembershipProofV1 &membership_proof_out)
@@ -406,7 +411,7 @@ void make_v1_membership_proof_v1(const std::size_t ref_set_decomp_n,
     /// checks and initialization
 
     // 1. misc
-    const std::size_t ref_set_size{ref_set_size_from_decomp(ref_set_decomp_n, ref_set_decomp_m)};
+    const std::size_t ref_set_size{size_from_decomposition(ref_set_decomp_n, ref_set_decomp_m)};
 
     CHECK_AND_ASSERT_THROW_MES(referenced_enotes_squashed.size() == ref_set_size,
         "make membership proof: ref set size doesn't match number of referenced enotes.");
@@ -415,19 +420,19 @@ void make_v1_membership_proof_v1(const std::size_t ref_set_decomp_n,
 
     // 2. make the real reference's squashed representation for later
     rct::key transformed_address;
-    make_seraphis_squashed_address_key(real_reference_enote.m_onetime_address,
-        real_reference_enote.m_amount_commitment,
+    make_seraphis_squashed_address_key(onetime_address_ref(real_reference_enote),
+        amount_commitment_ref(real_reference_enote),
         transformed_address);  //H_n(Ko,C) Ko
 
     rct::key real_Q;
-    rct::addKeys(real_Q, transformed_address, real_reference_enote.m_amount_commitment);  //Hn(Ko, C) Ko + C
+    rct::addKeys(real_Q, transformed_address, amount_commitment_ref(real_reference_enote));  //Hn(Ko, C) Ko + C
 
     // 3. check binned reference set generator
     rct::key masked_address;
     mask_key(address_mask, transformed_address, masked_address);  //K" = t_k G + H_n(Ko,C) Ko
 
     rct::key masked_commitment;
-    mask_key(commitment_mask, real_reference_enote.m_amount_commitment, masked_commitment);  //C" = t_c G + C
+    mask_key(commitment_mask, amount_commitment_ref(real_reference_enote), masked_commitment);  //C" = t_c G + C
 
     rct::key generator_seed_reproduced;
     make_binned_ref_set_generator_seed_v1(masked_address, masked_commitment, generator_seed_reproduced);
@@ -468,13 +473,13 @@ void make_v1_membership_proof_v1(const std::size_t ref_set_decomp_n,
 
 
     /// make grootle proof
-    make_grootle_proof(referenced_enotes_squashed,
+    make_grootle_proof(message,
+        referenced_enotes_squashed,
         real_spend_index_in_set,
         image_offset,
         image_mask,
         ref_set_decomp_n,
         ref_set_decomp_m,
-        message,
         membership_proof_out.m_grootle_proof);
 
 
@@ -503,8 +508,8 @@ void make_v1_membership_proof_v1(SpMembershipProofPrepV1 membership_proof_prep,
 
     // save the masked address to later match the membership proof with its input image
     make_seraphis_squashed_address_key(
-        membership_proof_prep.m_real_reference_enote.m_onetime_address,
-        membership_proof_prep.m_real_reference_enote.m_amount_commitment,
+        onetime_address_ref(membership_proof_prep.m_real_reference_enote),
+        amount_commitment_ref(membership_proof_prep.m_real_reference_enote),
         alignable_membership_proof_out.m_masked_address);  //H_n(Ko,C) Ko
 
     mask_key(membership_proof_prep.m_address_mask,
@@ -524,7 +529,7 @@ void make_v1_membership_proofs_v1(std::vector<SpMembershipProofPrepV1> membershi
     membership_proofs_out.reserve(membership_proof_preps.size());
 
     for (SpMembershipProofPrepV1 &proof_prep : membership_proof_preps)
-        make_v1_membership_proof_v1(std::move(proof_prep), add_element(membership_proofs_out));
+        make_v1_membership_proof_v1(std::move(proof_prep), tools::add_element(membership_proofs_out));
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_v1_membership_proofs_v1(std::vector<SpMembershipProofPrepV1> membership_proof_preps,
@@ -535,7 +540,7 @@ void make_v1_membership_proofs_v1(std::vector<SpMembershipProofPrepV1> membershi
     alignable_membership_proofs_out.reserve(membership_proof_preps.size());
 
     for (SpMembershipProofPrepV1 &proof_prep : membership_proof_preps)
-        make_v1_membership_proof_v1(std::move(proof_prep), add_element(alignable_membership_proofs_out));
+        make_v1_membership_proof_v1(std::move(proof_prep), tools::add_element(alignable_membership_proofs_out));
 }
 //-------------------------------------------------------------------------------------------------------------------
 void check_v1_partial_input_semantics_v1(const SpPartialInputV1 &partial_input)
@@ -545,14 +550,14 @@ void check_v1_partial_input_semantics_v1(const SpPartialInputV1 &partial_input)
             rct::commit(partial_input.m_input_amount, rct::sk2rct(partial_input.m_input_amount_blinding_factor))
         };
 
-    CHECK_AND_ASSERT_THROW_MES(reconstructed_amount_commitment == partial_input.m_input_enote_core.m_amount_commitment,
+    CHECK_AND_ASSERT_THROW_MES(reconstructed_amount_commitment == amount_commitment_ref(partial_input.m_input_enote_core),
         "partial input semantics (v1): could not reconstruct amount commitment.");
 
     // input image masked address and commitment can be reconstructed
     rct::key reconstructed_masked_address;
     rct::key reconstructed_masked_commitment;
-    make_seraphis_enote_image_masked_keys(partial_input.m_input_enote_core.m_onetime_address,
-        partial_input.m_input_enote_core.m_amount_commitment,
+    make_seraphis_enote_image_masked_keys(onetime_address_ref(partial_input.m_input_enote_core),
+        reconstructed_amount_commitment,
         partial_input.m_address_mask,
         partial_input.m_commitment_mask,
         reconstructed_masked_address,
@@ -574,11 +579,11 @@ void check_v1_partial_input_semantics_v1(const SpPartialInputV1 &partial_input)
 void make_v1_partial_input_v1(const SpInputProposalV1 &input_proposal,
     const rct::key &proposal_prefix,
     SpImageProofV1 sp_image_proof,
-    const rct::key &sp_spend_pubkey,
+    const rct::key &sp_core_spend_pubkey,
     SpPartialInputV1 &partial_input_out)
 {
     // 1. check input proposal semantics
-    check_v1_input_proposal_semantics_v1(input_proposal, sp_spend_pubkey);
+    check_v1_input_proposal_semantics_v1(input_proposal, sp_core_spend_pubkey);
 
     // 2. prepare input image
     input_proposal.get_enote_image_v1(partial_input_out.m_input_image);
@@ -599,8 +604,8 @@ void make_v1_partial_input_v1(const SpInputProposalV1 &input_proposal,
     SpPartialInputV1 &partial_input_out)
 {
     // 1. initialization
-    rct::key sp_spend_pubkey;
-    make_seraphis_spendbase(sp_spend_privkey, sp_spend_pubkey);
+    rct::key sp_core_spend_pubkey;
+    make_seraphis_spendbase(sp_spend_privkey, sp_core_spend_pubkey);
 
     // 2. construct image proof
     SpImageProofV1 sp_image_proof;
@@ -613,7 +618,7 @@ void make_v1_partial_input_v1(const SpInputProposalV1 &input_proposal,
     make_v1_partial_input_v1(input_proposal,
         proposal_prefix,
         std::move(sp_image_proof),
-        sp_spend_pubkey,
+        sp_core_spend_pubkey,
         partial_input_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -627,7 +632,12 @@ void make_v1_partial_inputs_v1(const std::vector<SpInputProposalV1> &input_propo
 
     // make all inputs
     for (const SpInputProposalV1 &input_proposal : input_proposals)
-        make_v1_partial_input_v1(input_proposal, proposal_prefix, sp_spend_privkey, add_element(partial_inputs_out));
+    {
+        make_v1_partial_input_v1(input_proposal,
+            proposal_prefix,
+            sp_spend_privkey,
+            tools::add_element(partial_inputs_out));
+    }
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace sp

@@ -79,7 +79,7 @@ void make_v1_legacy_input_proposal_v1(const rct::key &onetime_address,
     const crypto::secret_key &input_amount_blinding_factor,
     const rct::xmr_amount &input_amount,
     const crypto::secret_key &commitment_mask,
-    SpInputProposal &proposal_out);
+    SpInputProposalCore &proposal_out);
 void make_v1_legacy_input_proposal_v1(const LegacyEnoteRecord &enote_record,
     const crypto::secret_key &commitment_mask,
     LegacyInputProposalV1 &proposal_out);

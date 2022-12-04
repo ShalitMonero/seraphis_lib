@@ -32,22 +32,22 @@
 //
 // NOTE ON NOTATION:
 //  In the signature constructions used in Monero, commitments to zero are treated as
-//      public keys against the curve group generator `G`. This means that amount
-//      commitments must use another generator `H` for values in order to show balance.
-//  The result is that the roles of `g` and `h` in the preprint are effectively swapped
-//      in this code, taking on the roles of `H` and `G`, respectively. Read carefully!
+//      public keys against the curve group generator G. This means that amount
+//      commitments must use another generator H for values in order to show balance.
+//  The result is that the roles of g and h in the preprint are effectively swapped
+//      in this code, taking on the roles of H and G, respectively. Read carefully!
 
 #include "bulletproofs_plus2.h"
 
-#include "misc_log_ex.h"
-#include "span.h"
 extern "C"
 {
 #include "crypto/crypto-ops.h"
 }
 #include "cryptonote_config.h"
+#include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/multiexp.h"
+#include "span.h"
 #include "sp_crypto_utils.h"
 #include "sp_generator_factory.h"
 #include "sp_hash_functions.h"
@@ -88,6 +88,7 @@ namespace sp
     // Initial transcript hash
     static rct::key initial_transcript;
 
+    // Initialization flag
     static std::once_flag init_once_flag;
 
     // Use the generator caches to compute a multiscalar multiplication
@@ -96,11 +97,15 @@ namespace sp
         if (HiGi_size > 0)
         {
             static_assert(232 <= STRAUS_SIZE_LIMIT, "Straus in precalc mode can only be calculated till STRAUS_SIZE_LIMIT");
-            return ((HiGi_size <= 232) && (data.size() == HiGi_size)) ? straus(data, straus_HiGi_cache, 0) : pippenger(data, pippenger_HiGi_cache, HiGi_size, rct::get_pippenger_c(data.size()));
+            return ((HiGi_size <= 232) && (data.size() == HiGi_size))
+                ? straus(data, straus_HiGi_cache, 0)
+                : pippenger(data, pippenger_HiGi_cache, HiGi_size, rct::get_pippenger_c(data.size()));
         }
         else
         {
-            return (data.size() <= 95) ? straus(data, NULL, 0) : pippenger(data, NULL, 0, rct::get_pippenger_c(data.size()));
+            return (data.size() <= 95)
+                ? straus(data, NULL, 0)
+                : pippenger(data, NULL, 0, rct::get_pippenger_c(data.size()));
         }
     }
 
@@ -140,6 +145,7 @@ namespace sp
             // h_initial = H_n()
             SpFSTranscript initial_transcript_temp{config::HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT, 0};
             sp_hash_to_scalar(initial_transcript_temp, initial_transcript.bytes);
+
         });
     }
 
@@ -747,7 +753,7 @@ try_again:
         return bulletproof_plus2_PROVE(sv, gamma);
     }
 
-    struct bp_plus_proof_data_t
+    struct bp_plus2_proof_data_t
     {
         rct::key y, z, e;
         std::vector<rct::key> challenges;
@@ -767,13 +773,13 @@ try_again:
         size_t max_length = 0; // size of each of the longest proof's inner-product vectors
         size_t inv_offset = 0;
 
-        std::vector<bp_plus_proof_data_t> proof_data;
+        std::vector<bp_plus2_proof_data_t> proof_data;
         proof_data.reserve(proofs.size());
 
         // We'll perform only a single batch inversion across all proofs in the batch,
         //  since batch inversion requires only one scalar inversion operation.
         std::vector<rct::key> to_invert;
-        to_invert.reserve(11 * proofs.size()); // maximal size, given the aggregation limit
+        to_invert.reserve(14 * proofs.size()); // maximal size, given the aggregation limit
 
         for (const BulletproofPlus2 *p: proofs)
         {
@@ -791,7 +797,7 @@ try_again:
             max_length = std::max(max_length, proof.L.size());
 
             proof_data.push_back({});
-            bp_plus_proof_data_t &pd = proof_data.back();
+            bp_plus2_proof_data_t &pd = proof_data.back();
 
             // Reconstruct the challenges
             rct::key transcript = copy(initial_transcript);
@@ -861,7 +867,7 @@ try_again:
         for (const BulletproofPlus2 *p: proofs)
         {
             const BulletproofPlus2 &proof = *p;
-            const bp_plus_proof_data_t &pd = proof_data[proof_data_index++];
+            const bp_plus2_proof_data_t &pd = proof_data[proof_data_index++];
 
             CHECK_AND_ASSERT_MES(proof.L.size() == 6+pd.logM, false, "Proof is not the expected size");
             const size_t M = 1 << pd.logM;

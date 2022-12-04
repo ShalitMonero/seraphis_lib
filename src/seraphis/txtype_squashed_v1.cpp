@@ -33,13 +33,13 @@
 
 //local headers
 #include "cryptonote_config.h"
+#include "jamtis_payment_proposal.h"
 #include "misc_log_ex.h"
 #include "ringct/bulletproofs_plus.h"
 #include "ringct/multiexp.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
 #include "seraphis_crypto/sp_hash_functions.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "seraphis_crypto/sp_multiexp.h"
 #include "seraphis_crypto/sp_transcript.h"
 #include "sp_core_enote_utils.h"
@@ -69,6 +69,50 @@
 
 namespace sp
 {
+//-------------------------------------------------------------------------------------------------------------------
+void SpTxSquashedV1::get_id(rct::key &tx_id_out) const
+{
+    // tx_id = H_32(tx_proposal_prefix, input images, proofs)
+
+    // 1. tx proposal
+    // H_32(crypto project name, version string, legacy input key images, sp input key images, output enotes,
+    //        tx supplement, fee)
+    std::string version_string;
+    version_string.reserve(3);
+    make_versioning_string(m_tx_semantic_rules_version, version_string);
+
+    rct::key tx_proposal_prefix;
+    make_tx_proposal_prefix_v1(version_string,
+        m_legacy_input_images,
+        m_sp_input_images,
+        m_outputs,
+        m_tx_supplement,
+        m_tx_fee,
+        tx_proposal_prefix);
+
+    // 2. input images (note: key images are represented in the tx hash twice (image proofs message and input images))
+    // H_32({C", KI}((legacy)), {K", C", KI}((seraphis)))
+    rct::key input_images_prefix;
+    make_input_images_prefix_v1(m_legacy_input_images, m_sp_input_images, input_images_prefix);
+
+    // 3. proofs
+    // H_32(balance proof, legacy ring signatures, image proofs, seraphis membership proofs)
+    rct::key tx_proofs_prefix;
+    make_tx_proofs_prefix_v1(m_balance_proof,
+        m_legacy_ring_signatures,
+        m_sp_image_proofs,
+        m_sp_membership_proofs,
+        tx_proofs_prefix);
+
+    // 4. tx hash
+    // tx_hash = H_32(tx_proposal_prefix, input images, proofs)
+    SpFSTranscript transcript{config::HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1, 3*sizeof(rct::key)};
+    transcript.append("tx_proposal_prefix", tx_proposal_prefix);
+    transcript.append("input_images_prefix", input_images_prefix);
+    transcript.append("tx_proofs_prefix", tx_proofs_prefix);
+
+    sp_hash_to_32(transcript, tx_id_out.bytes);
+}
 //-------------------------------------------------------------------------------------------------------------------
 std::size_t SpTxSquashedV1::size_bytes(const std::size_t num_legacy_inputs,
     const std::size_t num_sp_inputs,
@@ -106,7 +150,7 @@ std::size_t SpTxSquashedV1::size_bytes(const std::size_t num_legacy_inputs,
     size += num_sp_inputs * SpMembershipProofV1::size_bytes(ref_set_decomp_n, ref_set_decomp_m, num_bin_members);
 
     // extra data in tx
-    size += SpTxSupplementV1::size_bytes(num_outputs, tx_extra);
+    size += SpTxSupplementV1::size_bytes(num_outputs, tx_extra, true);  //with shared ephemeral pubkey assumption
 
     // tx fee
     size += DiscretizedFee::size_bytes();
@@ -206,50 +250,6 @@ std::size_t SpTxSquashedV1::weight() const
         ref_set_decomp_m,
         num_bin_members,
         m_tx_supplement.m_tx_extra);
-}
-//-------------------------------------------------------------------------------------------------------------------
-void SpTxSquashedV1::get_hash(rct::key &tx_hash_out) const
-{
-    // tx_hash = H_32(tx_proposal_prefix, input images, proofs)
-
-    // 1. tx proposal
-    // H_32(crypto project name, version string, legacy input key images, sp input key images, output enotes,
-    //        tx supplement, fee)
-    std::string version_string;
-    version_string.reserve(3);
-    make_versioning_string(m_tx_semantic_rules_version, version_string);
-
-    rct::key tx_proposal_prefix;
-    make_tx_proposal_prefix_v1(version_string,
-        m_legacy_input_images,
-        m_sp_input_images,
-        m_outputs,
-        m_tx_supplement,
-        m_tx_fee,
-        tx_proposal_prefix);
-
-    // 2. input images (note: key images are represented in the tx hash twice (image proofs message and input images))
-    // H_32({C", KI}((legacy)), {K", C", KI}((seraphis)))
-    rct::key input_images_prefix;
-    make_input_images_prefix_v1(m_legacy_input_images, m_sp_input_images, input_images_prefix);
-
-    // 3. proofs
-    // H_32(balance proof, legacy ring signatures, image proofs, seraphis membership proofs)
-    rct::key tx_proofs_prefix;
-    make_tx_proofs_prefix_v1(m_balance_proof,
-        m_legacy_ring_signatures,
-        m_sp_image_proofs,
-        m_sp_membership_proofs,
-        tx_proofs_prefix);
-
-    // 4. tx hash
-    // tx_hash = H_32(tx_proposal_prefix, input images, proofs)
-    SpFSTranscript transcript{config::HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1, 3*sizeof(rct::key)};
-    transcript.append("tx_proposal_prefix", tx_proposal_prefix);
-    transcript.append("input_images_prefix", input_images_prefix);
-    transcript.append("tx_proofs_prefix", tx_proofs_prefix);
-
-    sp_hash_to_32(transcript, tx_hash_out.bytes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_seraphis_tx_squashed_v1(const SpTxSquashedV1::SemanticRulesVersion semantic_rules_version,
@@ -553,7 +553,7 @@ bool validate_tx_semantics<SpTxSquashedV1>(const SpTxSquashedV1 &tx)
         return false;
 
     // validate output serialization semantics
-    if (!validate_sp_semantics_output_serialization_v1(tx.m_outputs, tx.m_tx_supplement))
+    if (!validate_sp_semantics_output_serialization_v2(tx.m_outputs))
         return false;
 
     // validate input image semantics
@@ -578,10 +578,10 @@ bool validate_tx_semantics<SpTxSquashedV1>(const SpTxSquashedV1 &tx)
 }
 //-------------------------------------------------------------------------------------------------------------------
 template <>
-bool validate_tx_linking_tags<SpTxSquashedV1>(const SpTxSquashedV1 &tx, const TxValidationContext &tx_validation_context)
+bool validate_tx_key_images<SpTxSquashedV1>(const SpTxSquashedV1 &tx, const TxValidationContext &tx_validation_context)
 {
     // unspentness proof (key images not in ledger)
-    if (!validate_sp_linking_tags_v1(tx.m_legacy_input_images, tx.m_sp_input_images, tx_validation_context))
+    if (!validate_sp_key_images_v1(tx.m_legacy_input_images, tx.m_sp_input_images, tx_validation_context))
         return false;
 
     return true;
@@ -641,7 +641,7 @@ bool validate_txs_batchable<SpTxSquashedV1>(const std::vector<const SpTxSquashed
     const TxValidationContext &tx_validation_context)
 {
     std::vector<const SpMembershipProofV1*> sp_membership_proof_ptrs;
-    std::vector<const SpEnoteImage*> sp_input_image_ptrs;
+    std::vector<const SpEnoteImageCore*> sp_input_image_ptrs;
     std::vector<const BulletproofPlus2*> range_proof_ptrs;
     sp_membership_proof_ptrs.reserve(txs.size()*20);  //heuristic... (most tx have 1-2 seraphis inputs)
     sp_input_image_ptrs.reserve(txs.size()*20);

@@ -33,7 +33,6 @@
 #include "ringct/rctTypes.h"
 #include "seraphis/tx_binned_reference_set.h"
 #include "seraphis/txtype_squashed_v1.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "seraphis_mocks/seraphis_mocks.h"
 
 #include <iostream>
@@ -92,9 +91,9 @@ public:
             m_sp_in_i >= m_sp_in_counts.size() ||
             m_out_i >= m_out_counts.size() ||
             m_legacy_ring_size_i >= m_legacy_ring_size.size() ||
-            m_decomp_i >= m_ref_set_decomp_n.size() ||
-            m_decomp_i >= m_ref_set_decomp_m_limit.size() ||
-            m_decomp_m_current > m_ref_set_decomp_m_limit[m_decomp_i] ||
+            nm_decomp_i >= m_ref_set_decomp_n.size() ||
+            nm_decomp_i >= m_ref_set_decomp_m_limit.size() ||
+            m_decomp_m_current > m_ref_set_decomp_m_limit[nm_decomp_i] ||
             m_ref_set_decomp_n.size() != m_ref_set_decomp_m_limit.size())
         {
             m_is_done = true;
@@ -103,18 +102,26 @@ public:
         return m_is_done;
     }
 
-    void get_params(ParamsShuttleSpTx &params)
+    void get_params(ParamsShuttleSpTx &params_out)
     {
         if (is_done())
             return;
 
-        params.batch_size = m_batch_sizes[m_batch_size_i];
-        params.legacy_in_count = m_legacy_in_counts[m_legacy_in_i];
-        params.sp_in_count = m_sp_in_counts[m_sp_in_i];
-        params.out_count = m_out_counts[m_out_i];
-        params.legacy_ring_size = m_legacy_ring_size[m_legacy_ring_size_i];
-        params.n = m_ref_set_decomp_n[m_decomp_i];
-        params.m = m_decomp_m_current;
+        params_out.batch_size = m_batch_sizes[m_batch_size_i];
+        params_out.legacy_in_count = m_legacy_in_counts[m_legacy_in_i];
+        params_out.sp_in_count = m_sp_in_counts[m_sp_in_i];
+        params_out.out_count = m_out_counts[m_out_i];
+        params_out.legacy_ring_size = m_legacy_ring_size[m_legacy_ring_size_i];
+        params_out.n = m_ref_set_decomp_n[nm_decomp_i];
+        params_out.m = m_decomp_m_current;
+    }
+
+    bool refresh_params(ParamsShuttleSpTx &params_out)
+    {
+        get_params(params_out);
+        ++m_variations_requested;
+
+        return !is_done();
     }
 
     void init_decomp_m_current()
@@ -125,100 +132,86 @@ public:
             return;
 
         // heuristic: start at n^2 for n > 2
-        if (m_ref_set_decomp_n[m_decomp_i] > 2)
+        if (m_ref_set_decomp_n[nm_decomp_i] > 2)
             m_decomp_m_current = 2;
     }
 
-    bool next(ParamsShuttleSpTx &params)
+    bool next(ParamsShuttleSpTx &params_out)
     {
         if (is_done())
             return false;
 
+        // first variation
         if (m_variations_requested == 0)
-        {
-            get_params(params);
-            ++m_variations_requested;
+            return refresh_params(params_out);
 
-            return true;
-        }
-
-        // order:
+        // nesting order (lowest in list is changed first):
         // - batch size
-        //  - legacy in count
-        //   - seraphis in count
-        //    - out count
-        //     - legacy ring size
-        //      - decomp n
-        //       - decomp m
+        // - legacy in count
+        // - seraphis in count
+        // - out count
+        // - legacy ring size
+        // - decomp n
+        // - decomp m
 
-        if (m_decomp_m_current >= m_ref_set_decomp_m_limit[m_decomp_i])
-        {
-            if (m_decomp_i + 1 >= m_ref_set_decomp_n.size())
-            {
-                if (m_legacy_ring_size_i + 1 >= m_legacy_ring_size.size())
-                {
-                    if (m_out_i + 1 >= m_out_counts.size())
-                    {
-                        if (m_sp_in_i + 1 >= m_sp_in_counts.size())
-                        {
-                            if (m_legacy_in_i + 1 >= m_legacy_in_counts.size())
-                            {
-                                if (m_batch_size_i + 1 >= m_batch_sizes.size())
-                                {
-                                    // no where left to go
-                                    m_is_done = true;
-                                }
-                                else
-                                {
-                                    ++m_batch_size_i;
-                                }
-
-                                m_legacy_in_i = 0;
-                            }
-                            else
-                            {
-                                ++m_legacy_in_i;
-                            }
-
-                            m_sp_in_i = 0;
-                        }
-                        else
-                        {
-                            ++m_sp_in_i;
-                        }
-
-                        m_out_i = 0;
-                    }
-                    else
-                    {
-                        ++m_out_i;
-                    }
-
-                    m_legacy_ring_size_i = 0;
-                }
-                else
-                {
-                    ++m_legacy_ring_size_i;
-                }
-
-                m_decomp_i = 0;
-            }
-            else
-            {
-                ++m_decomp_i;
-            }
-
-            init_decomp_m_current();
-        }
-        else
+        if (m_decomp_m_current < m_ref_set_decomp_m_limit[nm_decomp_i])
         {
             ++m_decomp_m_current;
+            return this->refresh_params(params_out);
+        }
+        else
+            init_decomp_m_current();
+
+        if (nm_decomp_i + 1 < m_ref_set_decomp_n.size())
+        {
+            ++nm_decomp_i;
+            return this->refresh_params(params_out);
+        }
+        else
+            nm_decomp_i = 0;
+
+        if (m_legacy_ring_size_i + 1 < m_legacy_ring_size.size())
+        {
+            ++m_legacy_ring_size_i;
+            return this->refresh_params(params_out);
+        }
+        else
+            m_legacy_ring_size_i = 0;
+
+        if (m_out_i + 1 < m_out_counts.size())
+        {
+            ++m_out_i;
+            return this->refresh_params(params_out);
+        }
+        else
+            m_out_i = 0;
+
+        if (m_sp_in_i + 1 < m_sp_in_counts.size())
+        {
+            ++m_sp_in_i;
+            return this->refresh_params(params_out);
+        }
+        else
+            m_sp_in_i = 0;
+
+        if (m_legacy_in_i + 1 < m_legacy_in_counts.size())
+        {
+            ++m_legacy_in_i;
+            return this->refresh_params(params_out);
+        }
+        else
+            m_legacy_in_i = 0;
+
+        if (m_batch_size_i + 1 < m_batch_sizes.size())
+        {
+            ++m_batch_size_i;
+            return this->refresh_params(params_out);
         }
 
-        get_params(params);
-        ++m_variations_requested;
+        // nowhere left to go
+        m_is_done = true;
 
-        return !is_done();
+        return this->refresh_params(params_out);
     }
 
 private:
@@ -229,7 +222,7 @@ private:
     // count number of variations requested
     std::size_t m_variations_requested{0};
 
-    // max number of tx to batch validate
+    // number of tx to batch validate
     std::vector<std::size_t> m_batch_sizes;
     std::size_t m_batch_size_i{0};
 
@@ -247,10 +240,10 @@ private:
     std::vector<std::size_t> m_legacy_ring_size;
     std::size_t m_legacy_ring_size_i{0};
 
-    // seraphis ref set: n^m
+    // seraphis ref set: n^m (these are paired together, with only one shared index)
     std::vector<std::size_t> m_ref_set_decomp_n;
-    std::size_t m_decomp_i{0};
-    std::vector<std::size_t> m_ref_set_decomp_m_limit;
+    std::size_t nm_decomp_i{0};
+    std::vector<std::size_t> m_ref_set_decomp_m_limit;  //increment m from 2 to the specified limit
     std::size_t m_decomp_m_current{0};
 };
 
@@ -317,10 +310,10 @@ public:
                 tx_params.bin_config =
                     sp::SpBinnedReferenceSetConfigV1{
                         .m_bin_radius = static_cast<sp::ref_set_bin_dimension_v1_t>(
-                                sp::ref_set_size_from_decomp(params.n, params.m) / 2
+                                sp::size_from_decomposition(params.n, params.m) / 2
                             ),
                         .m_num_bin_members = static_cast<sp::ref_set_bin_dimension_v1_t>(
-                                sp::ref_set_size_from_decomp(params.n, params.m / 2)
+                                sp::size_from_decomposition(params.n, params.m / 2)
                             )
                     };  //bin config must be compatible with n^m
 
@@ -352,7 +345,7 @@ public:
         report += std::string{"outputs: "} + std::to_string(params.out_count) + " || ";
         report += std::string{"legacy ring size: "} + std::to_string(params.legacy_ring_size) + " || ";
         report += std::string{"sp ref set size ("} + std::to_string(params.n) + "^" + std::to_string(params.m) + "): ";
-        report += std::to_string(sp::ref_set_size_from_decomp(params.n, params.m));
+        report += std::to_string(sp::size_from_decomposition(params.n, params.m));
 
         std::cout << report << '\n';
 
@@ -373,7 +366,7 @@ public:
             report_csv += std::to_string(params.legacy_ring_size) + separator;
             report_csv += std::to_string(params.n) + separator;
             report_csv += std::to_string(params.m) + separator;
-            report_csv += std::to_string(sp::ref_set_size_from_decomp(params.n, params.m));
+            report_csv += std::to_string(sp::size_from_decomposition(params.n, params.m));
 
             params.core_params.td->add(report_csv.c_str(), null_instance);
         }

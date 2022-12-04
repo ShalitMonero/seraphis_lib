@@ -32,6 +32,7 @@
 #include "tx_validators.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctSigs.h"
@@ -40,7 +41,6 @@
 #include "seraphis_crypto/grootle.h"
 #include "seraphis_crypto/sp_composition_proof.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "tx_binned_reference_set_utils.h"
 #include "tx_builders_inputs.h"
 #include "tx_builders_legacy_inputs.h"
@@ -51,6 +51,7 @@
 #include "tx_validation_context.h"
 
 //third party headers
+#include "boost/multiprecision/cpp_int.hpp"
 
 //standard headers
 #include <algorithm>
@@ -99,6 +100,22 @@ static bool validate_sp_amount_balance_equality_check_v1(const std::vector<Legac
     return balance_check_equality(input_image_amount_commitments, output_commitments);
 }
 //-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+bool validate_sp_semantics_coinbase_component_counts_v1(const SemanticConfigCoinbaseComponentCountsV1 &config,
+    const std::size_t num_outputs,
+    const std::size_t num_enote_pubkeys)
+{
+    // output count
+    if (num_outputs < config.m_min_outputs ||
+        num_outputs > config.m_max_outputs)
+        return false;
+
+    // outputs and enote pubkeys should be 1:1 (note: there are no 'shared' enote pubkeys in coinbase txs)
+    if (num_outputs != num_enote_pubkeys)
+        return false;
+
+    return true;
+}
 //-------------------------------------------------------------------------------------------------------------------
 bool validate_sp_semantics_component_counts_v1(const SemanticConfigComponentCountsV1 &config,
     const std::size_t num_legacy_input_images,
@@ -206,7 +223,7 @@ bool validate_sp_semantics_sp_reference_sets_v1(const SemanticConfigSpRefSetV1 &
     for (const SpMembershipProofV1 &sp_proof : sp_membership_proofs)
     {
         // proof ref set decomposition (n^m) should match number of referenced enotes
-        const std::size_t ref_set_size{ref_set_size_from_decomp(sp_proof.m_ref_set_decomp_n, sp_proof.m_ref_set_decomp_m)};
+        const std::size_t ref_set_size{size_from_decomposition(sp_proof.m_ref_set_decomp_n, sp_proof.m_ref_set_decomp_m)};
 
         if (ref_set_size != sp_proof.m_binned_reference_set.reference_set_size())
             return false;
@@ -225,8 +242,23 @@ bool validate_sp_semantics_sp_reference_sets_v1(const SemanticConfigSpRefSetV1 &
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool validate_sp_semantics_output_serialization_v1(const std::vector<SpEnoteV1> &output_enotes,
-    const SpTxSupplementV1 &tx_supplement)
+bool validate_sp_semantics_output_serialization_v1(const std::vector<SpCoinbaseEnoteV1> &output_enotes)
+{
+    ge_p3 temp_deserialized;
+
+    // onetime addresses must be deserializable
+    for (const SpCoinbaseEnoteV1 &output_enote : output_enotes)
+    {
+        if (ge_frombytes_vartime(&temp_deserialized, output_enote.m_core.m_onetime_address.bytes) != 0)
+            return false;
+    }
+
+    // note: all possible serializations of x25519 public keys are valid, so we don't validate enote ephemeral pubkeys here
+
+    return true;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool validate_sp_semantics_output_serialization_v2(const std::vector<SpEnoteV1> &output_enotes)
 {
     ge_p3 temp_deserialized;
 
@@ -276,6 +308,28 @@ bool validate_sp_semantics_input_images_v1(const std::vector<LegacyEnoteImageV2>
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
+bool validate_sp_semantics_coinbase_layout_v1(const std::vector<SpCoinbaseEnoteV1> &outputs,
+    const std::vector<crypto::x25519_pubkey> &enote_ephemeral_pubkeys,
+    const TxExtra &tx_extra)
+{
+    // output enotes should be sorted by onetime address with byte-wise comparisons (ascending), and unique
+    if (!tools::is_sorted_and_unique(outputs))
+        return false;
+
+    // enote ephemeral pubkeys should be unique (they don't need to be sorted)
+    if (!keys_are_unique(enote_ephemeral_pubkeys))
+        return false;
+
+    // tx extra fields should be in sorted TLV (Type-Length-Value) format
+    std::vector<ExtraFieldElement> extra_field_elements;
+    if (!try_get_extra_field_elements(tx_extra, extra_field_elements))
+        return false;
+    if (!std::is_sorted(extra_field_elements.begin(), extra_field_elements.end()))
+        return false;
+
+    return true;
+}
+//-------------------------------------------------------------------------------------------------------------------
 bool validate_sp_semantics_layout_v1(const std::vector<LegacyRingSignatureV3> &legacy_ring_signatures,
     const std::vector<SpMembershipProofV1> &sp_membership_proofs,
     const std::vector<LegacyEnoteImageV2> &legacy_input_images,
@@ -287,7 +341,7 @@ bool validate_sp_semantics_layout_v1(const std::vector<LegacyRingSignatureV3> &l
     // legacy reference sets should be sorted (ascending) without duplicates
     for (const LegacyRingSignatureV3 &legacy_ring_signature : legacy_ring_signatures)
     {
-        if (!is_sorted_and_unique(legacy_ring_signature.m_reference_set))
+        if (!tools::is_sorted_and_unique(legacy_ring_signature.m_reference_set))
             return false;
     }
 
@@ -301,11 +355,11 @@ bool validate_sp_semantics_layout_v1(const std::vector<LegacyRingSignatureV3> &l
     }
 
     // legacy input images should be sorted by key image with byte-wise comparisons (ascending), and unique
-    if (!is_sorted_and_unique(legacy_input_images))
+    if (!tools::is_sorted_and_unique(legacy_input_images))
         return false;
 
     // seraphis input images should be sorted by key image with byte-wise comparisons (ascending), and unique
-    if (!is_sorted_and_unique(sp_input_images))
+    if (!tools::is_sorted_and_unique(sp_input_images))
         return false;
 
     // legacy and seraphis input images should not have any matching key images
@@ -320,7 +374,7 @@ bool validate_sp_semantics_layout_v1(const std::vector<LegacyRingSignatureV3> &l
     }
 
     // output enotes should be sorted by onetime address with byte-wise comparisons (ascending), and unique
-    if (!is_sorted_and_unique(outputs))
+    if (!tools::is_sorted_and_unique(outputs))
         return false;
 
     // enote ephemeral pubkeys should be unique (they don't need to be sorted)
@@ -344,7 +398,7 @@ bool validate_sp_semantics_fee_v1(const DiscretizedFee &discretized_transaction_
     return try_get_fee_value(discretized_transaction_fee, raw_transaction_fee);
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool validate_sp_linking_tags_v1(const std::vector<LegacyEnoteImageV2> &legacy_input_images,
+bool validate_sp_key_images_v1(const std::vector<LegacyEnoteImageV2> &legacy_input_images,
     const std::vector<SpEnoteImageV1> &sp_input_images,
     const TxValidationContext &tx_validation_context)
 {
@@ -361,6 +415,22 @@ bool validate_sp_linking_tags_v1(const std::vector<LegacyEnoteImageV2> &legacy_i
         if (tx_validation_context.key_image_exists_v1(sp_input_image.m_core.m_key_image))
             return false;
     }
+
+    return true;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool validate_sp_coinbase_amount_balance_v1(const rct::xmr_amount block_reward,
+    const std::vector<SpCoinbaseEnoteV1> &outputs)
+{
+    // add together output amounts (use uint128_t to prevent malicious overflow)
+    boost::multiprecision::uint128_t output_amount_sum{0};
+
+    for (const SpCoinbaseEnoteV1 &output : outputs)
+        output_amount_sum += output.m_core.m_amount;
+
+    // expect output amount equals coinbase block reward
+    if (block_reward != output_amount_sum)
+        return false;
 
     return true;
 }
@@ -416,7 +486,7 @@ bool validate_sp_amount_balance_v1(const std::vector<LegacyEnoteImageV2> &legacy
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool try_get_sp_membership_proofs_v1_validation_data(const std::vector<const SpMembershipProofV1*> &sp_membership_proofs,
-    const std::vector<const SpEnoteImage*> &sp_input_images,
+    const std::vector<const SpEnoteImageCore*> &sp_input_images,
     const TxValidationContext &tx_validation_context,
     std::list<SpMultiexpBuilder> &validation_data_out)
 {
@@ -473,7 +543,7 @@ bool try_get_sp_membership_proofs_v1_validation_data(const std::vector<const SpM
 
         // proof message
         make_tx_membership_proof_message_v1(sp_membership_proofs[proof_index]->m_binned_reference_set,
-            add_element(messages));
+            tools::add_element(messages));
 
         // save the proof
         proofs.emplace_back(&(sp_membership_proofs[proof_index]->m_grootle_proof));
@@ -481,11 +551,11 @@ bool try_get_sp_membership_proofs_v1_validation_data(const std::vector<const SpM
 
     // get verification data
     sp::get_grootle_verification_data(proofs,
+        messages,
         membership_proof_keys,
         offsets,
         sp_membership_proofs[0]->m_ref_set_decomp_n,
         sp_membership_proofs[0]->m_ref_set_decomp_m,
-        messages,
         validation_data_out);
 
     return true;

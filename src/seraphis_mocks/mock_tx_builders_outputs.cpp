@@ -32,9 +32,9 @@
 #include "mock_tx_builders_outputs.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "ringct/rctTypes.h"
 #include "seraphis/tx_builder_types.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 
 //third party headers
 
@@ -48,6 +48,23 @@
 namespace sp
 {
 //-------------------------------------------------------------------------------------------------------------------
+std::vector<SpCoinbaseOutputProposalV1> gen_mock_sp_coinbase_output_proposals_v1(
+    const std::vector<rct::xmr_amount> &out_amounts,
+    const std::size_t num_random_memo_elements)
+{
+    // generate random output proposals
+    std::vector<SpCoinbaseOutputProposalV1> output_proposals;
+    output_proposals.reserve(out_amounts.size());
+
+    for (const rct::xmr_amount out_amount : out_amounts)
+        tools::add_element(output_proposals).gen(out_amount, num_random_memo_elements);
+
+    // sort them
+    std::sort(output_proposals.begin(), output_proposals.end());
+
+    return output_proposals;
+}
+//-------------------------------------------------------------------------------------------------------------------
 std::vector<SpOutputProposalV1> gen_mock_sp_output_proposals_v1(const std::vector<rct::xmr_amount> &out_amounts,
     const std::size_t num_random_memo_elements)
 {
@@ -56,7 +73,7 @@ std::vector<SpOutputProposalV1> gen_mock_sp_output_proposals_v1(const std::vecto
     output_proposals.reserve(out_amounts.size());
 
     for (const rct::xmr_amount out_amount : out_amounts)
-        add_element(output_proposals).gen(out_amount, num_random_memo_elements);
+        tools::add_element(output_proposals).gen(out_amount, num_random_memo_elements);
 
     // sort them
     std::sort(output_proposals.begin(), output_proposals.end());

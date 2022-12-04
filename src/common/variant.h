@@ -26,10 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 // Variant wrapper class.
-
 
 #pragma once
 
@@ -50,41 +47,41 @@
 //forward declarations
 
 
-namespace sp
+namespace tools
 {
 
 ////
-// SpVariant: convenience wrapper around boost::variant with a cleaner interface
+// variant: convenience wrapper around boost::variant with a cleaner interface
 // - the value may be assigned to but is otherwise read-only
 // - the variant is 'optional' - an empty variant will evaluate to 'false' and an initialized variant will be 'true'
 ///
-template<typename ResultT>
-struct SpVariantStaticVisitor : public boost::static_visitor<ResultT>
+template <typename ResultT>
+struct variant_static_visitor : public boost::static_visitor<ResultT>
 {
     /// provide visitation for empty variants
-    /// - add to your visitor with: using SpVariantStaticVisitor::operator();
+    /// - add this to your visitor with: using variant_static_visitor::operator();
     ResultT operator()(const boost::blank) const
     {
-        throw std::runtime_error("SpVariant: tried to visit an empty variant.");
+        throw std::runtime_error("variant: tried to visit an empty variant.");
         static const ResultT dummy{};
         return dummy;
     }
 };
 
-template<typename... Types>
-class SpVariant final
+template <typename... Types>
+class variant final
 {
     using VType = boost::variant<boost::blank, Types...>;
 
 public:
 //constructors
     /// default constructor
-    SpVariant() = default;
-    SpVariant(boost::none_t) : SpVariant{} {}  //act like boost::optional
+    variant() = default;
+    variant(boost::none_t) : variant{} {}  //act like boost::optional
 
     /// construct from variant type
     template <typename T>
-    SpVariant(const T &value) : m_value{value} {}
+    variant(const T &value) : m_value{value} {}
 
 //overloaded operators
     /// boolean operator: true if the variant isn't empty/uninitialized
@@ -103,7 +100,7 @@ public:
     const T& unwrap() const
     {
         const T *value_ptr{boost::strict_get<T>(&m_value)};
-        if (!value_ptr) throw std::runtime_error("SpVariant: tried to access value of incorrect type.");
+        if (!value_ptr) throw std::runtime_error("variant: tried to access value of incorrect type.");
         return *value_ptr;
     }
 
@@ -119,7 +116,7 @@ public:
     }
 
     /// check if two variants have the same type
-    static bool same_type(const SpVariant<Types...> &v1, const SpVariant<Types...> &v2)
+    static bool same_type(const variant<Types...> &v1, const variant<Types...> &v2)
     { return v1.type_index() == v2.type_index(); }
 
     /// apply a visitor to the variant
@@ -135,4 +132,4 @@ private:
     VType m_value;
 };
 
-} //namespace sp
+} //namespace tools

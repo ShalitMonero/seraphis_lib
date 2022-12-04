@@ -69,7 +69,8 @@ std::vector<SpInputProposalV1> gen_mock_sp_input_proposals_v1(const crypto::secr
 * inoutparam: ledger_context_inout -
 * return: a reference set that can be used to make a membership proof
 */
-SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1(const SpEnote &real_reference_enote,
+SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1(
+    const SpEnoteCoreVariant &real_reference_enote,
     const std::uint64_t &real_reference_index_in_ledger,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
@@ -78,7 +79,7 @@ SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1(co
     const SpBinnedReferenceSetConfigV1 &bin_config,
     const MockLedgerContext &ledger_context);
 SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_v1(
-    const SpEnote &real_reference_enote,
+    const SpEnoteCoreVariant &real_reference_enote,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
     const std::size_t ref_set_decomp_n,
@@ -86,7 +87,7 @@ SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_v1(
     const SpBinnedReferenceSetConfigV1 &bin_config,
     MockLedgerContext &ledger_context_inout);
 std::vector<SpMembershipProofPrepV1> gen_mock_sp_membership_proof_preps_v1(
-    const std::vector<SpEnote> &real_referenced_enotes,
+    const std::vector<SpEnoteCoreVariant> &real_referenced_enotes,
     const std::vector<crypto::secret_key> &address_masks,
     const std::vector<crypto::secret_key> &commitment_masks,
     const std::size_t ref_set_decomp_n,

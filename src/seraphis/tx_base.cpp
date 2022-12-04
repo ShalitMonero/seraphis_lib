@@ -44,6 +44,16 @@
 namespace sp
 {
 //-------------------------------------------------------------------------------------------------------------------
+bool validate_tx(const SpTxCoinbaseV1 &tx, const TxValidationContext &tx_validation_context)
+{
+    return validate_txs_impl<SpTxCoinbaseV1>({&tx}, tx_validation_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool validate_txs(const std::vector<const SpTxCoinbaseV1*> &txs, const TxValidationContext &tx_validation_context)
+{
+    return validate_txs_impl<SpTxCoinbaseV1>(txs, tx_validation_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
 bool validate_tx(const SpTxSquashedV1 &tx, const TxValidationContext &tx_validation_context)
 {
     return validate_txs_impl<SpTxSquashedV1>({&tx}, tx_validation_context);

@@ -32,11 +32,12 @@
 #include "multisig_nonce_record.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
+#include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"  //for equals_from_less
 #include "seraphis_crypto/sp_transcript.h"
 
 //third party headers
@@ -45,7 +46,7 @@
 //standard headers
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
-#define MONERO_DEFAULT_LOG_CATEGORY "seraphis"
+#define MONERO_DEFAULT_LOG_CATEGORY "multisig"
 
 namespace multisig
 {
@@ -73,7 +74,7 @@ bool MultisigPubNonces::operator<(const MultisigPubNonces &other) const
 //-------------------------------------------------------------------------------------------------------------------
 bool MultisigPubNonces::operator==(const MultisigPubNonces &other) const
 {
-    return sp::equals_from_less{}(*this, other);
+    return tools::equals_from_less{}(*this, other);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void append_to_transcript(const MultisigPubNonces &container, sp::SpTranscriptBuilder &transcript_inout)

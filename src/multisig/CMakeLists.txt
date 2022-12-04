@@ -27,7 +27,6 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 set(multisig_sources
-  dual_base_vector_proof.cpp
   multisig.cpp
   multisig_account.cpp
   multisig_account_era_conversion_msg.cpp

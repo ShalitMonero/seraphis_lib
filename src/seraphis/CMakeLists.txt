@@ -68,6 +68,7 @@ set(seraphis_sources
   tx_input_selection_output_context_v1.cpp
   tx_ref_set_index_mapper_flat.cpp
   tx_validators.cpp
+  txtype_coinbase_v1.cpp
   txtype_squashed_v1.cpp)
 
 monero_find_all_headers(seraphis_headers, "${CMAKE_CURRENT_SOURCE_DIR}")

@@ -34,6 +34,7 @@
 #pragma once
 
 //local headers
+#include "common/variant.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "jamtis_support_types.h"
@@ -59,12 +60,43 @@ namespace sp
 {
 
 ////
+// SpCoinbaseEnoteV1
+///
+struct SpCoinbaseEnoteV1 final
+{
+    /// enote core (one-time address, amount)
+    SpCoinbaseEnoteCore m_core;
+
+    /// addr_tag_enc
+    jamtis::encrypted_address_tag_t m_addr_tag_enc;
+    /// view_tag
+    jamtis::view_tag_t m_view_tag;
+
+    /// less-than operator for sorting
+    bool operator<(const SpCoinbaseEnoteV1 &other_enote) const { return m_core < other_enote.m_core; }
+    /// comparison operator for equivalence testing
+    bool operator==(const SpCoinbaseEnoteV1 &other_enote) const;
+
+    /// generate a dummy v1 coinbase enote (all random; completely unspendable)
+    void gen();
+
+    static std::size_t size_bytes()
+    {
+        return SpCoinbaseEnoteCore::size_bytes() +
+            sizeof(jamtis::encrypted_address_tag_t) +
+            sizeof(jamtis::view_tag_t);
+    }
+};
+inline const boost::string_ref container_name(const SpCoinbaseEnoteV1&) { return "SpCoinbaseEnoteV1"; }
+void append_to_transcript(const SpCoinbaseEnoteV1 &container, SpTranscriptBuilder &transcript_inout);
+
+////
 // SpEnoteV1
 ///
 struct SpEnoteV1 final
 {
     /// enote core (one-time address, amount commitment)
-    SpEnote m_core;
+    SpEnoteCore m_core;
 
     /// enc(a)
     rct::xmr_amount m_encoded_amount;
@@ -83,7 +115,7 @@ struct SpEnoteV1 final
 
     static std::size_t size_bytes()
     {
-        return SpEnote::size_bytes() +
+        return SpEnoteCore::size_bytes() +
             sizeof(rct::xmr_amount) +
             sizeof(jamtis::encrypted_address_tag_t) +
             sizeof(jamtis::view_tag_t);
@@ -93,17 +125,37 @@ inline const boost::string_ref container_name(const SpEnoteV1&) { return "SpEnot
 void append_to_transcript(const SpEnoteV1 &container, SpTranscriptBuilder &transcript_inout);
 
 ////
+// SpEnoteVariant
+// - variant of all seraphis enote types
+//
+// core_ref(): get a copy of the enote's core
+// onetime_address_ref(): get the enote's onetime address
+// amount_commitment_ref(): get the enote's amount commitment (this is a copy because coinbase enotes need to
+//                          compute the commitment)
+// addr_tag_enc_ref(): get the enote's encrypted address tag
+// view_tag_ref(): get the enote's view tag
+// operator==(): check if two enotes are equal
+///
+using SpEnoteVariant = tools::variant<SpCoinbaseEnoteV1, SpEnoteV1>;
+SpEnoteCoreVariant core_ref(const SpEnoteVariant &variant);
+const rct::key& onetime_address_ref(const SpEnoteVariant &variant);
+rct::key amount_commitment_ref(const SpEnoteVariant &variant);
+const jamtis::encrypted_address_tag_t& addr_tag_enc_ref(const SpEnoteVariant &variant);
+jamtis::view_tag_t view_tag_ref(const SpEnoteVariant &variant);
+bool operator==(const SpEnoteVariant &variant1, const SpEnoteVariant &variant2);
+
+////
 // SpEnoteImageV1
 ///
 struct SpEnoteImageV1 final
 {
     /// enote image core (masked address, masked amount commitment, key image)
-    SpEnoteImage m_core;
+    SpEnoteImageCore m_core;
 
     /// less-than operator for sorting
     bool operator<(const SpEnoteImageV1 &other_image) const { return m_core < other_image.m_core; }
 
-    static std::size_t size_bytes() { return SpEnoteImage::size_bytes(); }
+    static std::size_t size_bytes() { return SpEnoteImageCore::size_bytes(); }
 };
 inline const boost::string_ref container_name(const SpEnoteImageV1&) { return "SpEnoteImageV1"; }
 void append_to_transcript(const SpEnoteImageV1 &container, SpTranscriptBuilder &transcript_inout);
@@ -182,7 +234,9 @@ struct SpTxSupplementV1 final
     /// tx memo
     TxExtra m_tx_extra;
 
-    static std::size_t size_bytes(const std::size_t num_outputs, const TxExtra &tx_extra);
+    static std::size_t size_bytes(const std::size_t num_outputs,
+        const TxExtra &tx_extra,
+        const bool use_shared_ephemeral_key_assumption);
     std::size_t size_bytes() const;
 };
 inline const boost::string_ref container_name(const SpTxSupplementV1&) { return "SpTxSupplementV1"; }

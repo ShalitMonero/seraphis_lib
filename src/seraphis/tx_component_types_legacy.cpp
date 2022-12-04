@@ -33,7 +33,7 @@
 
 //local headers
 #include "misc_log_ex.h"
-#include "seraphis_crypto/sp_misc_utils.h"
+#include "seraphis_crypto/sp_legacy_proof_helpers.h"
 #include "seraphis_crypto/sp_transcript.h"
 
 //third party headers

@@ -80,7 +80,7 @@ bool TimingsDatabase::load()
   return true;
 }
 
-bool TimingsDatabase::save(const bool print_current_time /*=true*/)
+bool TimingsDatabase::save(const bool save_current_time /*=true*/)
 {
   if (filename.empty() || instances.empty())
     return true;
@@ -92,11 +92,11 @@ bool TimingsDatabase::save(const bool print_current_time /*=true*/)
     return false;
   }
 
-  if (print_current_time)
+  if (save_current_time)
   {
-    // print current time in readable format (UTC)
+    // save current time in readable format (UTC)
     std::time_t sys_time{std::time(nullptr)};
-    std::tm *utc_time = std::gmtime(&sys_time);    //GMT /equiv UTC
+    std::tm *utc_time = std::gmtime(&sys_time);    //GMT is equivalent to UTC
 
     // format: year-month-day : hour:minute:second
     std::string current_time{};
@@ -139,7 +139,10 @@ bool TimingsDatabase::save(const bool print_current_time /*=true*/)
       fprintf(f, "%f,", i.second.npskew);
       for (uint64_t v: i.second.deciles)
         fprintf(f, "%lu,", (unsigned long)v);
-      fputc('\n', f);  // only add new line if there are points; assume that 'no points' means i.first is for prepending
+
+      // note: only add a new line if there are points; assume that 'no points' means i.first is a message meant to be
+      //       prepended to the next save operation
+      fputc('\n', f);
     }
   }
   fclose(f);
@@ -150,17 +153,19 @@ bool TimingsDatabase::save(const bool print_current_time /*=true*/)
   return true;
 }
 
-/*
 std::vector<TimingsDatabase::instance> TimingsDatabase::get(const char *name) const
 {
   std::vector<instance> ret;
-  auto range = instances.equal_range(name);
-  for (auto i = range.first; i != range.second; ++i)
-    ret.push_back(i->second);
+  for (const auto &i: instances)
+  {
+    if (i.first != name)
+      continue;
+
+    ret.push_back(i.second);
+  }
   std::sort(ret.begin(), ret.end(), [](const instance &e0, const instance &e1){ return e0.t < e1.t; });
   return ret;
 }
-*/
 
 void TimingsDatabase::add(const char *name, const instance &i)
 {

@@ -36,10 +36,10 @@
 #pragma once
 
 //local headers
+#include "common/variant.h"
 #include "crypto/crypto.h"
 #include "multisig/multisig_signer_set_filter.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_variant.h"
 
 //third party headers
 
@@ -220,7 +220,7 @@ struct MultisigSigningErrorBadSigSet final
 // MultisigSigningErrorVariant
 ///
 using MultisigSigningErrorVariant =
-    sp::SpVariant<
+    tools::variant<
         MultisigSigningErrorBadInitSet,
         MultisigSigningErrorBadInitSetCollection,
         MultisigSigningErrorAvailableSigners,

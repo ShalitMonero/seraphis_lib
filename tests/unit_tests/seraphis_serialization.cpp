@@ -31,13 +31,48 @@
 #include "seraphis/serialization_demo_utils.h"
 #include "seraphis/tx_base.h"
 #include "seraphis/tx_binned_reference_set.h"
+#include "seraphis/txtype_coinbase_v1.h"
 #include "seraphis/txtype_squashed_v1.h"
 #include "seraphis_mocks/seraphis_mocks.h"
 #include "span.h"
 
 #include "gtest/gtest.h"
 
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_serialization_demo, seraphis_coinbase_empty)
+{
+    using namespace sp;
 
+    // make empty tx
+    SpTxCoinbaseV1 tx{};
+
+    // convert the tx to serializable form
+    sp::serialization::ser_SpTxCoinbaseV1 serializable_tx;
+    EXPECT_NO_THROW(sp::serialization::make_serializable_sp_tx_coinbase_v1(tx, serializable_tx));
+
+    // serialize the tx
+    std::string serialized_tx;
+    EXPECT_TRUE(sp::serialization::try_append_serializable(serializable_tx, serialized_tx));
+
+    // deserialize the tx
+    sp::serialization::ser_SpTxCoinbaseV1 serializable_tx_recovered;
+    EXPECT_TRUE(sp::serialization::try_get_serializable(epee::strspan<std::uint8_t>(serialized_tx),
+        serializable_tx_recovered));
+
+    // recover the tx
+    SpTxCoinbaseV1 recovered_tx;
+    EXPECT_NO_THROW(sp::serialization::recover_sp_tx_coinbase_v1(serializable_tx_recovered, recovered_tx));
+
+    // check that the original tx was recovered
+    rct::key original_tx_id;
+    rct::key recovered_tx_id;
+
+    EXPECT_NO_THROW(tx.get_id(original_tx_id));
+    EXPECT_NO_THROW(recovered_tx.get_id(recovered_tx_id));
+
+    EXPECT_TRUE(original_tx_id == recovered_tx_id);
+    EXPECT_NO_THROW(EXPECT_TRUE(tx.size_bytes() == recovered_tx.size_bytes()));
+}
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis_serialization_demo, seraphis_squashed_empty)
 {
@@ -64,14 +99,56 @@ TEST(seraphis_serialization_demo, seraphis_squashed_empty)
     EXPECT_NO_THROW(sp::serialization::recover_sp_tx_squashed_v1(serializable_tx_recovered, {}, 0, 0, recovered_tx));
 
     // check that the original tx was recovered
-    rct::key original_tx_hash;
-    rct::key recovered_tx_hash;
+    rct::key original_tx_id;
+    rct::key recovered_tx_id;
 
-    EXPECT_NO_THROW(tx.get_hash(original_tx_hash));
-    EXPECT_NO_THROW(recovered_tx.get_hash(recovered_tx_hash));
+    EXPECT_NO_THROW(tx.get_id(original_tx_id));
+    EXPECT_NO_THROW(recovered_tx.get_id(recovered_tx_id));
 
-    EXPECT_TRUE(original_tx_hash == recovered_tx_hash);
+    EXPECT_TRUE(original_tx_id == recovered_tx_id);
     EXPECT_NO_THROW(EXPECT_TRUE(tx.size_bytes() == recovered_tx.size_bytes()));
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_serialization_demo, seraphis_coinbase_standard)
+{
+    using namespace sp;
+
+    // ledger context
+    MockLedgerContext ledger_context{0, 10000};
+    const TxValidationContextMock tx_validation_context{ledger_context};
+
+    // make a tx
+    SpTxCoinbaseV1 tx;
+    make_mock_tx<SpTxCoinbaseV1>(SpTxParamPackV1{}, {1}, {}, {1}, {0}, ledger_context, tx);
+
+    // convert the tx to serializable form
+    sp::serialization::ser_SpTxCoinbaseV1 serializable_tx;
+    EXPECT_NO_THROW(sp::serialization::make_serializable_sp_tx_coinbase_v1(tx, serializable_tx));
+
+    // serialize the tx
+    std::string serialized_tx;
+    EXPECT_TRUE(sp::serialization::try_append_serializable(serializable_tx, serialized_tx));
+
+    // deserialize the tx
+    sp::serialization::ser_SpTxCoinbaseV1 serializable_tx_recovered;
+    EXPECT_TRUE(sp::serialization::try_get_serializable(epee::strspan<std::uint8_t>(serialized_tx),
+        serializable_tx_recovered));
+
+    // recover the tx
+    SpTxCoinbaseV1 recovered_tx;
+    EXPECT_NO_THROW(sp::serialization::recover_sp_tx_coinbase_v1(serializable_tx_recovered, recovered_tx));
+
+    // check the tx was recovered
+    rct::key original_tx_id;
+    rct::key recovered_tx_id;
+
+    EXPECT_NO_THROW(tx.get_id(original_tx_id));
+    EXPECT_NO_THROW(recovered_tx.get_id(recovered_tx_id));
+
+    EXPECT_TRUE(original_tx_id == recovered_tx_id);
+    EXPECT_NO_THROW(EXPECT_TRUE(tx.size_bytes() == recovered_tx.size_bytes()));
+    EXPECT_TRUE(validate_tx(tx, tx_validation_context));
+    EXPECT_TRUE(validate_tx(recovered_tx, tx_validation_context));
 }
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis_serialization_demo, seraphis_squashed_standard)
@@ -126,13 +203,13 @@ TEST(seraphis_serialization_demo, seraphis_squashed_standard)
         recovered_tx));
 
     // check the tx was recovered
-    rct::key original_tx_hash;
-    rct::key recovered_tx_hash;
+    rct::key original_tx_id;
+    rct::key recovered_tx_id;
 
-    EXPECT_NO_THROW(tx.get_hash(original_tx_hash));
-    EXPECT_NO_THROW(recovered_tx.get_hash(recovered_tx_hash));
+    EXPECT_NO_THROW(tx.get_id(original_tx_id));
+    EXPECT_NO_THROW(recovered_tx.get_id(recovered_tx_id));
 
-    EXPECT_TRUE(original_tx_hash == recovered_tx_hash);
+    EXPECT_TRUE(original_tx_id == recovered_tx_id);
     EXPECT_NO_THROW(EXPECT_TRUE(tx.size_bytes() == recovered_tx.size_bytes()));
     EXPECT_TRUE(validate_tx(tx, tx_validation_context));
     EXPECT_TRUE(validate_tx(recovered_tx, tx_validation_context));

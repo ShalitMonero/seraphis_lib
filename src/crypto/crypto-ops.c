@@ -1136,7 +1136,7 @@ void ge_add(ge_p1p1 *r, const ge_p3 *p, const ge_cached *q) {
 
 /* From ge_double_scalarmult.c, modified */
 
-void slide(signed char *r, const unsigned char *a) {
+static void slide(signed char *r, const unsigned char *a) {
   int i;
   int b;
   int k;

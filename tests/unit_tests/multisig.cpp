@@ -28,8 +28,7 @@
 
 #include "crypto/crypto.h"
 #include "crypto/generators.h"
-#include "multisig/account_generator_era.h"
-#include "multisig/dual_base_vector_proof.h"
+#include "cryptonote_basic/account_generators.h"
 #include "multisig/multisig.h"
 #include "multisig/multisig_account.h"
 #include "multisig/multisig_account_era_conversion_msg.h"
@@ -648,47 +647,6 @@ TEST(multisig, multisig_signer_set_filter)
   EXPECT_TRUE(filtered_signers[1] == signer_list[2]);
 }
 //-------------------------------------------------------------------------------------------------------------------
-//todo: move to better-suited file?
-TEST(multisig, dual_base_vector_proof)
-{
-  crypto::DualBaseVectorProof proof;
-
-  auto make_keys =
-    [](const std::size_t num_keys) -> std::vector<crypto::secret_key>
-    {
-      std::vector<crypto::secret_key> skeys;
-      skeys.reserve(num_keys);
-      for (std::size_t i{0}; i < num_keys; ++i) { skeys.emplace_back(rct::rct2sk(rct::skGen())); }
-      return skeys;
-    };
-
-  const crypto::public_key gen_G{crypto::get_G()};
-  const crypto::public_key gen_U{crypto::get_U()};
-
-  // G, G, 0 keys
-  EXPECT_ANY_THROW(proof = crypto::dual_base_vector_prove(rct::zero(), gen_G, gen_G, make_keys(0)));
-
-  // G, G, 1 key
-  EXPECT_NO_THROW(proof = crypto::dual_base_vector_prove(rct::zero(), gen_G, gen_G, make_keys(1)));
-  EXPECT_TRUE(crypto::dual_base_vector_verify(proof, gen_G, gen_G));
-
-  // G, G, 2 keys
-  EXPECT_NO_THROW(proof = crypto::dual_base_vector_prove(rct::zero(), gen_G, gen_G, make_keys(2)));
-  EXPECT_TRUE(crypto::dual_base_vector_verify(proof, gen_G, gen_G));
-
-  // G, U, 2 keys
-  EXPECT_NO_THROW(proof = crypto::dual_base_vector_prove(rct::zero(), gen_G, gen_U, make_keys(2)));
-  EXPECT_TRUE(crypto::dual_base_vector_verify(proof, gen_G, gen_U));
-
-  // U, G, 3 keys
-  EXPECT_NO_THROW(proof = crypto::dual_base_vector_prove(rct::zero(), gen_U, gen_G, make_keys(3)));
-  EXPECT_TRUE(crypto::dual_base_vector_verify(proof, gen_U, gen_G));
-
-  // U, U, 3 keys
-  EXPECT_NO_THROW(proof = crypto::dual_base_vector_prove(rct::zero(), gen_U, gen_U, make_keys(3)));
-  EXPECT_TRUE(crypto::dual_base_vector_verify(proof, gen_U, gen_U));
-}
-//-------------------------------------------------------------------------------------------------------------------
 TEST(multisig, multisig_partial_cn_ki_msg)
 {
   using namespace multisig;
@@ -806,10 +764,10 @@ TEST(multisig, multisig_conversion_msg)
     for (const crypto::secret_key &privkey : privkeys)
     {
       expected_old_keyshares.emplace_back(
-          rct::rct2pk(rct::scalarmultKey(cryptonote::get_primary_generator(old_era), rct::sk2rct(privkey)))
+          rct::rct2pk(rct::scalarmultKey(rct::pk2rct(cryptonote::get_primary_generator(old_era)), rct::sk2rct(privkey)))
         );
       expected_new_keyshares.emplace_back(
-          rct::rct2pk(rct::scalarmultKey(cryptonote::get_primary_generator(new_era), rct::sk2rct(privkey)))
+          rct::rct2pk(rct::scalarmultKey(rct::pk2rct(cryptonote::get_primary_generator(new_era)), rct::sk2rct(privkey)))
         );
     }
 

@@ -26,10 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 // Transcript class for assembling data that needs to be hashed.
-
 
 #pragma once
 
@@ -58,7 +55,9 @@ namespace sp
 ////
 // SpTranscriptBuilder
 // - build a transcript
-// - data types: objects are prefixed with a label
+// - the user must provide a label when trying to append something to the transcript; labels are prepended to objects in
+//   the transcript
+// - data types
 //     - unsigned int: uint_flag || varint(uint_variable)
 //     - signed int: int_flag || uchar{int_variable < 0 ? 1 : 0} || varint(abs(int_variable))
 //     - byte buffer (assumed little-endian): buffer_flag || buffer_length || buffer
@@ -105,23 +104,21 @@ public:
 
 private:
 //member variables
-    /// if set, exclude: labels, flags, lengths
+    /// in simple mode, exclude labels, flags, and lengths
     Mode m_mode;
-    /// the transcript itself (wipeable in case it contains sensitive data)
+    /// the transcript buffer (wipeable in case it contains sensitive data)
     epee::wipeable_string m_transcript;
 
 //private member types
     /// flags for separating items added to the transcript
     enum SpTranscriptBuilderFlag : unsigned char
     {
-        EXTERNAL_PREDICATE_CALL = 0,
-        UNSIGNED_INTEGER = 1,
-        SIGNED_INTEGER = 2,
-        BYTE_BUFFER = 3,
-        NAMED_CONTAINER = 4,
-        NAMED_CONTAINER_TERMINATOR = 5,
-        LIST_TYPE_CONTAINER = 6,
-        TRANSCRIPT_CLONE = 7
+        UNSIGNED_INTEGER = 0,
+        SIGNED_INTEGER = 1,
+        BYTE_BUFFER = 2,
+        NAMED_CONTAINER = 3,
+        NAMED_CONTAINER_TERMINATOR = 4,
+        LIST_TYPE_CONTAINER = 5
     };
 
 //transcript builders
@@ -131,7 +128,6 @@ private:
         unsigned char *v_variable_end = v_variable;
 
         // append uint to string as a varint
-        v_variable_end = v_variable;
         tools::write_varint(v_variable_end, unsigned_integer);
         assert(v_variable_end <= v_variable + sizeof(v_variable));
         m_transcript.append(reinterpret_cast<const char*>(v_variable), v_variable_end - v_variable);
@@ -141,8 +137,7 @@ private:
         if (m_mode == Mode::SIMPLE)
             return;
 
-        static_assert(sizeof(SpTranscriptBuilderFlag) <= sizeof(std::uint64_t),
-            "SpTranscriptBuilder: flag type greater than uint64_t.");
+        static_assert(sizeof(SpTranscriptBuilderFlag) <= sizeof(std::uint64_t), "");
         this->append_uint(static_cast<std::uint64_t>(flag));
     }
     void append_length(const std::size_t length)
@@ -150,7 +145,7 @@ private:
         if (m_mode == Mode::SIMPLE)
             return;
 
-        static_assert(sizeof(std::size_t) <= sizeof(std::uint64_t), "SpTranscriptBuilder: size_t greater than uint64_t.");
+        static_assert(sizeof(std::size_t) <= sizeof(std::uint64_t), "");
         this->append_uint(static_cast<std::uint64_t>(length));
     }
     void append_buffer(const void *data, const std::size_t length)
@@ -181,7 +176,7 @@ private:
     {
         this->append_flag(SpTranscriptBuilderFlag::NAMED_CONTAINER_TERMINATOR);
     }
-    void begin_list_type_container(const std::size_t &list_length)
+    void begin_list_type_container(const std::size_t list_length)
     {
         this->append_flag(SpTranscriptBuilderFlag::LIST_TYPE_CONTAINER);
         this->append_length(list_length);
@@ -250,7 +245,7 @@ private:
         std::enable_if_t<std::is_unsigned<T>::value, bool> = true>
     void append_impl(const boost::string_ref label, const T unsigned_integer)
     {
-        static_assert(sizeof(T) <= sizeof(std::uint64_t), "SpTranscriptBuilderFlag: unsupported unsigned integer type.");
+        static_assert(sizeof(T) <= sizeof(std::uint64_t), "SpTranscriptBuilder: unsupported unsigned integer type.");
         this->append_label(label);
         this->append_flag(SpTranscriptBuilderFlag::UNSIGNED_INTEGER);
         this->append_uint(unsigned_integer);
@@ -260,7 +255,7 @@ private:
         std::enable_if_t<!std::is_unsigned<T>::value, bool> = true>
     void append_impl(const boost::string_ref label, const T signed_integer)
     {
-        static_assert(sizeof(T) <= sizeof(std::uint64_t), "SpTranscriptBuilderFlag: unsupported signed integer type.");
+        static_assert(sizeof(T) <= sizeof(std::uint64_t), "SpTranscriptBuilder: unsupported signed integer type.");
         this->append_label(label);
         this->append_flag(SpTranscriptBuilderFlag::SIGNED_INTEGER);
         if (signed_integer >= 0)
@@ -283,6 +278,8 @@ private:
         // named containers must satisfy two concepts:
         //   const boost::string_ref container_name(const T &container);
         //   void append_to_transcript(const T &container, SpTranscriptBuilder &transcript_inout);
+        //todo: this append must be called from within the namespace that container_name() and append_to_transcript()
+        //      are defined, but that is not generic
         this->append_label(label);
         this->begin_named_container(container_name(named_container));
         append_to_transcript(named_container, *this);  //non-member function assumed to be implemented elsewhere

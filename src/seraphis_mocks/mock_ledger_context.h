@@ -57,6 +57,7 @@
 //forward declarations
 namespace sp
 {
+    struct SpTxCoinbaseV1;
     struct SpTxSquashedV1;
     struct EnoteScanningChunkLedgerV1;
     struct EnoteScanningChunkNonLedgerV1;
@@ -186,10 +187,21 @@ public:
     */
     bool try_add_unconfirmed_tx_v1(const SpTxSquashedV1 &tx);
     /**
+    * brief: commit_unconfirmed_cache_v1 - move all unconfirmed txs onto the chain in a new block, with new
+    *      coinbase tx
+    *   - throws if the coinbase tx's block height does not equal the ledger's next block height
+    *   - clears the unconfirmed tx cache
+    *   - note: currently does NOT validate the coinbase tx
+    *   - note2: currently does nothing with the block reward
+    * param: coinbase_tx -
+    * return: block height of newly added block
+    */
+    std::uint64_t commit_unconfirmed_txs_v1(const SpTxCoinbaseV1 &coinbase_tx);
+    /**
     * brief: commit_unconfirmed_cache_v1 - move all unconfirmed txs onto the chain in a new block, with new mock coinbase tx
     *   - clears the unconfirmed tx cache
     *   - note: currently does NOT validate if coinbase enotes are sorted properly
-    *   - todo: use a real coinbase tx instead, with height that is expected to match the next block height (try commit)
+    *   - note2: permits seraphis enotes of any type (coinbase or regular enotes) for convenience in mockups
     * param: mock_coinbase_input_context -
     * param: mock_coinbase_tx_supplement -
     * param: mock_coinbase_output_enotes -
@@ -197,7 +209,7 @@ public:
     */
     std::uint64_t commit_unconfirmed_txs_v1(const rct::key &mock_coinbase_input_context,
         SpTxSupplementV1 mock_coinbase_tx_supplement,
-        std::vector<SpEnoteV1> mock_coinbase_output_enotes);
+        std::vector<SpEnoteVariant> mock_coinbase_output_enotes);
     /**
     * brief: remove_tx_from_unconfirmed_cache - remove a tx from the unconfirmed cache
     * param: tx_id - tx id of tx to remove
@@ -242,14 +254,16 @@ private:
         TxExtra memo,
         std::vector<crypto::key_image> legacy_key_images_for_block,
         std::vector<LegacyEnoteVariant> output_enotes);
-    bool try_add_unconfirmed_coinbase_v1_impl(const rct::key &tx_id,
+    bool try_add_unconfirmed_coinbase_v1_impl(const rct::key &coinbase_tx_id,
         const rct::key &input_context,
         SpTxSupplementV1 tx_supplement,
-        std::vector<SpEnoteV1> output_enotes);
+        std::vector<SpEnoteVariant> output_enotes);
     bool try_add_unconfirmed_tx_v1_impl(const SpTxSquashedV1 &tx);
-    std::uint64_t commit_unconfirmed_txs_v1_impl(const rct::key &mock_coinbase_input_context,
+    std::uint64_t commit_unconfirmed_txs_v1_impl(const SpTxCoinbaseV1 &coinbase_tx);
+    std::uint64_t commit_unconfirmed_txs_v1_impl(const rct::key &coinbase_tx_id,
+        const rct::key &mock_coinbase_input_context,
         SpTxSupplementV1 mock_coinbase_tx_supplement,
-        std::vector<SpEnoteV1> mock_coinbase_output_enotes);
+        std::vector<SpEnoteVariant> mock_coinbase_output_enotes);
     void remove_tx_from_unconfirmed_cache_impl(const rct::key &tx_id);
     void clear_unconfirmed_cache_impl();
     std::uint64_t pop_chain_at_height_impl(const std::uint64_t pop_height);
@@ -284,7 +298,7 @@ private:
         std::tuple<       // tx output contents
             rct::key,                // input context
             SpTxSupplementV1,        // tx supplement
-            std::vector<SpEnoteV1>   // output enotes
+            std::vector<SpEnoteVariant>   // output enotes
         >
     > m_unconfirmed_tx_output_contents;
 
@@ -340,7 +354,7 @@ private:
             std::tuple<       // tx output contents
                 rct::key,                // input context
                 SpTxSupplementV1,        // tx supplement
-                std::vector<SpEnoteV1>   // output enotes
+                std::vector<SpEnoteVariant>   // output enotes
             >
         >
     > m_blocks_of_sp_tx_output_contents;
@@ -354,6 +368,7 @@ private:
     > m_block_infos;
 };
 
+bool try_add_tx_to_ledger(const SpTxCoinbaseV1 &tx_to_add, MockLedgerContext &ledger_context_inout);
 bool try_add_tx_to_ledger(const SpTxSquashedV1 &tx_to_add, MockLedgerContext &ledger_context_inout);
 
 } //namespace sp

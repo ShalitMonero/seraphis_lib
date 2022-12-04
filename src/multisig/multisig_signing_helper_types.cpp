@@ -32,10 +32,10 @@
 #include "multisig_signing_helper_types.h"
 
 //local headers
+#include "common/variant.h"
 #include "multisig_clsag.h"
 #include "multisig_sp_composition_proof.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_variant.h"
 
 //third party headers
 
@@ -43,7 +43,7 @@
 #include <vector>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
-#define MONERO_DEFAULT_LOG_CATEGORY "seraphis"
+#define MONERO_DEFAULT_LOG_CATEGORY "multisig"
 
 namespace multisig
 {
@@ -60,9 +60,9 @@ bool MultisigProofInitSetV1::try_get_nonces(const std::size_t filter_index, std:
 //-------------------------------------------------------------------------------------------------------------------
 const rct::key& proof_key_ref(const MultisigPartialSigVariant &variant)
 {
-    struct visitor : public sp::SpVariantStaticVisitor<const rct::key&>
+    struct visitor : public tools::variant_static_visitor<const rct::key&>
     {
-        using SpVariantStaticVisitor::operator();  //for blank overload
+        using variant_static_visitor::operator();  //for blank overload
         const rct::key& operator()(const CLSAGMultisigPartial &partial_sig) const
         { return partial_sig.main_proof_key_K; }
         const rct::key& operator()(const SpCompositionProofMultisigPartial &partial_sig) const
@@ -74,9 +74,9 @@ const rct::key& proof_key_ref(const MultisigPartialSigVariant &variant)
 //-------------------------------------------------------------------------------------------------------------------
 const rct::key& message_ref(const MultisigPartialSigVariant &variant)
 {
-    struct visitor : public sp::SpVariantStaticVisitor<const rct::key&>
+    struct visitor : public tools::variant_static_visitor<const rct::key&>
     {
-        using SpVariantStaticVisitor::operator();  //for blank overload
+        using variant_static_visitor::operator();  //for blank overload
         const rct::key& operator()(const CLSAGMultisigPartial &partial_sig) const
         { return partial_sig.message; }
         const rct::key& operator()(const SpCompositionProofMultisigPartial &partial_sig) const

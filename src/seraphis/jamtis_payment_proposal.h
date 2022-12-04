@@ -47,7 +47,11 @@
 //standard headers
 
 //forward declarations
-namespace sp { struct SpOutputProposalV1; }
+namespace sp
+{
+    struct SpCoinbaseOutputProposalV1;
+    struct SpOutputProposalV1;
+}
 
 namespace sp
 {
@@ -78,7 +82,14 @@ struct JamtisPaymentProposalV1 final
     */
     void get_enote_ephemeral_pubkey(crypto::x25519_pubkey &enote_ephemeral_pubkey_out) const;
     /**
-    * brief: get_output_proposal_v1 - convert this proposal to a concrete output proposal
+    * brief: get_coinbase_output_proposal_v1 - convert this proposal to a coinbase output proposal
+    * param: block_height - height of the coinbase tx's block
+    * outparam: output_proposal_out -
+    */
+    void get_coinbase_output_proposal_v1(const std::uint64_t block_height,
+        SpCoinbaseOutputProposalV1 &output_proposal_out) const;
+    /**
+    * brief: get_output_proposal_v1 - convert this proposal to an output proposal
     * param: input_context -
     * outparam: output_proposal_out -
     */

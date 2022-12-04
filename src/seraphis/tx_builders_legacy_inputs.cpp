@@ -32,6 +32,7 @@
 #include "tx_builders_legacy_inputs.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 extern "C"
 {
@@ -47,7 +48,6 @@ extern "C"
 #include "ringct/rctTypes.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
 #include "seraphis_crypto/sp_hash_functions.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "seraphis_crypto/sp_transcript.h"
 #include "tx_builder_types_legacy.h"
 #include "tx_component_types_legacy.h"
@@ -86,7 +86,7 @@ static void prepare_clsag_proof_keys(const rct::ctkeyV &referenced_enotes,
     {
         referenced_onetime_addresses_out.emplace_back(referenced_enote.dest);
         referenced_amount_commitments_out.emplace_back(referenced_enote.mask);
-        rct::subKeys(add_element(nominal_commitments_to_zero_out), referenced_enote.mask, masked_commitment);
+        rct::subKeys(tools::add_element(nominal_commitments_to_zero_out), referenced_enote.mask, masked_commitment);
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -222,7 +222,7 @@ void make_v3_legacy_ring_signature_v1(const rct::key &tx_proposal_prefix,
     /// checks
 
     // 1. reference sets
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(reference_set),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(reference_set),
         "make v3 legacy ring signature: reference set indices are not sorted and unique.");
     CHECK_AND_ASSERT_THROW_MES(reference_set.size() == referenced_enotes.size(),
         "make v3 legacy ring signature: reference set indices don't match referenced enotes.");
@@ -325,7 +325,7 @@ void make_v3_legacy_ring_signatures_v1(std::vector<LegacyRingSignaturePrepV1> ri
     {
         make_v3_legacy_ring_signature_v1(std::move(signature_prep),
             legacy_spend_privkey,
-            add_element(ring_signatures_out));
+            tools::add_element(ring_signatures_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -344,7 +344,7 @@ void check_v1_legacy_input_semantics_v1(const LegacyInputV1 &input)
         "legacy input semantics (v1): key image is not consistent between input image and ring signature.");
 
     // 3. ring signature reference indices are sorted and unique and match with the cached reference enotes
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(input.m_ring_signature.m_reference_set),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(input.m_ring_signature.m_reference_set),
         "legacy input semantics (v1): reference set indices are not sorted and unique.");
     CHECK_AND_ASSERT_THROW_MES(input.m_ring_signature.m_reference_set.size() == input.m_ring_members.size(),
         "legacy input semantics (v1): reference set indices don't match referenced enotes.");
@@ -433,7 +433,7 @@ void make_v1_legacy_inputs_v1(const rct::key &proposal_prefix,
             input_proposals[input_index],
             std::move(ring_signature_preps[input_index]),
             legacy_spend_privkey,
-            add_element(inputs_out));
+            tools::add_element(inputs_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------

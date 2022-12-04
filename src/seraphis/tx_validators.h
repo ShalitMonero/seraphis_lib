@@ -60,6 +60,13 @@ namespace sp
 {
 
 /// semantic validation config: component counts
+struct SemanticConfigCoinbaseComponentCountsV1 final
+{
+    std::size_t m_min_outputs;
+    std::size_t m_max_outputs;
+};
+
+/// semantic validation config: component counts
 struct SemanticConfigComponentCountsV1 final
 {
     std::size_t m_min_inputs;
@@ -88,6 +95,19 @@ struct SemanticConfigSpRefSetV1 final
     std::size_t m_num_bin_members_max;
 };
 
+/**
+* brief: validate_sp_semantics_coinbase_component_counts_v1 - check coinbase tx component counts are valid
+*   - min_outputs <= num(outputs) <= max_outputs
+*   - num(enote pubkeys) == num(outputs)
+*
+* param: config -
+* param: num_outputs -
+* param: num_enote_pubkeys -
+* return: true/false on validation result
+*/
+bool validate_sp_semantics_coinbase_component_counts_v1(const SemanticConfigCoinbaseComponentCountsV1 &config,
+    const std::size_t num_outputs,
+    const std::size_t num_enote_pubkeys);
 /**
 * brief: validate_sp_semantics_component_counts_v1 - check tx component counts are valid
 *   - min_inputs <= num(legacy and seraphis input images) <= max_inputs
@@ -143,14 +163,13 @@ bool validate_sp_semantics_legacy_reference_sets_v1(const SemanticConfigLegacyRe
 bool validate_sp_semantics_sp_reference_sets_v1(const SemanticConfigSpRefSetV1 &config,
     const std::vector<SpMembershipProofV1> &sp_membership_proofs);
 /**
-* brief: validate_sp_semantics_output_serialization_v1 - check output enotes and tx supplement are properly serialized
+* brief: validate_sp_semantics_output_serialization_v1 - check output enotes are properly serialized
 *   - onetime addresses are deserializable (note: amount commitment serialization is checked in the balance proof)
-*   - output enote ephemeral pubkeys are deserializable
 * param: output_enotes -
 * return: true/false on validation result
 */
-bool validate_sp_semantics_output_serialization_v1(const std::vector<SpEnoteV1> &output_enotes,
-    const SpTxSupplementV1 &tx_supplement);
+bool validate_sp_semantics_output_serialization_v1(const std::vector<SpCoinbaseEnoteV1> &output_enotes);
+bool validate_sp_semantics_output_serialization_v2(const std::vector<SpEnoteV1> &output_enotes);
 /**
 * brief: validate_sp_semantics_input_images_v1 - check input images are well-formed
 *   - key images are in the prime-order EC subgroup: l*KI == identity
@@ -161,6 +180,20 @@ bool validate_sp_semantics_output_serialization_v1(const std::vector<SpEnoteV1> 
 */
 bool validate_sp_semantics_input_images_v1(const std::vector<LegacyEnoteImageV2> &legacy_input_images,
     const std::vector<SpEnoteImageV1> &sp_input_images);
+/**
+* brief: validate_sp_semantics_coinbase_layout_v1 - check coinbase tx components have the proper layout
+*   - output enotes sorted by onetime addresses with byte-wise comparisons (ascending)
+*   - onetime addresses are all unique
+*   - enote ephemeral pubkeys are unique
+*   - extra field is in sorted TLV (Type-Length-Value) format
+* param: outputs -
+* param: enote_ephemeral_pubkeys -
+* param: tx_extra -
+* return: true/false on validation result
+*/
+bool validate_sp_semantics_coinbase_layout_v1(const std::vector<SpCoinbaseEnoteV1> &outputs,
+    const std::vector<crypto::x25519_pubkey> &enote_ephemeral_pubkeys,
+    const TxExtra &tx_extra);
 /**
 * brief: validate_sp_semantics_layout_v1 - check tx components have the proper layout
 *   - legacy reference sets are sorted (ascending)
@@ -196,16 +229,25 @@ bool validate_sp_semantics_layout_v1(const std::vector<LegacyRingSignatureV3> &l
 */
 bool validate_sp_semantics_fee_v1(const DiscretizedFee &discretized_transaction_fee);
 /**
-* brief: validate_sp_linking_tags_v1 - check tx does not double spend
+* brief: validate_sp_key_images_v1 - check tx does not double spend
 *   - no key image duplicates in ledger
 * param: legacy_input_images -
 * param: sp_input_images -
 * param: tx_validation_context -
 * return: true/false on validation result
 */
-bool validate_sp_linking_tags_v1(const std::vector<LegacyEnoteImageV2> &legacy_input_images,
+bool validate_sp_key_images_v1(const std::vector<LegacyEnoteImageV2> &legacy_input_images,
     const std::vector<SpEnoteImageV1> &sp_input_images,
     const TxValidationContext &tx_validation_context);
+/**
+* brief: validate_sp_coinbase_amount_balance_v1 - check that amounts balance in the coinbase tx (block reward = outputs)
+*   - check block_reward == sum(output amounts)
+* param: block_reward -
+* param: outputs -
+* return: true/false on validation result
+*/
+bool validate_sp_coinbase_amount_balance_v1(const rct::xmr_amount block_reward,
+    const std::vector<SpCoinbaseEnoteV1> &outputs);
 /**
 * brief: validate_sp_amount_balance_v1 - check that amounts balance in the tx (inputs = outputs)
 *   - check sum(input image masked commitments) == sum(output commitments) + fee*H + remainder*G
@@ -233,7 +275,7 @@ bool validate_sp_amount_balance_v1(const std::vector<LegacyEnoteImageV2> &legacy
 * outparam: validation_data_out -
 */
 bool try_get_sp_membership_proofs_v1_validation_data(const std::vector<const SpMembershipProofV1*> &membership_proofs,
-    const std::vector<const SpEnoteImage*> &input_images,
+    const std::vector<const SpEnoteImageCore*> &input_images,
     const TxValidationContext &tx_validation_context,
     std::list<SpMultiexpBuilder> &validation_data_out);
 /**

@@ -37,95 +37,95 @@
 #include <vector>
 
 
-using namespace rct;
-
-bool test_grootle(const std::size_t N_proofs,
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static bool test_grootle(const std::size_t N_proofs,
+    const rct::keyV &proof_messages,
     const std::size_t n,
     const std::size_t m,
-    const std::vector<keyV> &M,
-    const keyV &proof_offsets,
-    const std::vector<crypto::secret_key> &proof_privkeys,
-    const keyV &proof_messages)
+    const std::vector<rct::keyV> &M,
+    const rct::keyV &proof_offsets,
+    const std::vector<crypto::secret_key> &proof_privkeys)
 {
     std::vector<sp::GrootleProof> proofs;
     proofs.reserve(N_proofs);
-    std::vector<const sp::GrootleProof *> proof_ptrs;
+    std::vector<const sp::GrootleProof*> proof_ptrs;
     proof_ptrs.reserve(N_proofs);
 
-    for (std::size_t proof_i = 0; proof_i < N_proofs; proof_i++)
+    for (std::size_t proof_i{0}; proof_i < N_proofs; ++proof_i)
     {
         proofs.emplace_back();
-        sp::make_grootle_proof(M[proof_i],
+        sp::make_grootle_proof(proof_messages[proof_i],
+            M[proof_i],
             proof_i,
             proof_offsets[proof_i],
             proof_privkeys[proof_i],
             n,
             m,
-            proof_messages[proof_i],
             proofs.back());
     }
-    for (sp::GrootleProof &proof: proofs)
+    for (const sp::GrootleProof &proof: proofs)
         proof_ptrs.push_back(&proof);
 
-    // Verify batch
-    if (!sp::verify_grootle_proofs(proof_ptrs, M, proof_offsets, n, m, proof_messages))
+    // verify batch
+    if (!sp::verify_grootle_proofs(proof_ptrs, proof_messages, M, proof_offsets, n, m))
         return false;
 
     return true;
 }
-
-// Test random proofs in batches
-bool test_grootle_proof(const std::size_t n,  // size base: N = n^m
-    const std::size_t N_proofs,  // number of proofs with common keys to verify in a batch
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static bool test_grootle_proof(const std::size_t n,  // size base: N = n^m
+    const std::size_t N_proofs,  // number of proofs to verify in a batch
     const bool use_ident_offset) // whether to set commitment to zero offset to identity
 {
-    // Ring sizes: N = n^m
-    for (std::size_t m = 2; m <= 6; m++)
+    // ring sizes: N = n^m
+    for (std::size_t m = 2; m <= 6; ++m)
     {
         // anonymity set size
-        const std::size_t N = std::pow(n, m);
+        const std::size_t N{static_cast<size_t>(std::pow(n, m))};
 
-        // Build key vectors
-        std::vector<keyV> M;                            // ref sets for each proof
-        M.resize(N_proofs, keyV(N));
+        // prepare key vectors
+        std::vector<rct::keyV> M;                       // ref sets for each proof
+        M.resize(N_proofs, rct::keyV(N));
         std::vector<crypto::secret_key> proof_privkeys; // privkey per-proof (at secret indices in M)
         proof_privkeys.resize(N_proofs);
-        keyV proof_messages = keyV(N_proofs); // message per-proof
-        keyV proof_offsets;                   // commitment offset per-proof
+        rct::keyV proof_messages = rct::keyV(N_proofs); // message per-proof
+        rct::keyV proof_offsets;                        // commitment offset per-proof
         proof_offsets.resize(N_proofs);
 
-        // Random keys for each proof
-        key temp;
-        for (std::size_t proof_i = 0; proof_i < N_proofs; proof_i++)
+        // random keys for each proof
+        rct::key temp;
+        for (std::size_t proof_i{0}; proof_i < N_proofs; ++proof_i)
         {
-            for (std::size_t k = 0; k < N; k++)
-                skpkGen(temp, M[proof_i][k]);
+            for (std::size_t k{0}; k < N; ++k)
+                rct::skpkGen(temp, M[proof_i][k]);
         }
 
-        // Signing keys, proof_messages, and commitment offsets
-        key privkey, offset_privkey;
-        for (std::size_t proof_i = 0; proof_i < N_proofs; proof_i++)
+        // signing keys, proof_messages, and commitment offsets
+        rct::key privkey, offset_privkey;
+        for (std::size_t proof_i{0}; proof_i < N_proofs; ++proof_i)
         {
             // set real-signer index = proof index (kludge)
-            skpkGen(privkey, M[proof_i][proof_i]);  //m_l * G
-            proof_messages[proof_i] = skGen();
+            rct::skpkGen(privkey, M[proof_i][proof_i]);  //m_l * G
+            proof_messages[proof_i] = rct::skGen();
 
             if (use_ident_offset)
             {
-                proof_offsets[proof_i] = identity();
+                proof_offsets[proof_i] = rct::identity();
                 proof_privkeys[proof_i] = rct::rct2sk(privkey);
             }
             else
             {
-                skpkGen(offset_privkey, proof_offsets[proof_i]);  //c * G
-                sc_sub(to_bytes(proof_privkeys[proof_i]), privkey.bytes, offset_privkey.bytes); //m - c [commitment to zero]
+                rct::skpkGen(offset_privkey, proof_offsets[proof_i]);  //c * G
+                sc_sub(to_bytes(proof_privkeys[proof_i]), privkey.bytes, offset_privkey.bytes); //m_l - c
             }
         }
 
         // make and test proofs
         try
         {
-            if (!test_grootle(N_proofs, n, m, M, proof_offsets, proof_privkeys, proof_messages))
+            if (!test_grootle(N_proofs, proof_messages, n, m, M, proof_offsets, proof_privkeys))
                 return false;
         }
         catch (...) { return false; }
@@ -133,7 +133,8 @@ bool test_grootle_proof(const std::size_t n,  // size base: N = n^m
 
     return true;
 }
-
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
 TEST(grootle, random)
 {
     //const std::size_t n                   // size base: N = n^m
@@ -149,3 +150,4 @@ TEST(grootle, random)
     EXPECT_TRUE(test_grootle_proof(3, 2, true));
     EXPECT_TRUE(test_grootle_proof(3, 3, false));
 }
+//-------------------------------------------------------------------------------------------------------------------

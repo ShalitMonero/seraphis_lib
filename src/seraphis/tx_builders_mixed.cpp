@@ -32,6 +32,7 @@
 #include "tx_builders_mixed.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "cryptonote_config.h"
 #include "jamtis_core_utils.h"
@@ -43,7 +44,7 @@
 #include "seraphis_crypto/bulletproofs_plus2.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
 #include "seraphis_crypto/sp_hash_functions.h"
-#include "seraphis_crypto/sp_misc_utils.h"
+#include "seraphis_crypto/sp_legacy_proof_helpers.h"
 #include "seraphis_crypto/sp_transcript.h"
 #include "sp_core_enote_utils.h"
 #include "tx_binned_reference_set_utils.h"
@@ -56,6 +57,7 @@
 #include "tx_contextual_enote_record_utils.h"
 #include "tx_input_selection_output_context_v1.h"
 #include "tx_ref_set_index_mapper_flat.h"
+#include "tx_validators.h"
 #include "txtype_squashed_v1.h"
 
 //third party headers
@@ -190,7 +192,7 @@ static void legacy_enote_records_to_input_proposals(
         // convert legacy inputs to input proposals
         make_v1_legacy_input_proposal_v1(legacy_contextual_input.m_record,
             rct::rct2sk(rct::skGen()),
-            add_element(legacy_input_proposals_out));
+            tools::add_element(legacy_input_proposals_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -207,14 +209,14 @@ static void sp_enote_records_to_input_proposals(const std::list<SpContextualEnot
         make_v1_input_proposal_v1(sp_contextual_input.m_record,
             rct::rct2sk(rct::skGen()),
             rct::rct2sk(rct::skGen()),
-            add_element(sp_input_proposals_out));
+            tools::add_element(sp_input_proposals_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static void prepare_sp_membership_proof_prep_for_tx_simulation(const rct::keyV &reference_enotes_squashed,
     const std::size_t real_reference_index,
-    const SpEnote &real_reference_enote,
+    const SpEnoteCoreVariant &real_reference_enote,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
     const std::size_t ref_set_decomp_n,
@@ -223,7 +225,7 @@ static void prepare_sp_membership_proof_prep_for_tx_simulation(const rct::keyV &
     SpMembershipProofPrepV1 &prep_out)
 {
     /// checks and initialization
-    const std::size_t ref_set_size{ref_set_size_from_decomp(ref_set_decomp_n, ref_set_decomp_m)};  // n^m
+    const std::size_t ref_set_size{size_from_decomposition(ref_set_decomp_n, ref_set_decomp_m)};  // n^m
 
     CHECK_AND_ASSERT_THROW_MES(reference_enotes_squashed.size() > 0,
         "prepare sp membership proof prep (tx simulation): insufficient reference elements.");
@@ -242,8 +244,8 @@ static void prepare_sp_membership_proof_prep_for_tx_simulation(const rct::keyV &
 
     // 2. generator seed
     rct::key generator_seed;
-    make_binned_ref_set_generator_seed_v1(real_reference_enote.m_onetime_address,
-        real_reference_enote.m_amount_commitment,
+    make_binned_ref_set_generator_seed_v1(onetime_address_ref(real_reference_enote),
+        amount_commitment_ref(real_reference_enote),
         address_mask,
         commitment_mask,
         generator_seed);
@@ -282,7 +284,8 @@ static void prepare_sp_membership_proof_prep_for_tx_simulation(const rct::keyV &
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void prepare_sp_membership_proof_preps_for_tx_simulation(const std::vector<SpEnote> &real_reference_enotes,
+static void prepare_sp_membership_proof_preps_for_tx_simulation(
+    const std::vector<SpEnoteCoreVariant> &real_reference_enotes,
     const std::vector<crypto::secret_key> &address_masks,
     const std::vector<crypto::secret_key> &commitment_masks,
     const std::size_t ref_set_decomp_n,
@@ -310,9 +313,9 @@ static void prepare_sp_membership_proof_preps_for_tx_simulation(const std::vecto
 
     for (std::size_t proof_index{0}; proof_index < real_reference_enotes.size(); ++proof_index)
     {
-        make_seraphis_squashed_enote_Q(real_reference_enotes[proof_index].m_onetime_address,
-            real_reference_enotes[proof_index].m_amount_commitment,
-            add_element(reference_enotes_squashed));
+        make_seraphis_squashed_enote_Q(onetime_address_ref(real_reference_enotes[proof_index]),
+            amount_commitment_ref(real_reference_enotes[proof_index]),
+            tools::add_element(reference_enotes_squashed));
 
         // save the [ index : squashed enote ] mapping
         sp_reference_set_proof_elements_out[proof_index] = reference_enotes_squashed.back();
@@ -341,7 +344,7 @@ static void prepare_sp_membership_proof_preps_for_tx_simulation(const std::vecto
             ref_set_decomp_n,
             ref_set_decomp_m,
             bin_config,
-            add_element(preps_out));
+            tools::add_element(preps_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -352,7 +355,8 @@ static void collect_legacy_ring_signature_ring_members(const std::vector<LegacyR
 {
     // map legacy ring members onto their on-chain legacy enote indices
     CHECK_AND_ASSERT_THROW_MES(legacy_ring_signatures.size() == legacy_ring_signature_rings.size(),
-        "collect legacy ring signature ring members: legacy ring signatures don't line up with legacy ring signature rings.");
+        "collect legacy ring signature ring members: legacy ring signatures don't line up with legacy ring signature "
+        "rings.");
 
     for (std::size_t legacy_input_index{0}; legacy_input_index < legacy_ring_signatures.size(); ++legacy_input_index)
     {
@@ -384,7 +388,7 @@ void make_tx_proposal_prefix_v1(const std::string &version_string,
         "tx proposal prefix (v1): legacy input key images are not sorted.");
     CHECK_AND_ASSERT_THROW_MES(std::is_sorted(sp_input_key_images.begin(), sp_input_key_images.end()),
         "tx proposal prefix (v1): seraphis input key images are not sorted.");
-    CHECK_AND_ASSERT_THROW_MES(std::is_sorted(output_enotes.begin(), output_enotes.end(), equals_from_less{}),
+    CHECK_AND_ASSERT_THROW_MES(std::is_sorted(output_enotes.begin(), output_enotes.end(), tools::equals_from_less{}),
         "tx proposal prefix (v1): output enotes are not sorted.");
 
     // H_32(crypto project name, version string, legacy input key images, seraphis input key images, output enotes,
@@ -653,6 +657,41 @@ bool try_prepare_inputs_and_outputs_for_transfer_v1(const jamtis::JamtisDestinat
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
+void check_v1_coinbase_tx_proposal_semantics_v1(const SpCoinbaseTxProposalV1 &tx_proposal)
+{
+    // 1. extract output proposals from tx proposal (and check their semantics)
+    std::vector<SpCoinbaseOutputProposalV1> output_proposals;
+    tx_proposal.get_coinbase_output_proposals_v1(output_proposals);
+
+    check_v1_coinbase_output_proposal_set_semantics_v1(output_proposals);
+
+    // 2. extract outputs from the output proposals
+    std::vector<SpCoinbaseEnoteV1> output_enotes;
+    SpTxSupplementV1 tx_supplement;
+
+    make_v1_coinbase_outputs_v1(output_proposals, output_enotes, tx_supplement.m_output_enote_ephemeral_pubkeys);
+    finalize_tx_extra_v1(tx_proposal.m_partial_memo, output_proposals, tx_supplement.m_tx_extra);
+
+    // 3. outputs should be sorted and unique
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(output_enotes),
+        "Semantics check coinbase tx proposal v1: output onetime addresses are not sorted and unique.");
+
+    // 4. onetime addresses should be canonical (sanity check so our tx outputs don't have duplicate key images)
+    for (const SpCoinbaseEnoteV1 &output_enote : output_enotes)
+    {
+        CHECK_AND_ASSERT_THROW_MES(output_enote.m_core.onetime_address_is_canonical(),
+            "Semantics check coinbase tx proposal v1: an output onetime address is not in the prime subgroup.");
+    }
+
+    // 5. check tx supplement (especially enote ephemeral pubkeys)
+    // note: no ephemeral pubkey optimization for coinbase txs
+    check_v1_tx_supplement_semantics_v1(tx_supplement, output_enotes.size(), false);
+
+    // 6. check balance
+    CHECK_AND_ASSERT_THROW_MES(validate_sp_coinbase_amount_balance_v1(tx_proposal.m_block_reward, output_enotes),
+        "Semantics check coinbase tx proposal v1: outputs do not balance the block reward.");
+}
+//-------------------------------------------------------------------------------------------------------------------
 void check_v1_tx_proposal_semantics_v1(const SpTxProposalV1 &tx_proposal,
     const rct::key &legacy_spend_pubkey,
     const rct::key &jamtis_spend_pubkey,
@@ -678,7 +717,8 @@ void check_v1_tx_proposal_semantics_v1(const SpTxProposalV1 &tx_proposal,
     rct::key input_context;
     make_standard_input_context_v1(tx_proposal.m_legacy_input_proposals, tx_proposal.m_sp_input_proposals, input_context);
 
-    for (const jamtis::JamtisPaymentProposalSelfSendV1 &selfsend_payment_proposal : tx_proposal.m_selfsend_payment_proposals)
+    for (const jamtis::JamtisPaymentProposalSelfSendV1 &selfsend_payment_proposal :
+        tx_proposal.m_selfsend_payment_proposals)
     {
         check_jamtis_payment_proposal_selfsend_semantics_v1(selfsend_payment_proposal,
             input_context,
@@ -714,7 +754,7 @@ void check_v1_tx_proposal_semantics_v1(const SpTxProposalV1 &tx_proposal,
         "Semantics check tx proposal v1: there are fewer than 2 outputs.");
 
     // 4. outputs should be sorted and unique
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(output_enotes),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(output_enotes),
         "Semantics check tx proposal v1: output onetime addresses are not sorted and unique.");
 
     // 5. onetime addresses should be canonical (sanity check so our tx outputs don't have duplicate key images)
@@ -739,19 +779,21 @@ void check_v1_tx_proposal_semantics_v1(const SpTxProposalV1 &tx_proposal,
     }
 
     // 7. check tx supplement (especially enote ephemeral pubkeys)
-    check_v1_tx_supplement_semantics_v1(tx_supplement, output_enotes.size());
+    // note: require ephemeral pubkey optimization for normal txs
+    check_v1_tx_supplement_semantics_v1(tx_supplement, output_enotes.size(), true);
 
 
     /// input checks
 
     // 1. there should be at least one input
-    CHECK_AND_ASSERT_THROW_MES(tx_proposal.m_legacy_input_proposals.size() + tx_proposal.m_sp_input_proposals.size() >= 1,
+    CHECK_AND_ASSERT_THROW_MES(tx_proposal.m_legacy_input_proposals.size() +
+            tx_proposal.m_sp_input_proposals.size() >= 1,
         "Semantics check tx proposal v1: there are no inputs.");
 
     // 2. input proposals should be sorted and unique
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(tx_proposal.m_legacy_input_proposals),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(tx_proposal.m_legacy_input_proposals),
         "Semantics check tx proposal v1: legacy input proposals are not sorted and unique.");
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(tx_proposal.m_sp_input_proposals),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(tx_proposal.m_sp_input_proposals),
         "Semantics check tx proposal v1: seraphis input proposals are not sorted and unique.");
 
     // 3. legacy input proposal semantics should be valid
@@ -759,11 +801,11 @@ void check_v1_tx_proposal_semantics_v1(const SpTxProposalV1 &tx_proposal,
         check_v1_legacy_input_proposal_semantics_v1(legacy_input_proposal, legacy_spend_pubkey);
 
     // 4. seraphis input proposal semantics should be valid
-    rct::key sp_spend_pubkey{jamtis_spend_pubkey};
-    reduce_seraphis_spendkey_x(k_view_balance, sp_spend_pubkey);
+    rct::key sp_core_spend_pubkey{jamtis_spend_pubkey};
+    reduce_seraphis_spendkey_x(k_view_balance, sp_core_spend_pubkey);
 
     for (const SpInputProposalV1 &sp_input_proposal : tx_proposal.m_sp_input_proposals)
-        check_v1_input_proposal_semantics_v1(sp_input_proposal, sp_spend_pubkey);
+        check_v1_input_proposal_semantics_v1(sp_input_proposal, sp_core_spend_pubkey);
 
 
     /// check that amounts balance in the proposal
@@ -786,6 +828,19 @@ void check_v1_tx_proposal_semantics_v1(const SpTxProposalV1 &tx_proposal,
     // 3. check: sum(input amnts) == sum(output amnts) + fee
     CHECK_AND_ASSERT_THROW_MES(balance_check_in_out_amnts(in_amounts, output_amounts, raw_transaction_fee),
         "Semantics check tx proposal v1: input/output amounts did not balance with desired fee.");
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_v1_coinbase_tx_proposal_v1(const std::uint64_t block_height,
+    const rct::xmr_amount block_reward,
+    std::vector<jamtis::JamtisPaymentProposalV1> normal_payment_proposals,
+    std::vector<ExtraFieldElement> additional_memo_elements,
+    SpCoinbaseTxProposalV1 &tx_proposal_out)
+{
+    // set fields
+    tx_proposal_out.m_block_height = block_height;
+    tx_proposal_out.m_block_reward = block_reward;
+    tx_proposal_out.m_normal_payment_proposals = std::move(normal_payment_proposals);
+    make_tx_extra(std::move(additional_memo_elements), tx_proposal_out.m_partial_memo);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_v1_tx_proposal_v1(std::vector<jamtis::JamtisPaymentProposalV1> normal_payment_proposals,
@@ -892,7 +947,21 @@ void make_v1_balance_proof_v1(const std::vector<rct::xmr_amount> &legacy_input_a
     balance_proof_out.m_remainder_blinding_factor = rct::sk2rct(remainder_blinding_factor);
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool balance_check_in_out_amnts_v1(const std::vector<LegacyInputProposalV1> &legacy_input_proposals,
+bool balance_check_in_out_amnts_v1(const rct::xmr_amount block_reward,
+    const std::vector<SpCoinbaseOutputProposalV1> &output_proposals)
+{
+    // output amounts
+    std::vector<rct::xmr_amount> out_amounts;
+    out_amounts.reserve(output_proposals.size());
+
+    for (const SpCoinbaseOutputProposalV1 &output_proposal : output_proposals)
+        out_amounts.emplace_back(output_proposal.amount());
+
+    // balance check
+    return balance_check_in_out_amnts({block_reward}, out_amounts, 0);
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool balance_check_in_out_amnts_v2(const std::vector<LegacyInputProposalV1> &legacy_input_proposals,
     const std::vector<SpInputProposalV1> &sp_input_proposals,
     const std::vector<SpOutputProposalV1> &output_proposals,
     const DiscretizedFee &discretized_transaction_fee)

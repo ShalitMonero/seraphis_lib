@@ -43,6 +43,7 @@
 #include "serialization/serialization.h"
 #include "tx_binned_reference_set.h"
 #include "tx_discretized_fee.h"
+#include "txtype_coinbase_v1.h"
 #include "txtype_squashed_v1.h"
 
 //third party headers
@@ -63,8 +64,22 @@ struct ser_encrypted_address_tag_t final
     unsigned char bytes[sizeof(jamtis::encrypted_address_tag_t)];
 };
 
-/// serializable SpEnote
-struct ser_SpEnote final
+/// serializable SpCoinbaseEnoteCore
+struct ser_SpCoinbaseEnoteCore final
+{
+    /// Ko
+    rct::key m_onetime_address;
+    /// a
+    rct::xmr_amount m_amount;
+
+    BEGIN_SERIALIZE()
+        FIELD(m_onetime_address)
+        FIELD(m_amount)
+    END_SERIALIZE()
+};
+
+/// serializable SpEnoteCore
+struct ser_SpEnoteCore final
 {
     /// Ko
     rct::key m_onetime_address;
@@ -77,8 +92,8 @@ struct ser_SpEnote final
     END_SERIALIZE()
 };
 
-/// serializable SpEnoteImage
-struct ser_SpEnoteImage final
+/// serializable SpEnoteImageCore
+struct ser_SpEnoteImageCore final
 {
     /// K"
     rct::key m_masked_address;
@@ -136,7 +151,9 @@ struct ser_SpCompositionProof final
     // challenge
     rct::key c;
     // responses
-    rct::key r_t1, r_t2, r_ki;
+    rct::key r_t1;
+    rct::key r_t2;
+    rct::key r_ki;
     // intermediate proof key
     rct::key K_t1;
 
@@ -152,10 +169,12 @@ struct ser_SpCompositionProof final
 /// serializable GrootleProof
 struct ser_GrootleProof final
 {
-    rct::key A, B;
+    rct::key A;
+    rct::key B;
     rct::keyM f;
     rct::keyV X;
-    rct::key zA, z;
+    rct::key zA;
+    rct::key z;
 
     BEGIN_SERIALIZE()
         FIELD(A)
@@ -204,10 +223,28 @@ struct ser_LegacyEnoteImageV2 final
 struct ser_SpEnoteImageV1 final
 {
     /// enote image core
-    ser_SpEnoteImage m_core;
+    ser_SpEnoteImageCore m_core;
 
     BEGIN_SERIALIZE()
         FIELD(m_core)
+    END_SERIALIZE()
+};
+
+/// serializable SpCoinbaseEnoteV1
+struct ser_SpCoinbaseEnoteV1 final
+{
+    /// enote core (one-time address, amount commitment)
+    ser_SpCoinbaseEnoteCore m_core;
+
+    /// addr_tag_enc
+    ser_encrypted_address_tag_t m_addr_tag_enc;
+    /// view_tag
+    unsigned char m_view_tag;
+
+    BEGIN_SERIALIZE()
+        FIELD(m_core)
+        FIELD(m_addr_tag_enc)    static_assert(sizeof(m_addr_tag_enc) == sizeof(jamtis::encrypted_address_tag_t), "");
+        VARINT_FIELD(m_view_tag) static_assert(sizeof(m_view_tag) == sizeof(jamtis::view_tag_t), "");
     END_SERIALIZE()
 };
 
@@ -215,13 +252,12 @@ struct ser_SpEnoteImageV1 final
 struct ser_SpEnoteV1 final
 {
     /// enote core (one-time address, amount commitment)
-    ser_SpEnote m_core;
+    ser_SpEnoteCore m_core;
 
     /// enc(a)
     rct::xmr_amount m_encoded_amount;
     /// addr_tag_enc
     ser_encrypted_address_tag_t m_addr_tag_enc;
-
     /// view_tag
     unsigned char m_view_tag;
 
@@ -300,6 +336,30 @@ struct ser_SpTxSupplementV1 final
     BEGIN_SERIALIZE()
         FIELD(m_output_enote_ephemeral_pubkeys)
         FIELD(m_tx_extra)
+    END_SERIALIZE()
+};
+
+/// serializable SpTxCoinbaseV1
+struct ser_SpTxCoinbaseV1 final
+{
+    /// semantic rules version
+    SpTxCoinbaseV1::SemanticRulesVersion m_tx_semantic_rules_version;
+
+    /// height of the block whose block reward this coinbase tx disperses
+    std::uint64_t m_block_height;
+    /// block reward dispersed by this coinbase tx
+    rct::xmr_amount m_block_reward;
+    /// tx outputs (new enotes)
+    std::vector<ser_SpCoinbaseEnoteV1> m_outputs;
+    /// supplemental data for tx
+    ser_SpTxSupplementV1 m_tx_supplement;
+
+    BEGIN_SERIALIZE()
+        VARINT_FIELD(m_tx_semantic_rules_version)
+        VARINT_FIELD(m_block_height)
+        VARINT_FIELD(m_block_reward)
+        FIELD(m_outputs)
+        FIELD(m_tx_supplement)
     END_SERIALIZE()
 };
 

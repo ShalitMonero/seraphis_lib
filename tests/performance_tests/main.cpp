@@ -39,6 +39,7 @@
 
 // tests
 #include "balance_check.h"
+#include "blake2b.h"
 #include "construct_tx.h"
 #include "check_tx_signature.h"
 #include "check_hash.h"
@@ -119,12 +120,12 @@ int main(int argc, char** argv)
 
 
   // test deciphering address tags
-  ParamsShuttleAddressTagDecrypt p_address_tag_decrypt;
-  p_address_tag_decrypt.core_params = p.core_params;
-  p_address_tag_decrypt.mode = AddressTagDecryptModes::ALL_SUCCESSFUL_DECRYPT;
-  TEST_PERFORMANCE0(filter, p_address_tag_decrypt, test_jamtis_address_tag_decrypt_sp);
-  p_address_tag_decrypt.mode = AddressTagDecryptModes::NO_SUCCESSFUL_DECRYPT;
-  TEST_PERFORMANCE0(filter, p_address_tag_decrypt, test_jamtis_address_tag_decrypt_sp);
+  ParamsShuttleAddressTagDecipher p_address_tag_decipher;
+  p_address_tag_decipher.core_params = p.core_params;
+  p_address_tag_decipher.mode = AddressTagDecipherModes::ALL_SUCCESSFUL_DECIPHER;
+  TEST_PERFORMANCE0(filter, p_address_tag_decipher, test_jamtis_address_tag_decipher_sp);
+  p_address_tag_decipher.mode = AddressTagDecipherModes::NO_SUCCESSFUL_DECIPHER;
+  TEST_PERFORMANCE0(filter, p_address_tag_decipher, test_jamtis_address_tag_decipher_sp);
 
   // test client-side scanning in a seraphis remote-scanning workflow
   ParamsShuttleScannerClient p_client_scan;
@@ -141,16 +142,40 @@ int main(int argc, char** argv)
     p.core_params.td->save(false);
 
 
+  // test blake2b
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 32, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 32, true);
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 200, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 200, true);
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 2000, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 2000, true);
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 16384, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b, 16384, true);
+
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 32, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 32, true);
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 200, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 200, true);
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 2000, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 2000, true);
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 16384, false);
+  TEST_PERFORMANCE2(filter, p, test_blake2b_streaming, 16384, true);
+
+  // test done, save results
+  if (p.core_params.td.get())
+    p.core_params.td->save(false);
+
+
   // test view scan performance with view tags
   ParamsShuttleViewScan p_view_scan;
   p_view_scan.core_params = p.core_params;
 
   TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_cn);
-  TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_cn_opt);
+  TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_cn_optimized);
   TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_sp);
   p_view_scan.test_view_tag_check = true;
   TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_cn);
-  TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_cn_opt);
+  TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_cn_optimized);
   TEST_PERFORMANCE0(filter, p_view_scan, test_view_scan_sp);
 
   // test done, save results

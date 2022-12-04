@@ -32,9 +32,9 @@
 #include "tx_contextual_enote_record_types.h"
 
 //local headers
+#include "common/variant.h"
 #include "crypto/crypto.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_variant.h"
 
 //third party headers
 
@@ -56,6 +56,8 @@ bool SpEnoteOriginContextV1::is_older_than(const SpEnoteOriginContextV1 &other_c
     // 2. block height
     if (m_block_height < other_context.m_block_height)
         return true;
+
+    // note: don't assess the tx output index
 
     // 3. enote ledger index
     if (m_enote_ledger_index < other_context.m_enote_ledger_index)
@@ -122,12 +124,12 @@ bool LegacyContextualEnoteRecordV1::has_spent_status(const SpEnoteSpentStatus te
 bool SpContextualBasicEnoteRecordV1::have_same_destination(const SpContextualBasicEnoteRecordV1 &record1,
     const SpContextualBasicEnoteRecordV1 &record2)
 {
-    return record1.m_record.m_enote.m_core.m_onetime_address == record2.m_record.m_enote.m_core.m_onetime_address;
+    return onetime_address_ref(record1.m_record.m_enote) == onetime_address_ref(record2.m_record.m_enote);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpContextualIntermediateEnoteRecordV1::get_onetime_address(rct::key &onetime_address_out) const
 {
-    onetime_address_out = m_record.m_enote.m_core.m_onetime_address;
+    onetime_address_out = onetime_address_ref(m_record.m_enote);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool SpContextualIntermediateEnoteRecordV1::have_same_destination(const SpContextualIntermediateEnoteRecordV1 &record1,
@@ -144,7 +146,7 @@ bool SpContextualIntermediateEnoteRecordV1::have_same_destination(const SpContex
 bool SpContextualEnoteRecordV1::have_same_destination(const SpContextualEnoteRecordV1 &record1,
     const SpContextualEnoteRecordV1 &record2)
 {
-    return record1.m_record.m_enote.m_core.m_onetime_address == record2.m_record.m_enote.m_core.m_onetime_address;
+    return onetime_address_ref(record1.m_record.m_enote) == onetime_address_ref(record2.m_record.m_enote);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool SpContextualEnoteRecordV1::has_origin_status(const SpEnoteOriginStatus test_status) const
@@ -159,9 +161,9 @@ bool SpContextualEnoteRecordV1::has_spent_status(const SpEnoteSpentStatus test_s
 //-------------------------------------------------------------------------------------------------------------------
 const SpEnoteOriginContextV1& origin_context_ref(const ContextualBasicRecordVariant &variant)
 {
-    struct visitor : public SpVariantStaticVisitor<const SpEnoteOriginContextV1&>
+    struct visitor : public tools::variant_static_visitor<const SpEnoteOriginContextV1&>
     {
-        using SpVariantStaticVisitor::operator();  //for blank overload
+        using variant_static_visitor::operator();  //for blank overload
         const SpEnoteOriginContextV1& operator()(const LegacyContextualBasicEnoteRecordV1 &record) const
         { return record.m_origin_context; }
         const SpEnoteOriginContextV1& operator()(const SpContextualBasicEnoteRecordV1 &record) const
@@ -173,9 +175,9 @@ const SpEnoteOriginContextV1& origin_context_ref(const ContextualBasicRecordVari
 //-------------------------------------------------------------------------------------------------------------------
 rct::xmr_amount amount_ref(const ContextualRecordVariant &variant)
 {
-    struct visitor : public SpVariantStaticVisitor<rct::xmr_amount>
+    struct visitor : public tools::variant_static_visitor<rct::xmr_amount>
     {
-        using SpVariantStaticVisitor::operator();  //for blank overload
+        using variant_static_visitor::operator();  //for blank overload
         rct::xmr_amount operator()(const LegacyContextualEnoteRecordV1 &record) const { return record.amount(); }
         rct::xmr_amount operator()(const SpContextualEnoteRecordV1 &record) const { return record.amount(); }
     };
@@ -185,9 +187,9 @@ rct::xmr_amount amount_ref(const ContextualRecordVariant &variant)
 //-------------------------------------------------------------------------------------------------------------------
 const SpEnoteOriginContextV1& origin_context_ref(const ContextualRecordVariant &variant)
 {
-    struct visitor : public SpVariantStaticVisitor<const SpEnoteOriginContextV1&>
+    struct visitor : public tools::variant_static_visitor<const SpEnoteOriginContextV1&>
     {
-        using SpVariantStaticVisitor::operator();  //for blank overload
+        using variant_static_visitor::operator();  //for blank overload
         const SpEnoteOriginContextV1& operator()(const LegacyContextualEnoteRecordV1 &record) const
         { return record.m_origin_context; }
         const SpEnoteOriginContextV1& operator()(const SpContextualEnoteRecordV1 &record) const
@@ -199,9 +201,9 @@ const SpEnoteOriginContextV1& origin_context_ref(const ContextualRecordVariant &
 //-------------------------------------------------------------------------------------------------------------------
 const SpEnoteSpentContextV1& spent_context_ref(const ContextualRecordVariant &variant)
 {
-    struct visitor : public SpVariantStaticVisitor<const SpEnoteSpentContextV1&>
+    struct visitor : public tools::variant_static_visitor<const SpEnoteSpentContextV1&>
     {
-        using SpVariantStaticVisitor::operator();  //for blank overload
+        using variant_static_visitor::operator();  //for blank overload
         const SpEnoteSpentContextV1& operator()(const LegacyContextualEnoteRecordV1 &record) const
         { return record.m_spent_context; }
         const SpEnoteSpentContextV1& operator()(const SpContextualEnoteRecordV1 &record) const

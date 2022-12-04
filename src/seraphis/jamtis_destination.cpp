@@ -80,7 +80,7 @@ void make_jamtis_destination_v1(const rct::key &spend_pubkey,
     // xK_3 = xk^j_a xK_ua
     x25519_scmul_key(address_privkey, unlockamounts_pubkey, destination_out.m_addr_K3);
 
-    // addr_tag = blowfish[s_ct](j, mac)
+    // addr_tag = cipher[s_ct](j, hint)
     crypto::secret_key ciphertag_secret;
     make_jamtis_ciphertag_secret(s_generate_address, ciphertag_secret);
 

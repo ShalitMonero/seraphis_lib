@@ -32,19 +32,20 @@
 #include "serialization_demo_utils.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_crypto/bulletproofs_plus2.h"
 #include "seraphis_crypto/grootle.h"
 #include "seraphis_crypto/sp_composition_proof.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "serialization_demo_types.h"
 #include "tx_binned_reference_set.h"
 #include "tx_builders_inputs.h"
 #include "tx_component_types.h"
 #include "tx_component_types_legacy.h"
 #include "tx_discretized_fee.h"
+#include "txtype_coinbase_v1.h"
 #include "txtype_squashed_v1.h"
 
 //third party headers
@@ -68,7 +69,7 @@ static void copy_array(const CopyFuncT &copy_func, const std::vector<Type1> &arr
     array2_out.clear();
     array2_out.reserve(array1.size());
     for (const Type1 &obj : array1)
-        copy_func(obj, add_element(array2_out));
+        copy_func(obj, tools::add_element(array2_out));
 }
 //-------------------------------------------------------------------------------------------------------------------
 // array2 consumes array1 via relay_func() on each element
@@ -79,7 +80,7 @@ static void relay_array(const RelayFuncT &relay_func, std::vector<Type1> &array1
     array2_out.clear();
     array2_out.reserve(array1_in.size());
     for (Type1 &obj_in : array1_in)
-        relay_func(obj_in, add_element(array2_out));
+        relay_func(obj_in, tools::add_element(array2_out));
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -130,7 +131,7 @@ static void recover_legacy_ring_signatures_v3(
     {
         recover_legacy_ring_signature_v3(serializable_legacy_ring_signatures_in[legacy_input_index],
             legacy_enote_images[legacy_input_index].m_key_image,
-            add_element(legacy_ring_signatures_out));
+            tools::add_element(legacy_ring_signatures_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -161,7 +162,7 @@ static void recover_sp_membership_proofs_v1(
             generator_seed_temp,
             sp_ref_set_decomp_n,
             sp_ref_set_decomp_m,
-            add_element(membership_proofs_out));
+            tools::add_element(membership_proofs_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -175,7 +176,7 @@ static void make_serializable_legacy_ring_signatures_v3(const std::vector<Legacy
     for (const LegacyRingSignatureV3 &legacy_ring_signature : legacy_ring_signatures)
     {
         make_serializable_legacy_ring_signature_v3(legacy_ring_signature,
-            add_element(serializable_legacy_ring_signatures_out));
+            tools::add_element(serializable_legacy_ring_signatures_out));
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -187,7 +188,7 @@ static void make_serializable_sp_membership_proofs_v1(const std::vector<SpMember
     serializable_membership_proofs_out.reserve(membership_proofs.size());
 
     for (const SpMembershipProofV1 &membership_proof : membership_proofs)
-        make_serializable_sp_membership_proof_v1(membership_proof, add_element(serializable_membership_proofs_out));
+        make_serializable_sp_membership_proof_v1(membership_proof, tools::add_element(serializable_membership_proofs_out));
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -229,13 +230,20 @@ void make_serializable_sp_composition_proof(const SpCompositionProof &proof, ser
     serializable_proof_out.K_t1 = proof.K_t1;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void make_serializable_sp_enote(const SpEnote &enote, ser_SpEnote &serializable_enote_out)
+void make_serializable_sp_coinbase_enote_core(const SpCoinbaseEnoteCore &enote,
+    ser_SpCoinbaseEnoteCore &serializable_enote_out)
+{
+    serializable_enote_out.m_onetime_address = enote.m_onetime_address;
+    serializable_enote_out.m_amount          = enote.m_amount;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_enote_core(const SpEnoteCore &enote, ser_SpEnoteCore &serializable_enote_out)
 {
     serializable_enote_out.m_onetime_address   = enote.m_onetime_address;
     serializable_enote_out.m_amount_commitment = enote.m_amount_commitment;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void make_serializable_sp_enote_image(const SpEnoteImage &image, ser_SpEnoteImage &serializable_image_out)
+void make_serializable_sp_enote_image_core(const SpEnoteImageCore &image, ser_SpEnoteImageCore &serializable_image_out)
 {
     serializable_image_out.m_masked_address    = image.m_masked_address;
     serializable_image_out.m_masked_commitment = image.m_masked_commitment;
@@ -257,9 +265,18 @@ void make_serializable_legacy_enote_image_v2(const LegacyEnoteImageV2 &image,
     serializable_image_out.m_key_image         = image.m_key_image;
 }
 //-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_coinbase_enote_v1(const SpCoinbaseEnoteV1 &enote, ser_SpCoinbaseEnoteV1 &serializable_enote_out)
+{
+    make_serializable_sp_coinbase_enote_core(enote.m_core, serializable_enote_out.m_core);
+    memcpy(serializable_enote_out.m_addr_tag_enc.bytes,
+        enote.m_addr_tag_enc.bytes,
+        sizeof(enote.m_addr_tag_enc.bytes));
+    serializable_enote_out.m_view_tag = enote.m_view_tag;
+}
+//-------------------------------------------------------------------------------------------------------------------
 void make_serializable_sp_enote_v1(const SpEnoteV1 &enote, ser_SpEnoteV1 &serializable_enote_out)
 {
-    make_serializable_sp_enote(enote.m_core, serializable_enote_out.m_core);
+    make_serializable_sp_enote_core(enote.m_core, serializable_enote_out.m_core);
     serializable_enote_out.m_encoded_amount = enote.m_encoded_amount;
     memcpy(serializable_enote_out.m_addr_tag_enc.bytes,
         enote.m_addr_tag_enc.bytes,
@@ -269,7 +286,7 @@ void make_serializable_sp_enote_v1(const SpEnoteV1 &enote, ser_SpEnoteV1 &serial
 //-------------------------------------------------------------------------------------------------------------------
 void make_serializable_sp_enote_image_v1(const SpEnoteImageV1 &image, ser_SpEnoteImageV1 &serializable_image_out)
 {
-    make_serializable_sp_enote_image(image.m_core, serializable_image_out.m_core);
+    make_serializable_sp_enote_image_core(image.m_core, serializable_image_out.m_core);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_serializable_sp_balance_proof_v1(const SpBalanceProofV1 &proof,
@@ -313,6 +330,24 @@ void make_serializable_discretized_fee(const DiscretizedFee &discretized_fee,
     unsigned char &serializable_discretized_fee_out)
 {
     serializable_discretized_fee_out = discretized_fee.m_fee_level;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_tx_coinbase_v1(const SpTxCoinbaseV1 &tx, ser_SpTxCoinbaseV1 &serializable_tx_out)
+{
+    // semantic rules version
+    serializable_tx_out.m_tx_semantic_rules_version = tx.m_tx_semantic_rules_version;
+
+    // block height
+    serializable_tx_out.m_block_height = tx.m_block_height;
+
+    // block reward
+    serializable_tx_out.m_block_reward = tx.m_block_reward;
+
+    // tx outputs (new enotes)
+    copy_array(&make_serializable_sp_coinbase_enote_v1, tx.m_outputs, serializable_tx_out.m_outputs);
+
+    // supplemental data for tx
+    make_serializable_sp_tx_supplement_v1(tx.m_tx_supplement, serializable_tx_out.m_tx_supplement);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquashedV1 &serializable_tx_out)
@@ -393,13 +428,19 @@ void recover_sp_composition_proof(const ser_SpCompositionProof &serializable_pro
     proof_out.K_t1 = serializable_proof.K_t1;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void recover_sp_enote(const ser_SpEnote &serializable_enote, SpEnote &enote_out)
+void recover_sp_coinbase_enote_core(const ser_SpCoinbaseEnoteCore &serializable_enote, SpCoinbaseEnoteCore &enote_out)
+{
+    enote_out.m_onetime_address   = serializable_enote.m_onetime_address;
+    enote_out.m_amount = serializable_enote.m_amount;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_enote_core(const ser_SpEnoteCore &serializable_enote, SpEnoteCore &enote_out)
 {
     enote_out.m_onetime_address   = serializable_enote.m_onetime_address;
     enote_out.m_amount_commitment = serializable_enote.m_amount_commitment;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void recover_sp_enote_image(const ser_SpEnoteImage &serializable_image, SpEnoteImage &image_out)
+void recover_sp_enote_image_core(const ser_SpEnoteImageCore &serializable_image, SpEnoteImageCore &image_out)
 {
     image_out.m_masked_address    = serializable_image.m_masked_address;
     image_out.m_masked_commitment = serializable_image.m_masked_commitment;
@@ -431,9 +472,18 @@ void recover_legacy_enote_image_v2(const ser_LegacyEnoteImageV2 &serializable_im
     image_out.m_key_image         = serializable_image.m_key_image;
 }
 //-------------------------------------------------------------------------------------------------------------------
+void recover_sp_coinbase_enote_v1(const ser_SpCoinbaseEnoteV1 &serializable_enote, SpCoinbaseEnoteV1 &enote_out)
+{
+    recover_sp_coinbase_enote_core(serializable_enote.m_core, enote_out.m_core);
+    memcpy(enote_out.m_addr_tag_enc.bytes,
+        serializable_enote.m_addr_tag_enc.bytes,
+        sizeof(serializable_enote.m_addr_tag_enc));
+    enote_out.m_view_tag           = serializable_enote.m_view_tag;
+}
+//-------------------------------------------------------------------------------------------------------------------
 void recover_sp_enote_v1(const ser_SpEnoteV1 &serializable_enote, SpEnoteV1 &enote_out)
 {
-    recover_sp_enote(serializable_enote.m_core, enote_out.m_core);
+    recover_sp_enote_core(serializable_enote.m_core, enote_out.m_core);
     enote_out.m_encoded_amount     = serializable_enote.m_encoded_amount;
     memcpy(enote_out.m_addr_tag_enc.bytes,
         serializable_enote.m_addr_tag_enc.bytes,
@@ -443,7 +493,7 @@ void recover_sp_enote_v1(const ser_SpEnoteV1 &serializable_enote, SpEnoteV1 &eno
 //-------------------------------------------------------------------------------------------------------------------
 void recover_sp_enote_image_v1(const ser_SpEnoteImageV1 &serializable_image, SpEnoteImageV1 &image_out)
 {
-    recover_sp_enote_image(serializable_image.m_core, image_out.m_core);
+    recover_sp_enote_image_core(serializable_image.m_core, image_out.m_core);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void recover_sp_balance_proof_v1(ser_SpBalanceProofV1_PARTIAL &serializable_proof_in,
@@ -504,6 +554,24 @@ void recover_sp_tx_supplement_v1(ser_SpTxSupplementV1 &serializable_supplement_i
 void recover_discretized_fee(const unsigned char serializable_discretized_fee, DiscretizedFee &discretized_fee_out)
 {
     discretized_fee_out.m_fee_level = serializable_discretized_fee;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_tx_coinbase_v1(ser_SpTxCoinbaseV1 &serializable_tx_in, SpTxCoinbaseV1 &tx_out)
+{
+    // semantic rules version
+    tx_out.m_tx_semantic_rules_version = serializable_tx_in.m_tx_semantic_rules_version;
+
+    // block height
+    tx_out.m_block_height = serializable_tx_in.m_block_height;
+
+    // block reward
+    tx_out.m_block_reward = serializable_tx_in.m_block_reward;
+
+    // tx outputs (new enotes)
+    relay_array(&recover_sp_coinbase_enote_v1, serializable_tx_in.m_outputs, tx_out.m_outputs);
+
+    // supplemental data for tx
+    recover_sp_tx_supplement_v1(serializable_tx_in.m_tx_supplement, tx_out.m_tx_supplement);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,

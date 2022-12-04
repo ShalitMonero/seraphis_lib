@@ -26,8 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 //paired header
 #include "sp_composition_proof.h"
 
@@ -45,14 +43,12 @@ extern "C"
 #include "ringct/rctTypes.h"
 #include "sp_crypto_utils.h"
 #include "sp_hash_functions.h"
-#include "sp_misc_utils.h"
 #include "sp_transcript.h"
 
 //third party headers
 #include <boost/utility/string_ref.hpp>
 
 //standard headers
-#include <algorithm>
 #include <vector>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
@@ -133,12 +129,12 @@ void compute_responses(const rct::key &challenge,
 
     // r_t2 = alpha_t2 - c * (x / y)
     r_t2_out = invert(rct::sk2rct(y));  // 1 / y
-    sc_mul(r_t2_out.bytes, r_t2_out.bytes, to_bytes(x));  // x / y
+    sc_mul(r_t2_out.bytes, to_bytes(x), r_t2_out.bytes);  // x / y
     sc_mulsub(r_t2_out.bytes, challenge.bytes, r_t2_out.bytes, alpha_t2.bytes);  // alpha_t2 - c * (x / y)
 
     // r_ki = alpha_ki - c * (z / y)
     r_ki_out = invert(rct::sk2rct(y));  // 1 / y
-    sc_mul(r_ki_out.bytes, r_ki_out.bytes, to_bytes(z));  // z / y
+    sc_mul(r_ki_out.bytes, to_bytes(z), r_ki_out.bytes);  // z / y
     sc_mulsub(r_ki_out.bytes, challenge.bytes, r_ki_out.bytes, alpha_ki.bytes);  // alpha_ki - c * (z / y)
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -152,6 +148,8 @@ void compute_K_t1_for_proof(const crypto::secret_key &y, const rct::key &K, rct:
     rct::key inv_y{invert(rct::sk2rct(y))};
     sc_mul(inv_y.bytes, inv_y.bytes, rct::INV_EIGHT.bytes);
     rct::scalarmultKey(K_t1_out, K, inv_y);
+
+    memwipe(inv_y.bytes, 32);  //try to clean up the lingering bytes
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace detail
@@ -177,7 +175,7 @@ void make_sp_composition_proof(const rct::key &message,
     /// input checks and initialization
     CHECK_AND_ASSERT_THROW_MES(!(K == rct::identity()), "make sp composition proof: bad proof key (K identity)!");
 
-    // x == 0 is allowed
+    CHECK_AND_ASSERT_THROW_MES(sc_isnonzero(to_bytes(x)), "make sp composition proof: bad private key (x zero)!");
     CHECK_AND_ASSERT_THROW_MES(sc_check(to_bytes(x)) == 0, "make sp composition proof: bad private key (x)!");
     CHECK_AND_ASSERT_THROW_MES(sc_isnonzero(to_bytes(y)), "make sp composition proof: bad private key (y zero)!");
     CHECK_AND_ASSERT_THROW_MES(sc_check(to_bytes(y)) == 0, "make sp composition proof: bad private key (y)!");
@@ -195,8 +193,6 @@ void make_sp_composition_proof(const rct::key &message,
 
     CHECK_AND_ASSERT_THROW_MES(K == temp_K, "make sp composition proof: bad proof key (K doesn't match privkeys)!");
 
-    const rct::key U_gen{rct::pk2rct(crypto::get_U())};
-
 
     /// make K_t1 and KI
 
@@ -204,7 +200,6 @@ void make_sp_composition_proof(const rct::key &message,
     detail::compute_K_t1_for_proof(y, K, proof_out.K_t1);
 
     // KI = (z / y) * U
-    // note: plain KI is used in all byte-aware contexts
     const crypto::key_image KI{
             rct::rct2ki(rct::scalarmultKey(
                     rct::scalarmultKey(rct::pk2rct(crypto::get_U()), rct::sk2rct(z)),  //z U
@@ -228,7 +223,7 @@ void make_sp_composition_proof(const rct::key &message,
     // alpha_ki * U
     crypto::secret_key alpha_ki;
     rct::key alpha_ki_pub;
-    generate_proof_nonce(U_gen, alpha_ki, alpha_ki_pub);
+    generate_proof_nonce(rct::pk2rct(crypto::get_U()), alpha_ki, alpha_ki_pub);
 
 
     /// compute proof challenge
@@ -296,6 +291,8 @@ bool verify_sp_composition_proof(const SpCompositionProof &proof,
     ge_p3_to_cached(&temp_cache, &KI_p3);
     ge_sub(&temp_p1p1, &K_t2_p3, &temp_cache);  //(K_t1 - X) - KI
     ge_p1p1_to_p3(&K_t2_p3, &temp_p1p1);
+    CHECK_AND_ASSERT_THROW_MES(!(ge_p3_is_point_at_infinity_vartime(&K_t2_p3)),
+         "verify sp composition proof: invalid proof element K_t2!");
 
     // K_t1 part: [r_t1 * K + c * K_t1]
     ge_dsm_precomp(temp_dsmp, &K_t1_p3);

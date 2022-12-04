@@ -28,8 +28,8 @@
 
 #pragma once
 
-#include "account_generator_era.h"
 #include "crypto/crypto.h"
+#include "cryptonote_basic/account_generators.h"
 #include "serialization/containers.h"
 #include "serialization/crypto.h"
 #include "serialization/serialization.h"

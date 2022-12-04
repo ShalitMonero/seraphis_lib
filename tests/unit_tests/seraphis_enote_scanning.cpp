@@ -66,7 +66,6 @@
 #include "seraphis/txtype_squashed_v1.h"
 #include "seraphis_crypto/sp_composition_proof.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "seraphis_mocks/seraphis_mocks.h"
 
 #include "boost/multiprecision/cpp_int.hpp"
@@ -759,7 +758,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_1)
     ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 2);
 
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
     refresh_user_enote_store_PV(user_keys_A, refresh_config, ledger_context, enote_store_PV_A);
     refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
@@ -857,7 +856,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_2)
     ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 3);
 
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
     refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
 
@@ -1091,7 +1090,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_4)
     ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 30);
 
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
     refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
 
@@ -1135,7 +1134,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_4)
     ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 33);
 
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
     refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
 
@@ -1230,7 +1229,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_5)
     ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 11);
 
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
     refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
 
@@ -1274,7 +1273,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_5)
     ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 12);
 
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
     refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
 
@@ -1335,7 +1334,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_5)
     ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 13);
 
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
     refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
 
@@ -1419,7 +1418,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_6)
             ref_set_decomp_m,
             bin_config,
             ledger_context);
-        ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+        ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
         // full refresh of user A
         SpEnoteStoreMockV1 enote_store_A_full_refresh{0, 0, 0};
@@ -1585,7 +1584,7 @@ public:
     /// invoke: commit any unconfirmed txs in the ledger's unconfirmed chache
     void invoke() override
     {
-        m_ledger_contex.commit_unconfirmed_txs_v1(rct::key{}, sp::SpTxSupplementV1{}, std::vector<sp::SpEnoteV1>{});
+        m_ledger_contex.commit_unconfirmed_txs_v1(rct::key{}, sp::SpTxSupplementV1{}, std::vector<sp::SpEnoteVariant>{});
     }
 private:
     sp::MockLedgerContext &m_ledger_contex;
@@ -1654,7 +1653,7 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_1)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     // c. refresh user A with injected invocable
     // current chain state: {block0[{1, 1, 1, 1} -> A], block1[A -> {2} -> B]}
@@ -1767,7 +1766,7 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_2)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
 
     transfer_funds_single_mock_v1_unconfirmed_sp_only(user_keys_A,
@@ -1780,7 +1779,7 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_2)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     // c. refresh A so top block is block 2
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
@@ -1896,7 +1895,7 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_3)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
 
     transfer_funds_single_mock_v1_unconfirmed_sp_only(user_keys_A,
@@ -1909,7 +1908,7 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_3)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     // c. refresh user B with injected invocable
     // current chain state: {block0[{2, 2, 2, 2} -> A], block1[A -> {1} -> B], block2[A -> {2} -> B]}
@@ -2027,7 +2026,7 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_4)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     // c. refresh user B with injected invocable
     // current chain state: {block0[{1, 1, 1, 1} -> A], block1[A -> {1} -> B]}
@@ -2125,7 +2124,7 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_5)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
 
     // c. prepare sneaky tx to insert while scanning
@@ -5357,7 +5356,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -5645,7 +5644,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -5915,7 +5914,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -6047,7 +6046,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -6489,7 +6488,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -6721,7 +6720,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -6964,7 +6963,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -7945,7 +7944,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -8104,7 +8103,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -8537,7 +8536,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,
@@ -8637,7 +8636,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         ref_set_decomp_m,
         bin_config,
         ledger_context);
-    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context.commit_unconfirmed_txs_v1(rct::key{}, SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     //test recovery
     legacy_sp_transition_test_recovery_assertions(legacy_keys,

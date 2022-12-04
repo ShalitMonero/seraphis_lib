@@ -77,14 +77,14 @@ private:
     Twofish_key m_twofish_key;
 };
 
-/// try to get j from an address tag representation (fails if MAC != 0)
+/// try to get j from an address tag representation (fails if hint != 0)
 bool try_get_address_index(const address_tag_t &addr_tag, address_index_t &j_out);
 
-/// cipher[k](j || addr_tag_MAC) -> addr_tag
+/// cipher[k](j || addr_tag_hint) -> addr_tag
 address_tag_t cipher_address_index(const jamtis_address_tag_cipher_context &cipher_context, const address_index_t &j);
 address_tag_t cipher_address_index(const rct::key &cipher_key, const address_index_t &j);
 
-/// cipher_decrypt[k](addr_tag) -> {j, addr_tag_MAC}
+/// cipher_decrypt[k](addr_tag) -> {j, addr_tag_hint}
 bool try_decipher_address_index(const jamtis_address_tag_cipher_context &cipher_context,
     const address_tag_t &addr_tag,
     address_index_t &j_out);

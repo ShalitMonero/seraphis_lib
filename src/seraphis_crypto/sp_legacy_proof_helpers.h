@@ -26,138 +26,26 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 // Miscellaneous utility functions.
-
 
 #pragma once
 
 //local headers
 #include "bulletproofs_plus2.h"
 #include "crypto/crypto.h"
-#include "crypto/x25519.h"
 #include "ringct/rctTypes.h"
 
 //third party headers
 
 //standard headers
-#include <algorithm>
-#include <string>
-#include <utility>
 #include <vector>
 
 //forward declarations
 namespace sp { class SpTranscriptBuilder; }
 
-
 namespace sp
 {
 
-/// use operator< to get operator==
-/// WARNING: equality is not always implied by operator<, depending on implementation
-struct equals_from_less final
-{
-    template <typename T>
-    bool operator()(const T &a, const T &b) { return !(a < b) && !(b < a); }
-};
-/// note: uniqueness uses 'equals_from_less' so it matches the sorting criteria
-template <typename T>
-bool is_sorted_and_unique(const T& container)
-{
-    if (!std::is_sorted(container.begin(), container.end()))
-        return false;
-
-    if (std::adjacent_find(container.begin(), container.end(), equals_from_less{}) != container.end())
-        return false;
-
-    return true;
-}
-/// convenience wrapper for checking if a mapped object is mapped to a key embedded in that object
-template <typename KeyT, typename ValueT>
-bool keys_match_internal_values(const std::unordered_map<KeyT, ValueT> &map,
-    const std::function<
-            const typename std::unordered_map<KeyT, ValueT>::key_type&
-            (const typename std::unordered_map<KeyT, ValueT>::mapped_type&)
-        > &get_internal_key_func)
-{
-    for (const auto &map_element : map)
-    {
-        if (!(map_element.first == get_internal_key_func(map_element.second)))
-            return false;
-    }
-
-    return true;
-}
-/// convenience wrapper for getting the last element after emplacing back
-template <typename ContainerT>
-typename ContainerT::value_type& add_element(ContainerT &container)
-{
-    container.emplace_back();
-    return container.back();
-}
-/// convenience erasor for unordered maps: std::erase_if(std::unordered_map) is C++20
-template <typename KeyT, typename ValueT>
-void for_all_in_map_erase_if(std::unordered_map<KeyT, ValueT> &map_inout,
-    const std::function<bool(const typename std::unordered_map<KeyT, ValueT>::value_type&)> &predicate)
-{
-    for (auto map_it = map_inout.begin(); map_it != map_inout.end();)
-    {
-        if (predicate(*map_it))
-            map_it = map_inout.erase(map_it);
-        else
-            ++map_it;
-    }
-}
-
-/**
-* brief: ref_set_size_from_decomp - compute n^m from decomposition of a reference set
-* param: ref_set_decomp_n -
-* param: ref_set_decomp_m -
-* return: n^m
-* 
-* note: use this instead of std::pow() for better control over error states
-*/
-constexpr std::size_t ref_set_size_from_decomp(const std::size_t ref_set_decomp_n, const std::size_t ref_set_decomp_m)
-{
-    // ref set size = n^m
-    std::size_t ref_set_size{ref_set_decomp_n};
-
-    if (ref_set_decomp_n == 0 || ref_set_decomp_m == 0)
-        ref_set_size = 1;
-    else
-    {
-        for (std::size_t mul{1}; mul < ref_set_decomp_m; ++mul)
-        {
-            if (ref_set_size*ref_set_decomp_n < ref_set_size)  //overflow
-                return -1;
-            else
-                ref_set_size *= ref_set_decomp_n;
-        }
-    }
-
-    return ref_set_size;
-}
-/**
-* brief: keys_are_unique - check if keys in a vector are unique
-* param: keys -
-* return: true if keys are unique
-*/
-bool keys_are_unique(const std::vector<crypto::x25519_pubkey> &keys);
-/**
-* brief: round_up_to_power_of_2 - next power of 2 >= the input number
-*   TODO: move to better file?
-* param: num -
-* return: the next power of 2 >= the input num
-*/
-std::size_t round_up_to_power_of_2(const std::size_t num);
-/**
-* brief: highest_bit_position - equivalent to floor(log2(num))
-*   TODO: move to better file?
-* param: num -
-* return: floor(log2(num))
-*/
-std::size_t highest_bit_position(const std::size_t num);
 /**
 * brief: append_clsag_to_transcript - append CLSAG proof to a transcript
 *   transcript += {s} || c1 || I || D
@@ -215,24 +103,5 @@ std::size_t bpp_size_bytes(const std::size_t num_range_proofs, const bool includ
 * return: the BP+ proof's weight
 */
 std::size_t bpp_weight(const std::size_t num_range_proofs, const bool include_commitments);
-/**
-* brief: balance_check_equality - balance check between two commitment sets using an equality test
-*   - i.e. sum(inputs) ?= sum(outputs)
-* param: commitment_set1 -
-* param: commitment_set2 -
-* return: true/false on balance check result
-*/
-bool balance_check_equality(const rct::keyV &commitment_set1, const rct::keyV &commitment_set2);
-/**
-* brief: balance_check_in_out_amnts - balance check between two sets of amounts
-*   - i.e. sum(inputs) ?= sum(outputs) + transaction_fee
-* param: input_amounts -
-* param: output_amounts -
-* param: transaction_fee -
-* return: true/false on balance check result
-*/
-bool balance_check_in_out_amnts(const std::vector<rct::xmr_amount> &input_amounts,
-    const std::vector<rct::xmr_amount> &output_amounts,
-    const rct::xmr_amount transaction_fee);
 
 } //namespace sp

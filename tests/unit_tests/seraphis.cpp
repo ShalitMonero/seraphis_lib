@@ -26,6 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 extern "C"
@@ -64,7 +65,6 @@ extern "C"
 #include "seraphis/txtype_squashed_v1.h"
 #include "seraphis_crypto/sp_composition_proof.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 #include "seraphis_mocks/seraphis_mocks.h"
 
 #include "boost/multiprecision/cpp_int.hpp"
@@ -95,21 +95,19 @@ static void make_secret_key(crypto::x25519_secret_key &skey_out)
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void check_is_owned_with_intermediate_record(const sp::SpOutputProposalV1 &test_proposal,
+static void check_is_owned_with_intermediate_record(const sp::SpEnoteVariant &enote,
+    const crypto::x25519_pubkey &enote_ephemeral_pubkey,
+    const rct::key &input_context,
     const sp::jamtis::jamtis_mock_keys &keys,
     const sp::jamtis::address_index_t j_expected,
     const rct::xmr_amount amount_expected)
 {
-    // convert to enote
-    sp::SpEnoteV1 enote;
-    test_proposal.get_enote_v1(enote);
-
     // try to extract intermediate information from the enote
     // - only succeeds if enote is owned and is a plain jamtis enote
     sp::SpIntermediateEnoteRecordV1 intermediate_enote_record;
     EXPECT_TRUE(sp::try_get_intermediate_enote_record_v1(enote,
-        test_proposal.m_enote_ephemeral_pubkey,
-        rct::zero(),
+        enote_ephemeral_pubkey,
+        input_context,
         keys.K_1_base,
         keys.xk_ua,
         keys.xk_fr,
@@ -141,21 +139,19 @@ static void check_is_owned_with_intermediate_record(const sp::SpOutputProposalV1
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void check_is_owned(const sp::SpOutputProposalV1 &test_proposal,
+static void check_is_owned(const sp::SpEnoteVariant &enote,
+    const crypto::x25519_pubkey &enote_ephemeral_pubkey,
+    const rct::key &input_context,
     const sp::jamtis::jamtis_mock_keys &keys,
     const sp::jamtis::address_index_t j_expected,
     const rct::xmr_amount amount_expected,
     const sp::jamtis::JamtisEnoteType type_expected)
 {
-    // convert to enote
-    sp::SpEnoteV1 enote;
-    test_proposal.get_enote_v1(enote);
-
     // try to extract information from the enote (only succeeds if enote is owned)
     sp::SpEnoteRecordV1 enote_record;
     EXPECT_TRUE(sp::try_get_enote_record_v1(enote,
-        test_proposal.m_enote_ephemeral_pubkey,
-        rct::zero(),
+        enote_ephemeral_pubkey,
+        input_context,
         keys.K_1_base,
         keys.k_vb,
         enote_record));
@@ -177,7 +173,57 @@ static void check_is_owned(const sp::SpOutputProposalV1 &test_proposal,
 
     // for plain enotes, double-check ownership with an intermediate record
     if (enote_record.m_type == sp::jamtis::JamtisEnoteType::PLAIN)
-        check_is_owned_with_intermediate_record(test_proposal, keys, j_expected, amount_expected);
+    {
+        check_is_owned_with_intermediate_record(enote,
+            enote_ephemeral_pubkey,
+            input_context,
+            keys,
+            j_expected,
+            amount_expected);
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void check_is_owned(const sp::SpCoinbaseOutputProposalV1 &test_proposal,
+    const std::uint64_t block_height,
+    const sp::jamtis::jamtis_mock_keys &keys,
+    const sp::jamtis::address_index_t j_expected,
+    const rct::xmr_amount amount_expected,
+    const sp::jamtis::JamtisEnoteType type_expected)
+{
+    // prepare coinbase input context
+    rct::key input_context;
+    sp::jamtis::make_jamtis_input_context_coinbase(block_height, input_context);
+
+    // check info
+    check_is_owned(test_proposal.m_enote,
+        test_proposal.m_enote_ephemeral_pubkey,
+        input_context,
+        keys,
+        j_expected,
+        amount_expected,
+        type_expected);
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void check_is_owned(const sp::SpOutputProposalV1 &test_proposal,
+    const sp::jamtis::jamtis_mock_keys &keys,
+    const sp::jamtis::address_index_t j_expected,
+    const rct::xmr_amount amount_expected,
+    const sp::jamtis::JamtisEnoteType type_expected)
+{
+    // convert to enote
+    sp::SpEnoteV1 enote;
+    test_proposal.get_enote_v1(enote);
+
+    // check info
+    check_is_owned(enote,
+        test_proposal.m_enote_ephemeral_pubkey,
+        rct::zero(),
+        keys,
+        j_expected,
+        amount_expected,
+        type_expected);
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -431,12 +477,13 @@ static bool test_info_recovery_addressindex(const sp::jamtis::address_index_t j)
     address_index_t j_recovered;
     if (!try_get_address_index(raw_address_tag, j_recovered))
         return false;
+    if (j != j_recovered)
+        return false;
 
     // cipher and decipher the index
     crypto::secret_key cipher_key;
     make_secret_key(cipher_key);
     const address_tag_t ciphered_tag{cipher_address_index(rct::sk2rct(cipher_key), j)};
-    address_tag_MAC_t decipher_mac;
     address_index_t decipher_j;
     if (!try_decipher_address_index(rct::sk2rct(cipher_key), ciphered_tag, decipher_j))
         return false;
@@ -572,6 +619,40 @@ TEST(seraphis, information_recovery_jamtisdestination)
         keys.xK_fr,
         keys.s_ga,
         j_nominal));
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis, information_recovery_coinbase_enote_v1_plain)
+{
+    using namespace sp;
+    using namespace jamtis;
+
+    // user wallet keys
+    jamtis_mock_keys keys;
+    make_jamtis_mock_keys(keys);
+
+    // user address
+    address_index_t j;
+    j.gen();
+    JamtisDestinationV1 user_address;
+
+    make_jamtis_destination_v1(keys.K_1_base,
+        keys.xK_ua,
+        keys.xK_fr,
+        keys.s_ga,
+        j,
+        user_address);
+
+    // make a plain enote paying to address
+    const rct::xmr_amount amount{crypto::rand_idx(static_cast<rct::xmr_amount>(-1))};
+    const crypto::x25519_secret_key enote_privkey{crypto::x25519_secret_key_gen()};
+
+    const std::uint64_t block_height{0};
+    JamtisPaymentProposalV1 payment_proposal{user_address, amount, enote_privkey};
+    SpCoinbaseOutputProposalV1 output_proposal;
+    payment_proposal.get_coinbase_output_proposal_v1(block_height, output_proposal);
+
+    // check the enote
+    check_is_owned(output_proposal, block_height, keys, j, amount, JamtisEnoteType::PLAIN);
 }
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis, information_recovery_enote_v1_plain)
@@ -1178,7 +1259,7 @@ TEST(seraphis, txtype_squashed_v1)
             discretized_transaction_fee,
             sp::SpTxSquashedV1::SemanticRulesVersion::MOCK,
             ledger_context,
-            add_element(txs));
+            tools::add_element(txs));
         tx_ptrs.push_back(&(txs.back()));
     }
 

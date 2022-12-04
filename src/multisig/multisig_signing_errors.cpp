@@ -32,7 +32,7 @@
 #include "multisig_signing_errors.h"
 
 //local headers
-#include "seraphis_crypto/sp_variant.h"
+#include "common/variant.h"
 
 //third party headers
 
@@ -40,16 +40,16 @@
 #include <string>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
-#define MONERO_DEFAULT_LOG_CATEGORY "seraphis"
+#define MONERO_DEFAULT_LOG_CATEGORY "multisig"
 
 namespace multisig
 {
 //-------------------------------------------------------------------------------------------------------------------
 const std::string& error_message_ref(const MultisigSigningErrorVariant &variant)
 {
-    struct visitor : public sp::SpVariantStaticVisitor<const std::string&>
+    struct visitor : public tools::variant_static_visitor<const std::string&>
     {
-        using SpVariantStaticVisitor::operator();  //for blank overload
+        using variant_static_visitor::operator();  //for blank overload
         const std::string& operator()(const MultisigSigningErrorBadInitSet &error) const
         { return error.m_error_message; }
         const std::string& operator()(const MultisigSigningErrorBadInitSetCollection &error) const

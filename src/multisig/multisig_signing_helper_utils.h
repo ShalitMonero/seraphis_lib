@@ -37,6 +37,7 @@
 #pragma once
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "multisig/multisig_account.h"
 #include "multisig/multisig_signer_set_filter.h"
@@ -248,7 +249,7 @@ bool try_assemble_multisig_partial_sigs(
         // b. try to make the contextual signature
         if (!try_assemble_partial_sigs_func(proof_key_and_partial_sigs.first,
                 partial_sigs_temp,
-                add_element(contextual_sigs_out)))
+                tools::add_element(contextual_sigs_out)))
             return false;
     }
 

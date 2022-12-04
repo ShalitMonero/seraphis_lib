@@ -26,8 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 ////
 // Multisig utilities for the seraphis composition proof.
 //
@@ -41,7 +39,6 @@
 // - FROST (Komlo): https://eprint.iacr.org/2020/852
 // - Multisig/threshold security (Crites): https://eprint.iacr.org/2021/1375
 ///
-
 
 #pragma once
 
@@ -65,8 +62,8 @@ namespace multisig
 ////
 // Multisig signature proposal for seraphis composition proofs
 //
-// WARNING: must only use a 'proposal' to make ONE 'signature' (or signature attempt),
-//          after that the opening privkeys should be deleted immediately
+// WARNING: must only use a proposal to make ONE signature, after that the shared signature nonces stored here
+//          should be deleted immediately
 ///
 struct SpCompositionProofMultisigProposal final
 {
@@ -84,9 +81,9 @@ struct SpCompositionProofMultisigProposal final
 };
 
 ////
-// Multisig partially signed composition proof (from one multisig participant)
-// - multisig assumes only proof component KI is subject to multisig signing (key z is split between signers)
-// - store signature opening for KI component (response r_ki)
+// Multisig partially signed composition proof (from one multisig signer)
+// - only proof component KI is subject to multisig signing (proof privkey z is split between signers)
+// - r_ki is the partial response from this multisig signer
 ///
 struct SpCompositionProofMultisigPartial final
 {
@@ -100,36 +97,34 @@ struct SpCompositionProofMultisigPartial final
     // challenge
     rct::key c;
     // responses r_t1, r_t2
-    rct::key r_t1, r_t2;
+    rct::key r_t1;
+    rct::key r_t2;
     // intermediate proof key K_t1
     rct::key K_t1;
 
-    // partial response for r_ki (from one multisig participant)
+    // partial response for r_ki (from one multisig signer)
     rct::key r_ki_partial;
 };
 
-//todo: place challenge and response calculations in a detail namespace so multisig stuff can be moved to a separate
-//      file without duplication
-
 /**
-* brief: make_sp_composition_multisig_proposal - propose to make a multisig Seraphis composition proof
+* brief: make_sp_composition_multisig_proposal - propose to make a multisig seraphis composition proof
 * param: message - message to insert in the proof's Fiat-Shamir transform hash
 * param: K - main proof key
 * param: KI - key image
-* outparam: proposal_out - Seraphis composition proof multisig proposal
+* outparam: proposal_out - proposal
 */
 void make_sp_composition_multisig_proposal(const rct::key &message,
     const rct::key &K,
     const crypto::key_image &KI,
     SpCompositionProofMultisigProposal &proposal_out);
 /**
-* brief: make_sp_composition_multisig_partial_sig - make local multisig signer's partial signature for a Seraphis composition
-*        proof
+* brief: make_sp_composition_multisig_partial_sig - make local multisig signer's partial signature for a seraphis
+*        composition proof
 *   - caller must validate the multisig proposal
-*       - is the key image well-made?
+*       - is the key image well-made and canonical?
 *       - is the main key legitimate?
 *       - is the message correct?
-* param: proposal - proof proposal to construct proof partial signature from
+* param: proposal - proof proposal to use when constructing the partial signature
 * param: x - secret key
 * param: y - secret key
 * param: z_e - secret key of multisig signer e
@@ -137,7 +132,7 @@ void make_sp_composition_multisig_proposal(const rct::key &message,
 *                            (including local signer)
 * param: local_nonce_1_priv - alpha_{ki,1,e} for local signer
 * param: local_nonce_2_priv - alpha_{ki,2,e} for local signer
-* outparam: partial_sig_out - partially signed Seraphis composition proof
+* outparam: partial_sig_out - partially signed seraphis composition proof
 */
 void make_sp_composition_multisig_partial_sig(const SpCompositionProofMultisigProposal &proposal,
     const crypto::secret_key &x,
@@ -148,11 +143,12 @@ void make_sp_composition_multisig_partial_sig(const SpCompositionProofMultisigPr
     const crypto::secret_key &local_nonce_2_priv,
     SpCompositionProofMultisigPartial &partial_sig_out);
 /**
-* brief: try_make_sp_composition_multisig_partial_sig - make a partial signature using a nonce record (nonce safety guarantee)
+* brief: try_make_sp_composition_multisig_partial_sig - make a partial signature using a nonce record (nonce safety
+*        guarantee)
 *   - caller must validate the multisig proposal
 * param: ...(see make_sp_composition_multisig_partial_sig())
 * param: filter - filter representing the multisig signer group that is supposedly working on this signature
-* inoutparam: nonce_record_inout - a record of nonces for makeing partial signatures; used nonces will be cleared
+* inoutparam: nonce_record_inout - a record of nonces for making partial signatures; used nonces will be cleared here
 * outparam: partial_sig_out - the partial signature
 * return: true if creating the partial signature succeeded
 */
@@ -165,9 +161,9 @@ bool try_make_sp_composition_multisig_partial_sig(const SpCompositionProofMultis
     MultisigNonceRecord &nonce_record_inout,
     SpCompositionProofMultisigPartial &partial_sig_out);
 /**
-* brief: finalize_sp_composition_multisig_proof - create a Seraphis composition proof from multisig partial signatures
-* param: partial_sigs - partial signatures from enough multisig participants to complete a full proof
-* outparam: proof_out - Seraphis composition proof
+* brief: finalize_sp_composition_multisig_proof - create a seraphis composition proof from multisig partial signatures
+* param: partial_sigs - partial signatures from enough multisig signers to complete a full proof
+* outparam: proof_out - seraphis composition proof
 */
 void finalize_sp_composition_multisig_proof(const std::vector<SpCompositionProofMultisigPartial> &partial_sigs,
     sp::SpCompositionProof &proof_out);

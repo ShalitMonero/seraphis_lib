@@ -37,11 +37,13 @@ extern "C"
 {
 #include "crypto/crypto-ops.h"
 }
+#include "crypto/x25519.h"
 #include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 
 //third party headers
+#include "boost/multiprecision/cpp_int.hpp"
 
 //standard headers
 #include <vector>
@@ -138,7 +140,7 @@ void decompose(const std::size_t val, const std::size_t base, const std::size_t 
 {
     CHECK_AND_ASSERT_THROW_MES(base > 1, "Bad decomposition parameters!");
     CHECK_AND_ASSERT_THROW_MES(size > 0, "Bad decomposition parameters!");
-    CHECK_AND_ASSERT_THROW_MES(r_out.size() >= size, "Bad decomposition result vector size!");
+    CHECK_AND_ASSERT_THROW_MES(r_out.size() == size, "Bad decomposition result vector size!");
 
     std::size_t temp = val;
 
@@ -251,6 +253,40 @@ bool key_domain_is_prime_subgroup(const rct::key &check_key)
     ge_scalarmult_p3(&check_key_p3, rct::curveOrder().bytes, &check_key_p3);
 
     return (ge_p3_is_point_at_infinity_vartime(&check_key_p3) != 0);
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool keys_are_unique(const std::vector<crypto::x25519_pubkey> &keys)
+{
+    for (auto key_it = keys.begin(); key_it != keys.end(); ++key_it)
+    {
+        if (std::find(keys.begin(), key_it, *key_it) != key_it)
+            return false;
+    }
+
+    return true;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool balance_check_equality(const rct::keyV &commitment_set1, const rct::keyV &commitment_set2)
+{
+    // balance check method chosen from perf test: tests/performance_tests/balance_check.h
+    return rct::equalKeys(rct::addKeys(commitment_set1), rct::addKeys(commitment_set2));
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool balance_check_in_out_amnts(const std::vector<rct::xmr_amount> &input_amounts,
+    const std::vector<rct::xmr_amount> &output_amounts,
+    const rct::xmr_amount transaction_fee)
+{
+    boost::multiprecision::uint128_t input_sum{0};
+    boost::multiprecision::uint128_t output_sum{0};
+
+    for (const auto amnt : input_amounts)
+        input_sum += amnt;
+
+    for (const auto amnt : output_amounts)
+        output_sum += amnt;
+    output_sum += transaction_fee;
+
+    return input_sum == output_sum;
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace sp

@@ -47,6 +47,7 @@
 #include "seraphis/tx_extra.h"
 #include "seraphis/tx_fee_calculator.h"
 #include "seraphis/tx_input_selection.h"
+#include "seraphis/txtype_coinbase_v1.h"
 #include "seraphis/txtype_squashed_v1.h"
 #include "tx_enote_store_mocks.h"
 

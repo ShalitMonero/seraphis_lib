@@ -34,9 +34,9 @@
 #pragma once
 
 //local headers
+#include "common/variant.h"
 #include "crypto/crypto.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_variant.h"
 
 //third party headers
 
@@ -151,7 +151,7 @@ struct LegacyEnoteV4 final
 // amount_commitment_ref(): get the enote's amount commitment (this is a copy because V1 enotes need to
 //                          compute the commitment)
 ///
-using LegacyEnoteVariant = SpVariant<LegacyEnoteV1, LegacyEnoteV2, LegacyEnoteV3, LegacyEnoteV4>;
+using LegacyEnoteVariant = tools::variant<LegacyEnoteV1, LegacyEnoteV2, LegacyEnoteV3, LegacyEnoteV4>;
 const rct::key& onetime_address_ref(const LegacyEnoteVariant &variant);
 rct::key amount_commitment_ref(const LegacyEnoteVariant &variant);
 

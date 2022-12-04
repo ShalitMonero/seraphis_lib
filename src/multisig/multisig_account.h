@@ -28,8 +28,8 @@
 
 #pragma once
 
-#include "account_generator_era.h"
 #include "crypto/crypto.h"
+#include "cryptonote_basic/account_generators.h"
 #include "multisig_account_era_conversion_msg.h"
 #include "multisig_kex_msg.h"
 #include "multisig_partial_cn_key_image_msg.h"

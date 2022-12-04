@@ -26,15 +26,13 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
-// Miscellaneous crypto utils for Seraphis.
-
+// Miscellaneous crypto utils for seraphis (also includes some more basic math utils).
 
 #pragma once
 
 //local headers
 #include "crypto/crypto.h"
+#include "crypto/x25519.h"
 #include "ringct/rctTypes.h"
 
 //third party headers
@@ -54,25 +52,42 @@ struct sortable_key
     unsigned char bytes[32];
 
     sortable_key() = default;
-    sortable_key(const rct::key &rct_key)
-    {
-        memcpy(bytes, rct_key.bytes, 32);
-    }
-
-    bool operator<(const sortable_key &other) const
-    {
-        return memcmp(bytes, other.bytes, 32) < 0;
-    }
+    sortable_key(const rct::key &rct_key) { memcpy(bytes, rct_key.bytes, 32); }
+    bool operator<(const sortable_key &other) const { return memcmp(bytes, other.bytes, 32) < 0; }
 };
 static inline const rct::key& sortable2rct(const sortable_key &sortable)
 {
     return reinterpret_cast<const rct::key&>(sortable);
 }
-static inline const rct::key sortable2rct(const sortable_key &&sortable)
-{
-    return reinterpret_cast<const rct::key&&>(sortable);
-}
 
+/**
+* brief: size_from_decomposition - compute n^m
+* param: n - base
+* param: m - power
+* return: n^m
+* 
+* note: use this instead of std::pow() for better control over error states
+*/
+constexpr std::size_t size_from_decomposition(const std::size_t n, const std::size_t m) noexcept
+{
+    // n^m
+    std::size_t size{n};
+
+    if (n == 0 || m == 0)
+        size = 1;
+    else
+    {
+        for (std::size_t mul{1}; mul < m; ++mul)
+        {
+            if (size*n < size)  //overflow
+                return -1;
+            else
+                size *= n;
+        }
+    }
+
+    return size;
+}
 /**
 * brief: minus_one - -1 mod q
 * return: -1 mod q
@@ -89,6 +104,8 @@ rct::key invert(const rct::key &x);
 *   val -> [_, _, ... ,_]
 *   - num slots = 'size'
 *   - numeric base = 'base'
+*   - PRECONDITION: 'size' must be large enough to accomodate all digits of the decomposed value; if it is too small then
+*     the last digit will not be mod the base
 *   e.g. if base = 2 then convert val to binary, if base = 10 then put its decimal digits into the return vector
 * param: val - value to decompose
 * param: base - numeric base for decomposing the value
@@ -146,11 +163,36 @@ void subtract_secret_key_vectors(const std::vector<crypto::secret_key> &keys_A,
 */
 void mask_key(const crypto::secret_key &mask, const rct::key &key, rct::key &masked_key_out);
 /**
-* brief: key_domain_is_prime_subgroup - check that input key is in prime order EC subgroup
+* brief: key_domain_is_prime_subgroup - check that input key is in the prime order EC subgroup
 *   l*K ?= identity
 * param: check_key - key to check
 * result: true if input key is in prime order EC subgroup
 */
 bool key_domain_is_prime_subgroup(const rct::key &check_key);
+/**
+* brief: keys_are_unique - check if keys in a vector are unique
+* param: keys -
+* return: true if keys are unique
+*/
+bool keys_are_unique(const std::vector<crypto::x25519_pubkey> &keys);
+/**
+* brief: balance_check_equality - balance check between two commitment sets using an equality test
+*   - i.e. sum(inputs) ?= sum(outputs)
+* param: commitment_set1 -
+* param: commitment_set2 -
+* return: true/false on balance check result
+*/
+bool balance_check_equality(const rct::keyV &commitment_set1, const rct::keyV &commitment_set2);
+/**
+* brief: balance_check_in_out_amnts - balance check between two sets of amounts
+*   - i.e. sum(inputs) ?= sum(outputs) + transaction_fee
+* param: input_amounts -
+* param: output_amounts -
+* param: transaction_fee -
+* return: true/false on balance check result
+*/
+bool balance_check_in_out_amnts(const std::vector<rct::xmr_amount> &input_amounts,
+    const std::vector<rct::xmr_amount> &output_amounts,
+    const rct::xmr_amount transaction_fee);
 
 } //namespace sp

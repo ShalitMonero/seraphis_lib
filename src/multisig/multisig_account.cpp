@@ -28,12 +28,12 @@
 
 #include "multisig_account.h"
 
-#include "account_generator_era.h"
 #include "crypto/crypto.h"
 extern "C"
 {
 #include "crypto/crypto-ops.h"
 }
+#include "cryptonote_basic/account_generators.h"
 #include "cryptonote_config.h"
 #include "include_base_utils.h"
 #include "multisig.h"
@@ -72,7 +72,9 @@ namespace multisig
       "Failed to derive public key");
 
     // prepare initial kex message
-    rct::key initial_pubkey{rct::scalarmultKey(get_primary_generator(m_account_era), rct::sk2rct(m_base_privkey))};
+    rct::key initial_pubkey{
+        rct::scalarmultKey(rct::pk2rct(get_primary_generator(m_account_era)), rct::sk2rct(m_base_privkey))
+      };
     m_next_round_kex_message =
       multisig_kex_msg{
         get_kex_msg_version(era),
@@ -114,12 +116,14 @@ namespace multisig
     CHECK_AND_ASSERT_THROW_MES(crypto::secret_key_to_public_key(m_base_privkey, m_base_pubkey),
       "Failed to derive public key");
 
-    m_common_pubkey =
-      rct::rct2pk(rct::scalarmultKey(cryptonote::get_secondary_generator(m_account_era), rct::sk2rct(m_common_privkey)));
+    m_common_pubkey = rct::rct2pk(rct::scalarmultKey(
+        rct::pk2rct(cryptonote::get_secondary_generator(m_account_era)),
+        rct::sk2rct(m_common_privkey)
+      ));
 
     // 2) initialize keyshare pubkeys and keyshare map
     m_multisig_keyshare_pubkeys.reserve(m_multisig_privkeys.size());
-    const rct::key primary_generator{get_primary_generator(m_account_era)};
+    const rct::key primary_generator{rct::pk2rct(get_primary_generator(m_account_era))};
     for (const crypto::secret_key &multisig_privkey : m_multisig_privkeys)
     {
       m_multisig_keyshare_pubkeys.emplace_back(

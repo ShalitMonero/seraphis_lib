@@ -26,8 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 //paired header
 #include "sp_multiexp.h"
 
@@ -46,7 +44,6 @@ extern "C"
 //third party headers
 
 //standard headers
-#include <iostream>
 #include <list>
 #include <vector>
 
@@ -65,11 +62,33 @@ static void weight_scalar(const boost::optional<rct::key> &weight, rct::key &sca
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void update_scalar(const boost::optional<rct::key> &new_scalar, rct::key &scalar_inout)
+static void update_scalar(const rct::key &new_scalar, rct::key &scalar_inout)
 {
     // s += s_new
-    if (new_scalar)
-        sc_add(scalar_inout.bytes, scalar_inout.bytes, new_scalar->bytes);
+    if (scalar_inout == rct::zero())
+        scalar_inout = new_scalar;
+    else
+        sc_add(scalar_inout.bytes, scalar_inout.bytes, new_scalar.bytes);
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void update_scalar(const rct::key &new_scalar, boost::optional<rct::key> &scalar_inout)
+{
+    if (!scalar_inout)
+        scalar_inout = rct::zero();
+
+    // s += s_new
+    update_scalar(new_scalar, *scalar_inout);
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void update_scalar(const boost::optional<rct::key> &new_scalar, rct::key &scalar_inout)
+{
+    if (!new_scalar)
+        return;
+
+    // s += s_new
+    update_scalar(*new_scalar, scalar_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -91,13 +110,13 @@ static void prepare_multiexp_cached_generators(const std::size_t num_predef_gen_
     // set generators
     cached_base_points_inout[0] = crypto::get_G_cached();
     cached_base_points_inout[1] = crypto::get_H_cached();
-    cached_base_points_inout[2] = crypto::get_U_cached();
-    cached_base_points_inout[3] = crypto::get_X_cached();
+    cached_base_points_inout[2] = crypto::get_X_cached();
+    cached_base_points_inout[3] = crypto::get_U_cached();
 
     elements_collected_inout[0].point = crypto::get_G_p3();
     elements_collected_inout[1].point = crypto::get_H_p3();
-    elements_collected_inout[2].point = crypto::get_U_p3();
-    elements_collected_inout[3].point = crypto::get_X_p3();
+    elements_collected_inout[2].point = crypto::get_X_p3();
+    elements_collected_inout[3].point = crypto::get_U_p3();
 
     for (std::size_t gen_index{0}; gen_index < num_predef_gen_elements; ++gen_index)
     {
@@ -125,58 +144,34 @@ SpMultiexpBuilder::SpMultiexpBuilder(const rct::key &weight,
 void SpMultiexpBuilder::add_G_element(rct::key scalar)
 {
     weight_scalar(m_weight, scalar);
-
-    if (!m_G_scalar)
-        m_G_scalar = scalar;
-    else
-        sc_add(m_G_scalar->bytes, m_G_scalar->bytes, scalar.bytes);
+    update_scalar(scalar, m_G_scalar);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpMultiexpBuilder::add_H_element(rct::key scalar)
 {
     weight_scalar(m_weight, scalar);
-
-    if (!m_H_scalar)
-        m_H_scalar = scalar;
-    else
-        sc_add(m_H_scalar->bytes, m_H_scalar->bytes, scalar.bytes);
-}
-//-------------------------------------------------------------------------------------------------------------------
-void SpMultiexpBuilder::add_U_element(rct::key scalar)
-{
-    weight_scalar(m_weight, scalar);
-
-    if (!m_U_scalar)
-        m_U_scalar = scalar;
-    else
-        sc_add(m_U_scalar->bytes, m_U_scalar->bytes, scalar.bytes);
+    update_scalar(scalar, m_H_scalar);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpMultiexpBuilder::add_X_element(rct::key scalar)
 {
     weight_scalar(m_weight, scalar);
-
-    if (!m_X_scalar)
-        m_X_scalar = scalar;
-    else
-        sc_add(m_X_scalar->bytes, m_X_scalar->bytes, scalar.bytes);
+    update_scalar(scalar, m_X_scalar);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void SpMultiexpBuilder::add_U_element(rct::key scalar)
+{
+    weight_scalar(m_weight, scalar);
+    update_scalar(scalar, m_U_scalar);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpMultiexpBuilder::add_element_at_generator_index(rct::key scalar, const std::size_t predef_generator_index)
 {
-    weight_scalar(m_weight, scalar);
-
-    if (m_predef_scalars.size() <= predef_generator_index)
+    if (m_predef_scalars.size() < predef_generator_index + 1)
         m_predef_scalars.resize(predef_generator_index + 1, rct::zero());
 
-    if (m_predef_scalars[predef_generator_index] == rct::zero())
-        m_predef_scalars[predef_generator_index] = scalar;
-    else
-    {
-        sc_add(m_predef_scalars[predef_generator_index].bytes,
-            m_predef_scalars[predef_generator_index].bytes,
-            scalar.bytes);
-    }
+    weight_scalar(m_weight, scalar);
+    update_scalar(scalar, m_predef_scalars[predef_generator_index]);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpMultiexpBuilder::add_element(rct::key scalar, const ge_p3 &base_point)
@@ -186,7 +181,6 @@ void SpMultiexpBuilder::add_element(rct::key scalar, const ge_p3 &base_point)
         return;
 
     weight_scalar(m_weight, scalar);
-
     m_user_def_elements.emplace_back(scalar, base_point);
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -222,7 +216,7 @@ SpMultiexp::SpMultiexp(const std::list<SpMultiexpBuilder> &multiexp_builders)
     }
 
     // 1. prepare generators
-    std::shared_ptr<rct::pippenger_cached_data> cached_base_points = std::make_shared<rct::pippenger_cached_data>();
+    std::shared_ptr<rct::pippenger_cached_data> cached_base_points{std::make_shared<rct::pippenger_cached_data>()};
     cached_base_points->reserve(4 + num_predef_gen_elements + num_user_def_elements);
 
     std::vector<rct::MultiexpData> elements_collected;
@@ -241,8 +235,8 @@ SpMultiexp::SpMultiexp(const std::list<SpMultiexpBuilder> &multiexp_builders)
         // main generators
         update_scalar(multiexp_builder.m_G_scalar, elements_collected[0].scalar);
         update_scalar(multiexp_builder.m_H_scalar, elements_collected[1].scalar);
-        update_scalar(multiexp_builder.m_U_scalar, elements_collected[2].scalar);
-        update_scalar(multiexp_builder.m_X_scalar, elements_collected[3].scalar);
+        update_scalar(multiexp_builder.m_X_scalar, elements_collected[2].scalar);
+        update_scalar(multiexp_builder.m_U_scalar, elements_collected[3].scalar);
 
         // pre-defined generators
         for (std::size_t predef_generator_index{0};

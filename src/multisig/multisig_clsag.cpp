@@ -32,6 +32,7 @@
 #include "multisig_clsag.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 extern "C"
 {
@@ -44,7 +45,6 @@ extern "C"
 #include "ringct/rctOps.h"
 #include "ringct/rctSigs.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 
 //third party headers
 
@@ -52,7 +52,7 @@ extern "C"
 #include <vector>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
-#define MONERO_DEFAULT_LOG_CATEGORY "seraphis"
+#define MONERO_DEFAULT_LOG_CATEGORY "multisig"
 
 namespace multisig
 {
@@ -200,9 +200,9 @@ void make_clsag_multisig_partial_sig(const CLSAGMultisigProposal &proposal,
     signer_pub_nonces_Hp_mul8.reserve(num_signers);
 
     for (const MultisigPubNonces &signer_pub_nonce_pair : signer_pub_nonces_G)
-        signer_nonces_mul8(signer_pub_nonce_pair, sp::add_element(signer_pub_nonces_G_mul8));
+        signer_nonces_mul8(signer_pub_nonce_pair, tools::add_element(signer_pub_nonces_G_mul8));
     for (const MultisigPubNonces &signer_pub_nonce_pair : signer_pub_nonces_Hp)
-        signer_nonces_mul8(signer_pub_nonce_pair, sp::add_element(signer_pub_nonces_Hp_mul8));
+        signer_nonces_mul8(signer_pub_nonce_pair, tools::add_element(signer_pub_nonces_Hp_mul8));
 
     // check that the local signer's signature opening is in the input set of opening nonces (for both G and Hp versions)
     MultisigPubNonces local_pub_nonces_G;

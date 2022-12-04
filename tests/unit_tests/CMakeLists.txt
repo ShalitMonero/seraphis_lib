@@ -112,6 +112,7 @@ set(unit_tests_sources
   is_hdd.cpp
   aligned.cpp
   rpc_version_str.cpp
+  x25519.cpp
   zmq_rpc.cpp)
 
 set(unit_tests_headers
@@ -129,6 +130,7 @@ target_link_libraries(unit_tests
     daemon_rpc_server
     blockchain_db
     lmdb_lib
+    mx25519_static
     rpc
     net
     serialization
@@ -144,6 +146,9 @@ target_link_libraries(unit_tests
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES}
     ${ZMQ_LIB})
+target_include_directories(unit_tests
+  PRIVATE
+    ${MX25519_INCLUDE})
 set_property(TARGET unit_tests
   PROPERTY
     FOLDER "tests")

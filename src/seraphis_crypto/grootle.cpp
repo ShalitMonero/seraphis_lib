@@ -26,8 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 //paired header
 #include "grootle.h"
 
@@ -45,7 +43,6 @@ extern "C"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "sp_crypto_utils.h"
-#include "sp_misc_utils.h"
 #include "sp_multiexp.h"
 #include "sp_generator_factory.h"
 #include "sp_hash_functions.h"
@@ -87,7 +84,6 @@ static void grootle_matrix_commitment(const rct::key &x,  //blinding factor
     CHECK_AND_ASSERT_THROW_MES(m > 0, "grootle proof matrix commitment: bad matrix size!");
     CHECK_AND_ASSERT_THROW_MES(m == M_priv_B.size(), "grootle proof matrix commitment: matrix size mismatch (m)!");
     const std::size_t n{M_priv_A[0].size()};
-    CHECK_AND_ASSERT_THROW_MES(n == M_priv_B[0].size(), "grootle proof matrix commitment: matrix size mismatch (n)!");
     CHECK_AND_ASSERT_THROW_MES(m*n <= GROOTLE_MAX_MN, "grootle proof matrix commitment: bad matrix commitment parameters!");
 
     data_out.resize(1 + 2*m*n);
@@ -101,27 +97,27 @@ static void grootle_matrix_commitment(const rct::key &x,  //blinding factor
     offset += 1;
     for (std::size_t j = 0; j < m; ++j)
     {
+        CHECK_AND_ASSERT_THROW_MES(n == M_priv_A[j].size(), "grootle proof matrix commitment: matrix size mismatch (n)!");
+
         for (std::size_t i = 0; i < n; ++i)
-        {
             data_out[offset + j*n + i] = {M_priv_A[j][i], generator_factory::get_generator_at_index_p3(2*(j*n + i))};
-        }
     }
 
     // map M_B onto Hi_B
     offset += m*n;
     for (std::size_t j = 0; j < m; ++j)
     {
+        CHECK_AND_ASSERT_THROW_MES(n == M_priv_B[j].size(), "grootle proof matrix commitment: matrix size mismatch (n)!");
+
         for (std::size_t i = 0; i < n; ++i)
-        {
             data_out[offset + j*n + i] = {M_priv_B[j][i], generator_factory::get_generator_at_index_p3(2*(j*n + i) + 1)};
-        }
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
 // Fiat-Shamir challenge
 // c = H_n(message, n, m, {M}, C_offset, A, B, {X})
 //
-// note: in Triptych notation, c == xi
+// note: c == xi
 //-------------------------------------------------------------------------------------------------------------------
 static rct::key compute_challenge(const rct::key &message,
     const std::size_t n,
@@ -153,11 +149,11 @@ static rct::key compute_challenge(const rct::key &message,
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static void build_verification_multiexps_for_proof(const GrootleProof &proof,
+    const rct::key &message,
     const rct::keyV &M,
     const rct::key &proof_offset,
     const std::size_t n,
     const std::size_t m,
-    const rct::key &message,
     const rct::key &weight1,
     const rct::key &weight2,
     SpMultiexpBuilder &builder1_inout,
@@ -169,7 +165,7 @@ static void build_verification_multiexps_for_proof(const GrootleProof &proof,
     // builer 1: A + xi*B == dual_matrix_commit(zA, f, f*(xi - f))
     // per-index storage:
     // 0                                  G                             (zA*G)
-    // 1                  2*m*n           alternate(Hi_A[i], Hi_B[i])   {f, f*(xi - f)}
+    // 1 .. 2*m*n                         alternate(Hi_A[i], Hi_B[i])   {f, f*(xi - f)}
     // ... other proof data: A, B
 
     // builer 2: sum_k( t_k*(M[k] - C_offset) ) - sum_j( xi^j*X[j] ) - z G == 0
@@ -219,9 +215,9 @@ static void build_verification_multiexps_for_proof(const GrootleProof &proof,
             "grootle proof verifying: proof matrix element should not be zero!");
     }
 
-    // Matrix commitment
-    //   weight1 * [ A + xi*B == zA * G + ... f[j][i] * Hi_A[j][i] ... + ... f[j][i] * (xi - f[j][i]) * Hi_B[j][i] ... ]
-    //   weight1 * [          == dual_matrix_commit(zA, f, f*(xi - f))                                                 ]
+    // Signing index matrix commitments sub-proof
+    //   weight1 * [ A + xi*B == dual_matrix_commit(zA, f, f*(xi - f))                                                 ]
+    //   weight1 * [          == zA * G + ... f[j][i] * Hi_A[j][i] ... + ... f[j][i] * (xi - f[j][i]) * Hi_B[j][i] ... ]
     // G: weight1 * zA
     sc_mul(temp.bytes, weight1.bytes, proof.zA.bytes);
     builder1_inout.add_G_element(temp);
@@ -258,19 +254,20 @@ static void build_verification_multiexps_for_proof(const GrootleProof &proof,
     sc_mul(temp.bytes, w1_MINUS_ONE.bytes, xi.bytes);
     builder1_inout.add_element(temp, B_p3);  //weight1 * -xi * B
 
-    // {M}
+    // One-of-many sub-proof
     //   t_k = mul_all_j(f[j][decomp_k[j]])
-    //   weight2 * [ sum_k( t_k*(M[k] - C_offset) ) - sum(...) - z G == 0  ]
+    //   weight2 * [ sum_k( t_k*(M[k] - C_offset) ) - sum_j( xi^j*X[j] ) - z G == 0  ]
     //
+    // {M}
     //   weight2 * [ sum_k( t_k*M[k] ) - sum_k( t_k )*C_offset - [ sum(...) + z G ] == 0 ]
     // M[k]: weight2 * t_k
+    std::vector<std::size_t> decomp_k;
+    decomp_k.resize(m);
     rct::key w2_sum_t = ZERO;
     rct::key w2_t_k;
     for (std::size_t k = 0; k < N; ++k)
     {
         w2_t_k = weight2;
-        std::vector<std::size_t> decomp_k;
-        decomp_k.resize(m);
         decompose(k, n, m, decomp_k);
 
         for (std::size_t j = 0; j < m; ++j)
@@ -279,7 +276,7 @@ static void build_verification_multiexps_for_proof(const GrootleProof &proof,
         }
 
         sc_add(w2_sum_t.bytes, w2_sum_t.bytes, w2_t_k.bytes);  //weight2 * sum_k( t_k )
-        builder2_inout.add_element(w2_t_k, M[k]);
+        builder2_inout.add_element(w2_t_k, M[k]);  //weight2 * t_k*M[k]
     }
 
     // C_offset
@@ -332,13 +329,13 @@ void append_to_transcript(const GrootleProof &container, SpTranscriptBuilder &tr
     transcript_inout.append("z", container.z);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void make_grootle_proof(const rct::keyV &M, // [vec<commitments>]
-    const std::size_t l,        // secret index into {{M}}
-    const rct::key &C_offset,   // offset for commitment to zero at index l
+void make_grootle_proof(const rct::key &message,  // message to insert in Fiat-Shamir transform hash
+    const rct::keyV &M,        // referenced commitments
+    const std::size_t l,       // secret index into {M}
+    const rct::key &C_offset,  // offset for commitment to zero at index l
     const crypto::secret_key &privkey,  // privkey of commitment to zero 'M[l] - C_offset'
-    const std::size_t n,        // decomp input set: n^m
+    const std::size_t n,       // decomposition of the reference set size: n^m
     const std::size_t m,
-    const rct::key &message,    // message to insert in Fiat-Shamir transform hash
     GrootleProof &proof_out)
 {
     /// input checks and initialization
@@ -351,14 +348,14 @@ void make_grootle_proof(const rct::keyV &M, // [vec<commitments>]
 
     CHECK_AND_ASSERT_THROW_MES(M.size() == N, "grootle proof proving: commitment column is wrong size!");
 
-    // commitment to zero signing keys
+    // commitment to zero signing key position
     CHECK_AND_ASSERT_THROW_MES(l < N, "grootle proof proving: signing index out of bounds!");
 
     // verify: commitment to zero C_zero = M[l] - C_offset = k*G
     rct::key C_zero_reproduced;
     rct::subKeys(C_zero_reproduced, M[l], C_offset);
     CHECK_AND_ASSERT_THROW_MES(rct::scalarmultBase(rct::sk2rct(privkey)) == C_zero_reproduced,
-        "grootle proof proving: bad commitment private key!");
+        "grootle proof proving: bad signing private key!");
 
 
     /// Grootle proof
@@ -431,7 +428,7 @@ void make_grootle_proof(const rct::keyV &M, // [vec<commitments>]
     proof.B = rct::scalarmultKey(proof.B, rct::INV_EIGHT);
 
 
-    /// one-of-many sub-proof: polynomial 'p' coefficients
+    /// one-of-many sub-proof: polynomial coefficients 'p'
     rct::keyM p = rct::keyMInit(m + 1, N);
     CHECK_AND_ASSERT_THROW_MES(p.size() == N, "grootle proof proving: bad matrix size (p)!");
     CHECK_AND_ASSERT_THROW_MES(p[0].size() == m + 1, "grootle proof proving: bad matrix size (p[])!");
@@ -554,26 +551,26 @@ void make_grootle_proof(const rct::keyV &M, // [vec<commitments>]
 }
 //-------------------------------------------------------------------------------------------------------------------
 void get_grootle_verification_data(const std::vector<const GrootleProof*> &proofs,
+    const rct::keyV &messages,
     const std::vector<rct::keyV> &M,
     const rct::keyV &proof_offsets,
     const std::size_t n,
     const std::size_t m,
-    const rct::keyV &messages,
     std::list<SpMultiexpBuilder> &verification_data_out)
 {
     /// Global checks
-    const std::size_t N_proofs = proofs.size();
+    const std::size_t num_proofs = proofs.size();
 
-    CHECK_AND_ASSERT_THROW_MES(N_proofs > 0, "grootle proof verifying: must have at least one proof to verify!");
+    CHECK_AND_ASSERT_THROW_MES(num_proofs > 0, "grootle proof verifying: must have at least one proof to verify!");
 
     CHECK_AND_ASSERT_THROW_MES(n > 1, "grootle proof verifying: must have n > 1!");
     CHECK_AND_ASSERT_THROW_MES(m > 1, "grootle proof verifying: must have m > 1!");
     CHECK_AND_ASSERT_THROW_MES(m*n <= GROOTLE_MAX_MN, "grootle proof verifying: size parameters are too large!");
 
-    // anonymity set size
+    // reference set size
     const std::size_t N = std::pow(n, m);
 
-    CHECK_AND_ASSERT_THROW_MES(M.size() == N_proofs,
+    CHECK_AND_ASSERT_THROW_MES(M.size() == num_proofs,
         "grootle proof verifying: public key vectors don't line up with proofs!");
     for (const rct::keyV &proof_M : M)
     {
@@ -582,9 +579,9 @@ void get_grootle_verification_data(const std::vector<const GrootleProof*> &proof
     }
 
     // inputs line up with proofs
-    CHECK_AND_ASSERT_THROW_MES(proof_offsets.size() == N_proofs,
+    CHECK_AND_ASSERT_THROW_MES(messages.size() == num_proofs, "grootle proof verifying: incorrect number of messages!");
+    CHECK_AND_ASSERT_THROW_MES(proof_offsets.size() == num_proofs,
         "grootle proof verifying: commitment offsets don't line up with input proofs!");
-    CHECK_AND_ASSERT_THROW_MES(messages.size() == N_proofs, "grootle proof verifying: incorrect number of messages!");
 
 
     /// Per-proof checks
@@ -631,11 +628,11 @@ void get_grootle_verification_data(const std::vector<const GrootleProof*> &proof
         SpMultiexpBuilder &builder2 = builders.back();
 
         build_verification_multiexps_for_proof(*(proofs[proof_i]),
+            messages[proof_i],
             M[proof_i],
             proof_offsets[proof_i],
             n,
             m,
-            messages[proof_i],
             rct::skGen(),
             rct::skGen(),
             builder1,
@@ -648,15 +645,15 @@ void get_grootle_verification_data(const std::vector<const GrootleProof*> &proof
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool verify_grootle_proofs(const std::vector<const GrootleProof*> &proofs,
+    const rct::keyV &messages,
     const std::vector<rct::keyV> &M,
     const rct::keyV &proof_offsets,
     const std::size_t n,
-    const std::size_t m,
-    const rct::keyV &messages)
+    const std::size_t m)
 {
     // build multiexp
     std::list<SpMultiexpBuilder> verification_data;
-    get_grootle_verification_data(proofs, M, proof_offsets, n, m, messages, verification_data);
+    get_grootle_verification_data(proofs, messages, M, proof_offsets, n, m, verification_data);
 
     // verify multiexp
     if (!SpMultiexp{verification_data}.evaluates_to_point_at_infinity())

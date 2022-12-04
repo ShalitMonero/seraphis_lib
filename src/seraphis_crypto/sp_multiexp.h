@@ -26,10 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 // Utilities for performing multiexponentiations.
-
 
 #pragma once
 
@@ -59,9 +56,9 @@ namespace sp
 // SpMultiexpBuilder
 // - collect data points for a multiexponentiation
 // - all data points added to the builder are weighted by some factor w
-// - for efficiency, elements can be added for pre-defined generators
+// - for efficiency, pre-defined generators are provided
 // - multiexp stored: w * (a G + b_0 G_0 + ... + b_n G_n + c_0 P_0 + ... + c_m P_m)
-//   - G: ed25519 generator
+//   - G, H, X, U: ed25519 generators
 //   - G_0..G_n: generators defined in 'generator_factory' namespace
 //   - P_0..P_m: user-defined base points
 ///
@@ -73,7 +70,7 @@ public:
 //constructors
     /// normal constructor
     /// - define a non-zero weight to apply to all elements
-    /// - use identify if this builder won't be merged with other builders
+    ///   - use identity if this builder won't be merged with other builders
     SpMultiexpBuilder(const rct::key &weight,
         const std::size_t estimated_num_predefined_generator_elements,
         const std::size_t estimated_num_user_defined_elements);
@@ -81,8 +78,8 @@ public:
 //member functions
     void add_G_element(rct::key scalar);
     void add_H_element(rct::key scalar);
-    void add_U_element(rct::key scalar);
     void add_X_element(rct::key scalar);
+    void add_U_element(rct::key scalar);
     void add_element_at_generator_index(rct::key scalar, const std::size_t predef_generator_index);
     void add_element(rct::key scalar, const ge_p3 &base_point);
     void add_element(const rct::key &scalar, const rct::key &base_point);
@@ -94,10 +91,10 @@ protected:
     boost::optional<rct::key> m_G_scalar;
     /// Pedersen commitment generator scalar
     boost::optional<rct::key> m_H_scalar;
-    /// seraphis spend key generator scalar
-    boost::optional<rct::key> m_U_scalar;
     /// seraphis spend key extension generator scalar
     boost::optional<rct::key> m_X_scalar;
+    /// seraphis spend key generator scalar
+    boost::optional<rct::key> m_U_scalar;
     /// pre-defined generators scalars
     std::vector<rct::key> m_predef_scalars;
     /// user-defined [scalar, base point] pairs

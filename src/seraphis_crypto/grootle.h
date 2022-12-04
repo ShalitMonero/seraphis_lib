@@ -26,8 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
 ////
 // Grootle proof: Groth/Bootle one-of-many proof of a commitment to zero
 // - given a set of EC points S
@@ -45,9 +43,8 @@
 // - Short Accountable Ring Signatures Based on DDH (Bootle): https://eprint.iacr.org/2015/643
 // - Triptych (Sarang Noether): https://eprint.iacr.org/2020/018
 // - Lelantus-Spark (Aram Jivanyan, Aaron Feickert [Sarang Noether]): https://eprint.iacr.org/2021/1173
-// - MatRiCT (Esgin et. al): https://eprint.iacr.org/2019/1287.pdf (section 1.3 for A/B optimization)
+// - MatRiCT (Esgin et. al; section 1.3 for A/B optimization): https://eprint.iacr.org/2019/1287.pdf
 ///
-
 
 #pragma once
 
@@ -62,7 +59,6 @@
 #include <vector>
 
 //forward declarations
-namespace rct { struct pippenger_prep_data; }
 namespace sp
 {
     class SpTranscriptBuilder;
@@ -75,20 +71,17 @@ namespace sp
 /// Maximum matrix entries
 constexpr std::size_t GROOTLE_MAX_MN{128};  //2^64, 3^42, etc.
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////// Types ////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 ////
-// Grootle proof (using the A/B optimization from MatRiCT)
+// Grootle proof: Groth/Bootle proof using the A/B optimization from MatRiCT
 ///
 struct GrootleProof
 {
-    rct::key A, B;
+    rct::key A;
+    rct::key B;
     rct::keyM f;
     rct::keyV X;
-    rct::key zA, z;
+    rct::key zA;
+    rct::key z;
 
     static std::size_t size_bytes(const std::size_t n, const std::size_t m);
     std::size_t size_bytes() const;
@@ -96,51 +89,47 @@ struct GrootleProof
 inline const boost::string_ref container_name(const GrootleProof&) { return "GrootleProof"; }
 void append_to_transcript(const GrootleProof &container, SpTranscriptBuilder &transcript_inout);
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////// Handle Proofs /////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /**
 * brief: make_grootle_proof - create a grootle proof
-* param: M - <vec of commitments>  (one column)
+* param: message - message to insert in Fiat-Shamir transform hash
+* param: M - referenced commitments
 * param: l - secret index into {M}
 * param: C_offset - offset for commitment to zero at index l
-* param: privkey - privkey of commitment to zero 'M[l] - C_offset'
-* param: n - decomp input set: n^m
+* param: privkey - privkey of commitment to zero 'M[l] - C_offset' (proof signing key)
+* param: n - decomposition of the reference set size: n^m
 * param: m - ...
-* param: message - message to insert in Fiat-Shamir transform hash
 * outparam: proof_out - Grootle proof
 */
-void make_grootle_proof(const rct::keyV &M,
+void make_grootle_proof(const rct::key &message,
+    const rct::keyV &M,
     const std::size_t l,
     const rct::key &C_offset,
     const crypto::secret_key &privkey,
     const std::size_t n,
     const std::size_t m,
-    const rct::key &message,
     GrootleProof &proof_out);
 /**
 * brief: verify_grootle_proofs - verify a batch of grootle proofs
 * param: proofs - batch of proofs to verify
-* param: M - (per-proof) vec<<vec of commitments>>
-* param: proof_offsets - (per-proof) offset for commitment to zero at unknown indices in each proof
-* param: n - decomp input set: n^m
-* param: m - ...
 * param: message - (per-proof) message to insert in Fiat-Shamir transform hash
+* param: M - (per-proof) referenced commitments
+* param: proof_offsets - (per-proof) offset for commitment to zero at unknown indices in each proof
+* param: n - decomposition of the reference set size: n^m
+* param: m - ...
 * return: true/false on verification result
 */
 void get_grootle_verification_data(const std::vector<const GrootleProof*> &proofs,
+    const rct::keyV &messages,
     const std::vector<rct::keyV> &M,
     const rct::keyV &proof_offsets,
     const std::size_t n,
     const std::size_t m,
-    const rct::keyV &messages,
     std::list<SpMultiexpBuilder> &verification_data_out);
 bool verify_grootle_proofs(const std::vector<const GrootleProof*> &proofs,
+    const rct::keyV &messages,
     const std::vector<rct::keyV> &M,
     const rct::keyV &proof_offsets,
     const std::size_t n,
-    const std::size_t m,
-    const rct::keyV &messages);
+    const std::size_t m);
 
 } //namespace sp

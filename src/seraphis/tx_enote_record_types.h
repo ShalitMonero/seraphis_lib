@@ -134,7 +134,7 @@ struct LegacyEnoteRecord final
 struct SpBasicEnoteRecordV1 final
 {
     /// original enote
-    SpEnoteV1 m_enote;
+    SpEnoteVariant m_enote;
     /// the enote's ephemeral pubkey
     crypto::x25519_pubkey m_enote_ephemeral_pubkey;
     /// context of the tx input(s) associated with this enote
@@ -150,7 +150,7 @@ struct SpBasicEnoteRecordV1 final
 struct SpIntermediateEnoteRecordV1 final
 {
     /// original enote
-    SpEnoteV1 m_enote;
+    SpEnoteVariant m_enote;
     /// the enote's ephemeral pubkey
     crypto::x25519_pubkey m_enote_ephemeral_pubkey;
     /// context of the tx input(s) associated with this enote
@@ -170,7 +170,7 @@ struct SpIntermediateEnoteRecordV1 final
 struct SpEnoteRecordV1 final
 {
     /// original enote
-    SpEnoteV1 m_enote;
+    SpEnoteVariant m_enote;
     /// the enote's ephemeral pubkey
     crypto::x25519_pubkey m_enote_ephemeral_pubkey;
     /// context of the tx input(s) associated with this enote

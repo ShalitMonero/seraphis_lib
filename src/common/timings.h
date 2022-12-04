@@ -22,7 +22,7 @@ public:
   TimingsDatabase(const std::string &filename, const bool load_previous = false);
   ~TimingsDatabase();
 
-  //std::vector<instance> get(const char *name) const;  //changed to std::list from std::multimap... can't get range
+  std::vector<instance> get(const char *name) const;
   void add(const char *name, const instance &data);
   bool save(const bool print_current_time = true);
 

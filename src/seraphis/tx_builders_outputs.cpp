@@ -32,6 +32,7 @@
 #include "tx_builders_outputs.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "cryptonote_config.h"
@@ -42,7 +43,7 @@
 #include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_misc_utils.h"
+#include "seraphis_crypto/sp_crypto_utils.h"
 #include "tx_builder_types.h"
 #include "tx_component_types.h"
 #include "tx_extra.h"
@@ -60,6 +61,18 @@
 
 namespace sp
 {
+//-------------------------------------------------------------------------------------------------------------------
+// check that all enote ephemeral pubkeys in an output proposal set are unique
+//-------------------------------------------------------------------------------------------------------------------
+static bool ephemeral_pubkeys_are_unique(const std::vector<SpCoinbaseOutputProposalV1> &output_proposals)
+{
+    std::unordered_set<crypto::x25519_pubkey> enote_ephemeral_pubkeys;
+
+    for (const SpCoinbaseOutputProposalV1 &output_proposal : output_proposals)
+        enote_ephemeral_pubkeys.insert(output_proposal.m_enote_ephemeral_pubkey);
+
+    return enote_ephemeral_pubkeys.size() == output_proposals.size();
+}
 //-------------------------------------------------------------------------------------------------------------------
 // check that all enote ephemeral pubkeys in an output proposal set are unique
 //-------------------------------------------------------------------------------------------------------------------
@@ -248,12 +261,42 @@ static void make_additional_output_selfsend_v1(const OutputProposalSetExtraTypes
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
+void check_v1_coinbase_output_proposal_semantics_v1(const SpCoinbaseOutputProposalV1 &output_proposal)
+{
+    std::vector<ExtraFieldElement> additional_memo_elements;
+    CHECK_AND_ASSERT_THROW_MES(try_get_extra_field_elements(output_proposal.m_partial_memo,
+            additional_memo_elements),
+        "coinbase output proposal semantics (v1): invalid partial memo.");
+}
+//-------------------------------------------------------------------------------------------------------------------
 void check_v1_output_proposal_semantics_v1(const SpOutputProposalV1 &output_proposal)
 {
     std::vector<ExtraFieldElement> additional_memo_elements;
     CHECK_AND_ASSERT_THROW_MES(try_get_extra_field_elements(output_proposal.m_partial_memo,
             additional_memo_elements),
         "output proposal semantics (v1): invalid partial memo.");
+}
+//-------------------------------------------------------------------------------------------------------------------
+void check_v1_coinbase_output_proposal_set_semantics_v1(const std::vector<SpCoinbaseOutputProposalV1> &output_proposals)
+{
+    // individual output proposals should be internally valid
+    for (const SpCoinbaseOutputProposalV1 &output_proposal : output_proposals)
+        check_v1_coinbase_output_proposal_semantics_v1(output_proposal);
+
+    // all enote ephemeral pubkeys should be unique
+    CHECK_AND_ASSERT_THROW_MES(ephemeral_pubkeys_are_unique(output_proposals),
+        "Semantics check coinbase output proposals v1: enote ephemeral pubkeys aren't all unique.");
+
+    // proposals should be sorted and unique
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(output_proposals),
+        "Semantics check output proposals v1: output onetime addresses are not sorted and unique.");
+
+    // proposal onetime addresses should be canonical (sanity check so our tx outputs don't have duplicate key images)
+    for (const SpCoinbaseOutputProposalV1 &output_proposal : output_proposals)
+    {
+        CHECK_AND_ASSERT_THROW_MES(output_proposal.m_enote.m_core.onetime_address_is_canonical(),
+            "Semantics check output proposals v1: an output onetime address is not in the prime subgroup.");
+    }
 }
 //-------------------------------------------------------------------------------------------------------------------
 void check_v1_output_proposal_set_semantics_v1(const std::vector<SpOutputProposalV1> &output_proposals)
@@ -281,7 +324,7 @@ void check_v1_output_proposal_set_semantics_v1(const std::vector<SpOutputProposa
     }
 
     // proposals should be sorted and unique
-    CHECK_AND_ASSERT_THROW_MES(is_sorted_and_unique(output_proposals),
+    CHECK_AND_ASSERT_THROW_MES(tools::is_sorted_and_unique(output_proposals),
         "Semantics check output proposals v1: output onetime addresses are not sorted and unique.");
 
     // proposal onetime addresses should be canonical (sanity check so our tx outputs don't have duplicate key images)
@@ -292,26 +335,27 @@ void check_v1_output_proposal_set_semantics_v1(const std::vector<SpOutputProposa
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
-void check_v1_tx_supplement_semantics_v1(const SpTxSupplementV1 &tx_supplement, const std::size_t num_outputs)
+void check_v1_tx_supplement_semantics_v1(const SpTxSupplementV1 &tx_supplement,
+    const std::size_t num_outputs,
+    const bool ephemeral_pubkey_optimization)
 {
     // there may be either 1 or 3+ enote pubkeys
-    if (num_outputs <= 2)
+    if (num_outputs <= 2 && ephemeral_pubkey_optimization)
     {
         CHECK_AND_ASSERT_THROW_MES(tx_supplement.m_output_enote_ephemeral_pubkeys.size() == 1,
-            "Semantics check tx supplement v1: there must be 1 enote pubkey if there are 2 outputs.");
+            "Semantics check tx supplement v1: there must be 1 enote pubkey if there are 2 outputs and the ephemeral "
+            "pubkey optimization is being used.");
     }
-    else if (num_outputs >= 3)
+    else
     {
         CHECK_AND_ASSERT_THROW_MES(tx_supplement.m_output_enote_ephemeral_pubkeys.size() == num_outputs,
-            "Semantics check tx supplement v1: there must be one enote pubkey for each output when there are 3+ outputs.");
+            "Semantics check tx supplement v1: there must be one enote pubkey for each output when there is no ephemeral "
+            "pubkey optimization.");
     }
 
-    // if 3+ enote pubkeys, all should be unique
-    if (tx_supplement.m_output_enote_ephemeral_pubkeys.size() >= 3)
-    {
-        CHECK_AND_ASSERT_THROW_MES(keys_are_unique(tx_supplement.m_output_enote_ephemeral_pubkeys),
-            "Semantics check tx supplement v1: enote pubkeys must be unique.");
-    }
+    // all enote pubkeys should be unique
+    CHECK_AND_ASSERT_THROW_MES(keys_are_unique(tx_supplement.m_output_enote_ephemeral_pubkeys),
+        "Semantics check tx supplement v1: enote pubkeys must be unique.");
 
     // enote ephemeral pubkeys should not be zero
     // note: these are easy checks to do, but in no way guarantee the enote ephemeral pubkeys are valid/usable
@@ -329,6 +373,32 @@ void check_v1_tx_supplement_semantics_v1(const SpTxSupplementV1 &tx_supplement, 
 
     CHECK_AND_ASSERT_THROW_MES(std::is_sorted(extra_field_elements.begin(), extra_field_elements.end()),
         "Semantics check tx supplement v1: extra field elements are not sorted.");
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_v1_coinbase_outputs_v1(const std::vector<SpCoinbaseOutputProposalV1> &output_proposals,
+    std::vector<SpCoinbaseEnoteV1> &outputs_out,
+    std::vector<crypto::x25519_pubkey> &output_enote_ephemeral_pubkeys_out)
+{
+    // output proposal set should be valid
+    check_v1_coinbase_output_proposal_set_semantics_v1(output_proposals);
+
+    // extract tx output information from output proposals
+    outputs_out.clear();
+    outputs_out.reserve(output_proposals.size());
+    output_enote_ephemeral_pubkeys_out.clear();
+    output_enote_ephemeral_pubkeys_out.reserve(output_proposals.size());
+
+    for (const SpCoinbaseOutputProposalV1 &output_proposal : output_proposals)
+    {
+        // convert to enote
+        outputs_out.emplace_back(output_proposal.m_enote);
+
+        // copy non-duplicate enote pubkeys to tx supplement (note: the semantics checker should prevent duplicates)
+        if (std::find(output_enote_ephemeral_pubkeys_out.begin(),
+                output_enote_ephemeral_pubkeys_out.end(),
+                output_proposal.m_enote_ephemeral_pubkey) == output_enote_ephemeral_pubkeys_out.end())
+            output_enote_ephemeral_pubkeys_out.emplace_back(output_proposal.m_enote_ephemeral_pubkey);
+    }
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_v1_outputs_v1(const std::vector<SpOutputProposalV1> &output_proposals,
@@ -358,7 +428,7 @@ void make_v1_outputs_v1(const std::vector<SpOutputProposalV1> &output_proposals,
             "making v1 outputs: invalid amount blinding factor (non-canonical).");
 
         // convert to enote
-        output_proposal.get_enote_v1(add_element(outputs_out));
+        output_proposal.get_enote_v1(tools::add_element(outputs_out));
 
         // prepare for range proofs
         output_amounts_out.emplace_back(output_proposal.amount());
@@ -370,6 +440,21 @@ void make_v1_outputs_v1(const std::vector<SpOutputProposalV1> &output_proposals,
                 output_proposal.m_enote_ephemeral_pubkey) == output_enote_ephemeral_pubkeys_out.end())
             output_enote_ephemeral_pubkeys_out.emplace_back(output_proposal.m_enote_ephemeral_pubkey);
     }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void finalize_tx_extra_v1(const TxExtra &partial_memo,
+    const std::vector<SpCoinbaseOutputProposalV1> &output_proposals,
+    TxExtra &tx_extra_out)
+{
+    // collect all memo elements
+    std::vector<ExtraFieldElement> collected_memo_elements;
+    accumulate_extra_field_elements(partial_memo, collected_memo_elements);
+
+    for (const SpCoinbaseOutputProposalV1 &output_proposal : output_proposals)
+        accumulate_extra_field_elements(output_proposal.m_partial_memo, collected_memo_elements);
+
+    // finalize the extra field
+    make_tx_extra(std::move(collected_memo_elements), tx_extra_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void finalize_tx_extra_v1(const TxExtra &partial_memo,
@@ -438,9 +523,10 @@ void get_additional_output_types_for_output_set_v1(const std::size_t num_outputs
             //         have the same onetime address if the destinations of the two outputs are the same)
 
             // two change outputs doesn't make sense, so just ban it
-            CHECK_AND_ASSERT_THROW_MES(false, "Finalize output proposals: there is 1 change-type output already specified, "
-                "but the change amount is non-zero and a tx with just two change outputs is not allowed for privacy reasons. "
-                "If you want to make a tx with just two change outputs, avoid calling this function (not recommended).");
+            CHECK_AND_ASSERT_THROW_MES(false, "Finalize output proposals: there is 1 change-type output already "
+                "specified, but the change amount is non-zero and a tx with just two change outputs is not allowed "
+                "for privacy reasons. If you want to make a tx with just two change outputs, avoid calling this function "
+                "(not recommended).");
         }
         else //(change_amount > 0 && single output is not a self-send change)
         {
@@ -493,9 +579,10 @@ void get_additional_output_types_for_output_set_v1(const std::size_t num_outputs
             if (self_send_output_types.size() == 2 &&
                 self_send_output_types[0] == self_send_output_types[1])
             {
-                CHECK_AND_ASSERT_THROW_MES(false, "Finalize output proposals: there are 2 self-send outputs with the same "
-                    "type that share an enote ephemeral pubkey, but this can reduce user privacy. If you want to send "
-                    "money to yourself, make independent self-spend types, or avoid calling this function (not recommended).");
+                CHECK_AND_ASSERT_THROW_MES(false, "Finalize output proposals: there are 2 self-send outputs with the "
+                    "same type that share an enote ephemeral pubkey, but this can reduce user privacy. If you want to "
+                    "send money to yourself, make independent self-spend types, or avoid calling this function (not "
+                    "recommended).");
             }
             else if (self_send_output_types.size() > 0)
             {
@@ -504,17 +591,18 @@ void get_additional_output_types_for_output_set_v1(const std::size_t num_outputs
             else //(no self-sends)
             {
                 CHECK_AND_ASSERT_THROW_MES(false, "Finalize output proposals: there are 2 normal outputs that share "
-                    "an enote ephemeral pubkey, but every normally-constructed tx needs at least one self-send output (since "
-                    "the 2 outputs share an enote ephemeral pubkey, we can't add a dummy self-send). If you want to make a "
-                    "2-output tx with no self-sends, then avoid calling this function (not recommended without good reason).");
+                    "an enote ephemeral pubkey, but every normally-constructed tx needs at least one self-send output "
+                    "(since the 2 outputs share an enote ephemeral pubkey, we can't add a dummy self-send). If you want "
+                    "to make a 2-output tx with no self-sends, then avoid calling this function (not recommended without "
+                    "good reason).");
             }
         }
         else //(change_amount > 0)
         {
             CHECK_AND_ASSERT_THROW_MES(false, "Finalize output proposals: there are 2 outputs that share "
-                "an enote ephemeral pubkey, but a non-zero change amount. In >2-out txs, all enote ephemeral pubkeys should "
-                "be unique, so adding a change output isn't feasible here. You need to make independent output proposals, "
-                "or avoid calling this function (not recommended).");
+                "an enote ephemeral pubkey, but a non-zero change amount. In >2-out txs, all enote ephemeral pubkeys "
+                "should be unique, so adding a change output isn't feasible here. You need to make independent output "
+                "proposals, or avoid calling this function (not recommended).");
         }
     }
     else //(output_proposals.size() > 2)
@@ -605,7 +693,7 @@ void finalize_v1_output_proposal_set_v1(const boost::multiprecision::uint128_t &
         {
             make_additional_output_dummy_v1(additional_output_type,
                 first_enote_ephemeral_pubkey,
-                add_element(normal_payment_proposals_inout));
+                tools::add_element(normal_payment_proposals_inout));
         }
         else
         {
@@ -615,7 +703,7 @@ void finalize_v1_output_proposal_set_v1(const boost::multiprecision::uint128_t &
                 dummy_destination,
                 k_view_balance,
                 change_amount,
-                add_element(selfsend_payment_proposals_inout));
+                tools::add_element(selfsend_payment_proposals_inout));
         }
     }
 }

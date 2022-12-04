@@ -157,6 +157,20 @@ bool try_prepare_inputs_and_outputs_for_transfer_v1(const jamtis::JamtisDestinat
     std::vector<jamtis::JamtisPaymentProposalSelfSendV1> &final_selfsend_payment_proposals_out,
     DiscretizedFee &discretized_transaction_fee_out);
 /**
+* brief: check_v1_coinbase_tx_proposal_semantics_v1 - check semantics of a coinbase tx proposal
+*   - throws if a check fails
+*   - outputs should be sorted and unique
+*   - outputs should have unique and canonical onetime addresses
+*   - the tx supplement should have valid semantics
+*   - output amounts should balance the block reward
+*   - NOTE: zero coinbase enotes are permitted by the semantics check
+* param: tx_proposal -
+* param: legacy_spend_pubkey -
+* param: jamtis_spend_pubkey -
+* param: k_view_balance -
+*/
+void check_v1_coinbase_tx_proposal_semantics_v1(const SpCoinbaseTxProposalV1 &tx_proposal);
+/**
 * brief: check_v1_tx_proposal_semantics_v1 - check semantics of a tx proposal
 *   - throws if a check fails
 *   - outputs should have unique and canonical onetime addresses
@@ -173,6 +187,19 @@ void check_v1_tx_proposal_semantics_v1(const SpTxProposalV1 &tx_proposal,
     const rct::key &legacy_spend_pubkey,
     const rct::key &jamtis_spend_pubkey,
     const crypto::secret_key &k_view_balance);
+/**
+* brief: make_v1_coinbase_tx_proposal_v1 - make v1 coinbase tx proposal
+* param: block_height -
+* param: block_reward -
+* param: normal_payment_proposals -
+* param: additional_memo_elements -
+* outparam: tx_proposal_out -
+*/
+void make_v1_coinbase_tx_proposal_v1(const std::uint64_t block_height,
+    const rct::xmr_amount block_reward,
+    std::vector<jamtis::JamtisPaymentProposalV1> normal_payment_proposals,
+    std::vector<ExtraFieldElement> additional_memo_elements,
+    SpCoinbaseTxProposalV1 &tx_proposal_out);
 /**
 * brief: make_v1_tx_proposal_v1 - make v1 tx proposal
 * param: normal_payment_proposals -
@@ -218,14 +245,22 @@ void make_v1_balance_proof_v1(const std::vector<rct::xmr_amount> &legacy_input_a
     const std::vector<crypto::secret_key> &output_amount_commitment_blinding_factors,
     SpBalanceProofV1 &balance_proof_out);
 /**
-* brief: balance_check_in_out_amnts_v1 - verify that input amounts equal output amounts + fee
+* brief: balance_check_in_out_amnts_v1 - verify that block reward equals output amounts (coinbase txs)
+* param: block_reward -
+* param: output_proposals -
+* return: true if amounts balance between block reward and outputs
+*/
+bool balance_check_in_out_amnts_v1(const rct::xmr_amount block_reward,
+    const std::vector<SpCoinbaseOutputProposalV1> &output_proposals);
+/**
+* brief: balance_check_in_out_amnts_v2 - verify that input amounts equal output amounts + fee
 * param: legacy_input_proposals -
 * param: sp_input_proposals -
 * param: output_proposals -
 * param: discretized_transaction_fee -
 * return: true if amounts balance between inputs and outputs (plus fee)
 */
-bool balance_check_in_out_amnts_v1(const std::vector<LegacyInputProposalV1> &legacy_input_proposals,
+bool balance_check_in_out_amnts_v2(const std::vector<LegacyInputProposalV1> &legacy_input_proposals,
     const std::vector<SpInputProposalV1> &sp_input_proposals,
     const std::vector<SpOutputProposalV1> &output_proposals,
     const DiscretizedFee &discretized_transaction_fee);

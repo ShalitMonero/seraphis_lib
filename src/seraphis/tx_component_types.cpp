@@ -32,11 +32,13 @@
 #include "tx_component_types.h"
 
 //local headers
+#include "common/variant.h"
 #include "crypto/crypto.h"
 #include "int-util.h"
 #include "jamtis_support_types.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_crypto/sp_misc_utils.h"
+#include "seraphis_crypto/sp_crypto_utils.h"
+#include "seraphis_crypto/sp_legacy_proof_helpers.h"
 #include "seraphis_crypto/sp_transcript.h"
 #include "tx_binned_reference_set.h"
 
@@ -50,6 +52,32 @@
 
 namespace sp
 {
+//-------------------------------------------------------------------------------------------------------------------
+bool SpCoinbaseEnoteV1::operator==(const SpCoinbaseEnoteV1 &other_enote) const
+{
+    return m_core      == other_enote.m_core &&
+        m_addr_tag_enc == other_enote.m_addr_tag_enc &&
+        m_view_tag     == other_enote.m_view_tag;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void SpCoinbaseEnoteV1::gen()
+{
+    // generate a dummy enote: random pieces, completely unspendable
+
+    // gen base of enote
+    m_core.gen();
+
+    // memo
+    m_view_tag = crypto::rand_idx(static_cast<jamtis::view_tag_t>(-1));
+    crypto::rand(sizeof(jamtis::encrypted_address_tag_t), m_addr_tag_enc.bytes);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void append_to_transcript(const SpCoinbaseEnoteV1 &container, SpTranscriptBuilder &transcript_inout)
+{
+    transcript_inout.append("core", container.m_core);
+    transcript_inout.append("addr_tag_enc", container.m_addr_tag_enc.bytes);
+    transcript_inout.append("view_tag", container.m_view_tag);
+}
 //-------------------------------------------------------------------------------------------------------------------
 bool SpEnoteV1::operator==(const SpEnoteV1 &other_enote) const
 {
@@ -83,6 +111,88 @@ void append_to_transcript(const SpEnoteV1 &container, SpTranscriptBuilder &trans
     transcript_inout.append("view_tag", container.m_view_tag);
 }
 //-------------------------------------------------------------------------------------------------------------------
+SpEnoteCoreVariant core_ref(const SpEnoteVariant &variant)
+{
+    struct visitor : public tools::variant_static_visitor<SpEnoteCoreVariant>
+    {
+        using variant_static_visitor::operator();  //for blank overload
+        SpEnoteCoreVariant operator()(const SpCoinbaseEnoteV1 &enote) const { return enote.m_core; }
+        SpEnoteCoreVariant operator()(const SpEnoteV1 &enote) const { return enote.m_core; }
+    };
+
+    return variant.visit(visitor{});
+}
+//-------------------------------------------------------------------------------------------------------------------
+const rct::key& onetime_address_ref(const SpEnoteVariant &variant)
+{
+    struct visitor : public tools::variant_static_visitor<const rct::key&>
+    {
+        using variant_static_visitor::operator();  //for blank overload
+        const rct::key& operator()(const SpCoinbaseEnoteV1 &enote) const { return enote.m_core.m_onetime_address; }
+        const rct::key& operator()(const SpEnoteV1 &enote) const { return enote.m_core.m_onetime_address; }
+    };
+
+    return variant.visit(visitor{});
+}
+//-------------------------------------------------------------------------------------------------------------------
+rct::key amount_commitment_ref(const SpEnoteVariant &variant)
+{
+    struct visitor : public tools::variant_static_visitor<rct::key>
+    {
+        using variant_static_visitor::operator();  //for blank overload
+        rct::key operator()(const SpCoinbaseEnoteV1 &enote) const { return rct::zeroCommit(enote.m_core.m_amount); }
+        rct::key operator()(const SpEnoteV1 &enote) const { return enote.m_core.m_amount_commitment; }
+    };
+
+    return variant.visit(visitor{});
+}
+//-------------------------------------------------------------------------------------------------------------------
+const jamtis::encrypted_address_tag_t& addr_tag_enc_ref(const SpEnoteVariant &variant)
+{
+    struct visitor : public tools::variant_static_visitor<const jamtis::encrypted_address_tag_t&>
+    {
+        using variant_static_visitor::operator();  //for blank overload
+        const jamtis::encrypted_address_tag_t& operator()(const SpCoinbaseEnoteV1 &enote) const
+        { return enote.m_addr_tag_enc; }
+        const jamtis::encrypted_address_tag_t& operator()(const SpEnoteV1 &enote) const
+        { return enote.m_addr_tag_enc; }
+    };
+
+    return variant.visit(visitor{});
+}
+//-------------------------------------------------------------------------------------------------------------------
+jamtis::view_tag_t view_tag_ref(const SpEnoteVariant &variant)
+{
+    struct visitor : public tools::variant_static_visitor<jamtis::view_tag_t>
+    {
+        using variant_static_visitor::operator();  //for blank overload
+        jamtis::view_tag_t operator()(const SpCoinbaseEnoteV1 &enote) const { return enote.m_view_tag; }
+        jamtis::view_tag_t operator()(const SpEnoteV1 &enote) const { return enote.m_view_tag; }
+    };
+
+    return variant.visit(visitor{});
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool operator==(const SpEnoteVariant &variant1, const SpEnoteVariant &variant2)
+{
+    // check they have the same type
+    if (!SpEnoteVariant::same_type(variant1, variant2))
+        return false;
+
+    // use a visitor to test equality with variant2
+    struct visitor : public tools::variant_static_visitor<bool>
+    {
+        visitor(const SpEnoteVariant &other_ref) : other{other_ref} {}
+        const SpEnoteVariant &other;
+
+        using variant_static_visitor::operator();  //for blank overload
+        bool operator()(const SpCoinbaseEnoteV1 &enote) const { return enote == other.unwrap<SpCoinbaseEnoteV1>(); }
+        bool operator()(const SpEnoteV1 &enote) const { return enote == other.unwrap<SpEnoteV1>(); }
+    };
+
+    return variant1.visit(visitor{variant2});
+}
+//-------------------------------------------------------------------------------------------------------------------
 void append_to_transcript(const SpEnoteImageV1 &container, SpTranscriptBuilder &transcript_inout)
 {
     transcript_inout.append("core", container.m_core);
@@ -90,7 +200,7 @@ void append_to_transcript(const SpEnoteImageV1 &container, SpTranscriptBuilder &
 //-------------------------------------------------------------------------------------------------------------------
 std::size_t SpMembershipProofV1::size_bytes(const std::size_t n, const std::size_t m, const std::size_t num_bin_members)
 {
-    const std::size_t ref_set_size{ref_set_size_from_decomp(n, m)};
+    const std::size_t ref_set_size{size_from_decomposition(n, m)};
 
     return sp::GrootleProof::size_bytes(n, m) +
         (num_bin_members > 0
@@ -164,12 +274,14 @@ void append_to_transcript(const SpBalanceProofV1 &container, SpTranscriptBuilder
     transcript_inout.append("remainder_blinding_factor", container.m_remainder_blinding_factor);
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::size_t SpTxSupplementV1::size_bytes(const std::size_t num_outputs, const TxExtra &tx_extra)
+std::size_t SpTxSupplementV1::size_bytes(const std::size_t num_outputs,
+    const TxExtra &tx_extra,
+    const bool use_shared_ephemeral_key_assumption)
 {
     std::size_t size{0};
 
-    // enote ephemeral pubkeys (need to refactor if assumption about output count : enote ephemeral pubkey mapping changes)
-    if (num_outputs == 2)
+    // enote ephemeral pubkeys
+    if (use_shared_ephemeral_key_assumption && num_outputs == 2)
         size += 32;
     else
         size += 32 * num_outputs;

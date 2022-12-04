@@ -32,6 +32,7 @@
 #include "mock_tx_builders_inputs.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "misc_log_ex.h"
 #include "mock_ledger_context.h"
@@ -44,7 +45,6 @@
 #include "seraphis/tx_builders_inputs.h"
 #include "seraphis/tx_component_types.h"
 #include "seraphis/tx_ref_set_index_mapper_flat.h"
-#include "seraphis_crypto/sp_misc_utils.h"
 
 
 //third party headers
@@ -68,12 +68,13 @@ std::vector<SpInputProposalV1> gen_mock_sp_input_proposals_v1(const crypto::secr
     input_proposals.reserve(in_amounts.size());
 
     for (const rct::xmr_amount in_amount : in_amounts)
-        add_element(input_proposals).gen(sp_spend_privkey, in_amount);
+        tools::add_element(input_proposals).gen(sp_spend_privkey, in_amount);
 
     return input_proposals;
 }
 //-------------------------------------------------------------------------------------------------------------------
-SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1(const SpEnote &real_reference_enote,
+SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1
+    (const SpEnoteCoreVariant &real_reference_enote,
     const std::uint64_t &real_reference_index_in_ledger,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
@@ -85,7 +86,7 @@ SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1(co
     // generate a mock membership proof prep
 
     /// checks and initialization
-    const std::size_t ref_set_size{ref_set_size_from_decomp(ref_set_decomp_n, ref_set_decomp_m)};  // n^m
+    const std::size_t ref_set_size{size_from_decomposition(ref_set_decomp_n, ref_set_decomp_m)};  // n^m
 
     CHECK_AND_ASSERT_THROW_MES(validate_bin_config_v1(ref_set_size, bin_config),
         "gen mock membership proof prep: invalid binned reference set config.");
@@ -99,8 +100,8 @@ SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1(co
 
     // 2. generator seed
     rct::key generator_seed;
-    make_binned_ref_set_generator_seed_v1(real_reference_enote.m_onetime_address,
-        real_reference_enote.m_amount_commitment,
+    make_binned_ref_set_generator_seed_v1(onetime_address_ref(real_reference_enote),
+        amount_commitment_ref(real_reference_enote),
         address_mask,
         commitment_mask,
         generator_seed);
@@ -134,7 +135,7 @@ SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_for_enote_at_pos_v1(co
 }
 //-------------------------------------------------------------------------------------------------------------------
 SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_v1(
-    const SpEnote &real_reference_enote,
+    const SpEnoteCoreVariant &real_reference_enote,
     const crypto::secret_key &address_mask,
     const crypto::secret_key &commitment_mask,
     const std::size_t ref_set_decomp_n,
@@ -147,24 +148,33 @@ SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_v1(
     /// add fake enotes to the ledger (2x the ref set size), with the real one at a random location
 
     // 1. make fake enotes
-    const std::size_t ref_set_size{ref_set_size_from_decomp(ref_set_decomp_n, ref_set_decomp_m)};  // n^m
+    const std::size_t ref_set_size{size_from_decomposition(ref_set_decomp_n, ref_set_decomp_m)};  // n^m
     const std::size_t num_enotes_to_add{ref_set_size * 2};
     const std::size_t add_real_at_pos{crypto::rand_idx(num_enotes_to_add)};
-    std::vector<SpEnoteV1> mock_enotes;
+    std::vector<SpEnoteVariant> mock_enotes;
     mock_enotes.reserve(num_enotes_to_add);
 
     for (std::size_t enote_to_add{0}; enote_to_add < num_enotes_to_add; ++enote_to_add)
     {
-        mock_enotes.emplace_back();
-
         if (enote_to_add == add_real_at_pos)
-            mock_enotes.back().m_core = real_reference_enote;
+        {
+            if (real_reference_enote.is_type<SpCoinbaseEnoteCore>())
+                mock_enotes.emplace_back(SpCoinbaseEnoteV1{.m_core = real_reference_enote.unwrap<SpCoinbaseEnoteCore>()});
+            else if (real_reference_enote.is_type<SpEnoteCore>())
+                mock_enotes.emplace_back(SpEnoteV1{.m_core = real_reference_enote.unwrap<SpEnoteCore>()});
+            else
+                CHECK_AND_ASSERT_THROW_MES(false, "gen mock sp membership proof prep: invalid real reference enote type.");
+        }
         else
-            mock_enotes.back().gen();
+        {
+            SpEnoteV1 temp;
+            temp.gen();
+            mock_enotes.emplace_back(temp);
+        }
     }
 
     // 2. clear any txs lingering unconfirmed
-    ledger_context_inout.commit_unconfirmed_txs_v1(rct::pkGen(), SpTxSupplementV1{}, std::vector<SpEnoteV1>{});
+    ledger_context_inout.commit_unconfirmed_txs_v1(rct::pkGen(), SpTxSupplementV1{}, std::vector<SpEnoteVariant>{});
 
     // 3. add mock enotes as the outputs of a mock coinbase tx
     const std::uint64_t real_reference_index_in_ledger{ledger_context_inout.max_sp_enote_index() + add_real_at_pos + 1};
@@ -183,7 +193,7 @@ SpMembershipProofPrepV1 gen_mock_sp_membership_proof_prep_v1(
 }
 //-------------------------------------------------------------------------------------------------------------------
 std::vector<SpMembershipProofPrepV1> gen_mock_sp_membership_proof_preps_v1(
-    const std::vector<SpEnote> &real_referenced_enotes,
+    const std::vector<SpEnoteCoreVariant> &real_referenced_enotes,
     const std::vector<crypto::secret_key> &address_masks,
     const std::vector<crypto::secret_key> &commitment_masks,
     const std::size_t ref_set_decomp_n,
@@ -224,7 +234,7 @@ std::vector<SpMembershipProofPrepV1> gen_mock_sp_membership_proof_preps_v1(
     MockLedgerContext &ledger_context_inout)
 {
     // make mock membership ref sets from input proposals
-    std::vector<SpEnote> input_enotes;
+    std::vector<SpEnoteCoreVariant> input_enotes;
     std::vector<crypto::secret_key> address_masks;
     std::vector<crypto::secret_key> commitment_masks;
     input_enotes.reserve(input_proposals.size());

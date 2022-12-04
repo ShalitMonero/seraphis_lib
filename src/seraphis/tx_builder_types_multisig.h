@@ -121,7 +121,7 @@ struct LegacyMultisigInputProposalV1 final
 struct SpMultisigInputProposalV1 final
 {
     /// enote to spend
-    SpEnoteV1 m_enote;
+    SpEnoteVariant m_enote;
     /// the enote's ephemeral pubkey
     crypto::x25519_pubkey m_enote_ephemeral_pubkey;
     /// the enote's input context

@@ -227,6 +227,7 @@ namespace config
   uint32_t const GENESIS_NONCE = 10000;
 
   // misc config
+  const constexpr uint16_t SP_MAX_COINBASE_OUTPUTS_V1 = 60000;  //todo: what to set this to?
   const constexpr uint16_t SP_MAX_INPUTS_V1 = 128 - BULLETPROOF_MAX_OUTPUTS;
   const constexpr uint16_t SP_MAX_OUTPUTS_V1 = BULLETPROOF_MAX_OUTPUTS;
   const constexpr uint16_t SP_GROOTLE_N_V1 = 2;
@@ -261,8 +262,8 @@ namespace config
   const unsigned char HASH_KEY_MM_SLOT = 'm';
   const constexpr char HASH_KEY_MULTISIG_TX_PRIVKEYS_SEED[] = "multisig_tx_privkeys_seed";
   const constexpr char HASH_KEY_MULTISIG_TX_PRIVKEYS[] = "multisig_tx_privkeys";
-  const constexpr char HASH_KEY_SERAPHIS_U[] = "seraphis_U";
   const constexpr char HASH_KEY_SERAPHIS_X[] = "seraphis_X";
+  const constexpr char HASH_KEY_SERAPHIS_U[] = "seraphis_U";
 
   const constexpr char SERAPHIS_FS_TRANSCRIPT_PREFIX[] = "sp_FS_transcript";
 
@@ -275,10 +276,14 @@ namespace config
   const constexpr char HASH_KEY_SERAPHIS_MEMBERSHIP_PROOF_MESSAGE_V1[] = "sp_membership_proof_message_v1";
   const constexpr char HASH_KEY_SERAPHIS_INPUT_IMAGES_PREFIX_V1[] = "sp_input_images_prefix_v1";
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_PROOFS_PREFIX_V1[] = "sp_transaction_proofs_prefix_v1";
+  const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_COINBASE_V1[] = "sp_transaction_type_coinbase_v1";
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1[] = "sp_transaction_type_squashed_v1";
 
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT[] = "bpp2_transcript";
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT_UPDATE[] = "bpp2_tupdate";
+  const constexpr char HASH_KEY_DUAL_BASE_VECTOR_PROOF_AGGREGATION_COEFF[] = "dual_base_vector_proof_aggregation_coeff";
+  const constexpr char HASH_KEY_DUAL_BASE_VECTOR_PROOF_CHALLENGE_MSG[] = "dual_base_vector_proof_challenge_msg";
+  const constexpr char HASH_KEY_DUAL_BASE_VECTOR_PROOF_CHALLENGE[] = "dual_base_vector_proof_challenge";
   const constexpr char HASH_KEY_GROOTLE_Hi_A[] = "grootle_Hi_A";
   const constexpr char HASH_KEY_GROOTLE_Hi_B[] = "grootle_Hi_B";
   const constexpr char HASH_KEY_GROOTLE_CHALLENGE[] = "grootle_challenge";

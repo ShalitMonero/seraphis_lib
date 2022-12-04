@@ -73,6 +73,57 @@ void JamtisPaymentProposalV1::get_enote_ephemeral_pubkey(crypto::x25519_pubkey &
     make_jamtis_enote_ephemeral_pubkey(m_enote_ephemeral_privkey, m_destination.m_addr_K3, enote_ephemeral_pubkey_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
+void JamtisPaymentProposalV1::get_coinbase_output_proposal_v1(const std::uint64_t block_height,
+    SpCoinbaseOutputProposalV1 &output_proposal_out) const
+{
+    // 1. sanity checks
+    CHECK_AND_ASSERT_THROW_MES(sc_isnonzero(m_enote_ephemeral_privkey.data),
+        "jamtis payment proposal: invalid enote ephemeral privkey (zero).");
+    CHECK_AND_ASSERT_THROW_MES(x25519_scalar_is_canonical(m_enote_ephemeral_privkey),
+        "jamtis payment proposal: invalid enote ephemeral privkey (not canonical).");
+
+    // 2. enote ephemeral pubkey: xK_e = xr xK_3
+    this->get_enote_ephemeral_pubkey(output_proposal_out.m_enote_ephemeral_pubkey);
+
+    // 3. derived key: xK_d = xr * xK_2
+    crypto::x25519_pubkey xK_d;
+    auto xKd_wiper = epee::misc_utils::create_scope_leave_handler([&]{ memwipe(&xK_d, sizeof(xK_d)); });
+
+    crypto::x25519_scmul_key(m_enote_ephemeral_privkey, m_destination.m_addr_K2, xK_d);
+
+    // 4. coinbase input context
+    rct::key input_context;
+    make_jamtis_input_context_coinbase(block_height, input_context);
+
+    // 5. sender-receiver shared secret: q = H_32(xK_d, xK_e, input_context)
+    rct::key q;
+    auto q_wiper = epee::misc_utils::create_scope_leave_handler([&]{ memwipe(&q, sizeof(q)); });
+    make_jamtis_sender_receiver_secret_plain(xK_d, output_proposal_out.m_enote_ephemeral_pubkey, input_context, q);
+
+    // 6. amount: a
+    output_proposal_out.m_enote.m_core.m_amount = m_amount;
+
+    // 7. amount commitment (temporary): C = 1 G + a H
+    const rct::key temp_amount_commitment{rct::commit(m_amount, rct::I)};
+
+    // 8. onetime address: Ko = H_n("..g..", q, C) G + H_n("..x..", q, C) X + H_n("..u..", q, C) U + K_1
+    make_jamtis_onetime_address(q,
+        temp_amount_commitment,
+        m_destination.m_addr_K1,
+        output_proposal_out.m_enote.m_core.m_onetime_address);
+
+    // 9. encrypt address tag: addr_tag_enc = addr_tag(cipher(j || hint)) ^ H(q, Ko)
+    output_proposal_out.m_enote.m_addr_tag_enc =
+        encrypt_address_tag(q, output_proposal_out.m_enote.m_core.m_onetime_address, m_destination.m_addr_tag);
+
+    // 10. view tag: view_tag = H_1(xK_d, Ko)
+    make_jamtis_view_tag(xK_d, output_proposal_out.m_enote.m_core.m_onetime_address,
+        output_proposal_out.m_enote.m_view_tag);
+
+    // 11. memo elements
+    output_proposal_out.m_partial_memo = m_partial_memo;
+}
+//-------------------------------------------------------------------------------------------------------------------
 void JamtisPaymentProposalV1::get_output_proposal_v1(const rct::key &input_context,
     SpOutputProposalV1 &output_proposal_out) const
 {
@@ -123,7 +174,7 @@ void JamtisPaymentProposalV1::get_output_proposal_v1(const rct::key &input_conte
         m_destination.m_addr_K1,
         output_proposal_out.m_core.m_onetime_address);
 
-    // 11. encrypt address tag: addr_tag_enc = addr_tag(cipher(j || mac)) ^ H(q, Ko)
+    // 11. encrypt address tag: addr_tag_enc = addr_tag(cipher(j || hint)) ^ H(q, Ko)
     output_proposal_out.m_addr_tag_enc =
         encrypt_address_tag(q, output_proposal_out.m_core.m_onetime_address, m_destination.m_addr_tag);
 
@@ -207,7 +258,7 @@ void JamtisPaymentProposalSelfSendV1::get_output_proposal_v1(const crypto::secre
         m_destination.m_addr_K1,
         output_proposal_out.m_core.m_onetime_address);
 
-    // 9. encrypt address index: addr_tag_enc = addr_tag(j, mac) ^ H(q, Ko)
+    // 9. encrypt address index: addr_tag_enc = addr_tag(j, hint) ^ H(q, Ko)
 
     // a. extract the address index from the destination address's address tag
     crypto::secret_key generateaddress_secret;
@@ -221,7 +272,7 @@ void JamtisPaymentProposalSelfSendV1::get_output_proposal_v1(const crypto::secre
     // b. make a raw address tag (not ciphered)
     const address_tag_t raw_address_tag{j};
 
-    // c. encrypt the raw address tag: addr_tag_enc = addr_tag(j || mac) ^ H(q, Ko)
+    // c. encrypt the raw address tag: addr_tag_enc = addr_tag(j || hint) ^ H(q, Ko)
     output_proposal_out.m_addr_tag_enc =
         encrypt_address_tag(q, output_proposal_out.m_core.m_onetime_address, raw_address_tag);
 

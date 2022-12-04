@@ -26,10 +26,7 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// NOT FOR PRODUCTION
-
-// interface for an x25519 implementation (mx25519)
-
+// Interface for an x25519 implementation (mx25519).
 
 #pragma once
 
@@ -91,7 +88,7 @@ x25519_secret_key x25519_secret_key_gen();
 x25519_pubkey x25519_pubkey_gen();
 /**
 * brief: x25519_scalar_is_canonical - check that an X25519 scalar is canonical
-*   2^255 > scalar >= 8 (i.e. last bit and first three bits not set)
+*   - expect: 2^255 > scalar >= 8 (i.e. last bit and first three bits not set)
 * result: true if input scalar is canonical
 */
 bool x25519_scalar_is_canonical(const x25519_scalar &test_scalar);

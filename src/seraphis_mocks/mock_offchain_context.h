@@ -54,7 +54,6 @@
 //forward declarations
 namespace sp
 {
-    struct SpEnoteV1;
     struct SpPartialTxV1;
     struct SpTxSquashedV1;
     struct EnoteScanningChunkLedgerV1;
@@ -138,7 +137,7 @@ private:
         rct::key,     // input context
         std::tuple<       // tx output contents
             SpTxSupplementV1,        // tx supplement
-            std::vector<SpEnoteV1>   // output enotes
+            std::vector<SpEnoteVariant>   // output enotes
         >
     > m_output_contents;
     /// map of tx key images

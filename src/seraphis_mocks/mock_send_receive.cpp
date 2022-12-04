@@ -32,6 +32,7 @@
 #include "mock_send_receive.h"
 
 //local headers
+#include "common/container_helpers.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/subaddress_index.h"
 #include "misc_log_ex.h"
@@ -51,7 +52,8 @@
 #include "seraphis/tx_component_types.h"
 #include "seraphis/tx_contextual_enote_record_utils.h"
 #include "seraphis/tx_enote_scanning_context_simple.h"
-#include "seraphis_crypto/sp_misc_utils.h"
+#include "seraphis/txtype_coinbase_v1.h"
+#include "seraphis/txtype_squashed_v1.h"
 #include "tx_enote_store_updater_mocks.h"
 #include "tx_enote_finding_context_mocks.h"
 #include "tx_validation_context_mock.h"
@@ -70,34 +72,6 @@
 
 namespace sp
 {
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static void add_sp_coinbase_enotes_for_user(const rct::key &mock_input_context,
-    const std::vector<rct::xmr_amount> &coinbase_amounts,
-    const jamtis::JamtisDestinationV1 &user_address,
-    std::vector<SpEnoteV1> &coinbase_enotes_inout,
-    SpTxSupplementV1 &tx_supplement_inout)
-{
-    // prepare mock coinbase enotes
-    jamtis::JamtisPaymentProposalV1 payment_proposal_temp;
-    coinbase_enotes_inout.reserve(coinbase_enotes_inout.size() + coinbase_amounts.size());
-    tx_supplement_inout.m_output_enote_ephemeral_pubkeys.reserve(
-        tx_supplement_inout.m_output_enote_ephemeral_pubkeys.size() + coinbase_amounts.size());
-
-    for (const rct::xmr_amount coinbase_amount : coinbase_amounts)
-    {
-        // make payment proposal
-        convert_outlay_to_payment_proposal(coinbase_amount, user_address, TxExtra{}, payment_proposal_temp);
-
-        // get output proposal
-        SpOutputProposalV1 output_proposal;
-        payment_proposal_temp.get_output_proposal_v1(mock_input_context, output_proposal);
-
-        // save enote and ephemeral pubkey
-        output_proposal.get_enote_v1(add_element(coinbase_enotes_inout));
-        tx_supplement_inout.m_output_enote_ephemeral_pubkeys.emplace_back(output_proposal.m_enote_ephemeral_pubkey);
-    }
-}
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 void convert_outlay_to_payment_proposal(const rct::xmr_amount outlay_amount,
@@ -159,32 +133,39 @@ void send_sp_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinba
     const jamtis::JamtisDestinationV1 &user_address,
     MockLedgerContext &ledger_context_inout)
 {
-    // prepare mock coinbase enotes
-    std::vector<SpEnoteV1> coinbase_enotes;
-    SpTxSupplementV1 tx_supplement;
-    jamtis::JamtisPaymentProposalV1 payment_proposal_temp;
-    const rct::key mock_input_context{rct::pkGen()};
-    coinbase_enotes.reserve(coinbase_amounts.size());
-    tx_supplement.m_output_enote_ephemeral_pubkeys.reserve(coinbase_amounts.size());
+    // prepare payment proposals
+    std::vector<jamtis::JamtisPaymentProposalV1> payment_proposals;
+    payment_proposals.reserve(coinbase_amounts.size());
+    rct::xmr_amount block_reward{0};
 
     for (const rct::xmr_amount coinbase_amount : coinbase_amounts)
     {
         // make payment proposal
-        convert_outlay_to_payment_proposal(coinbase_amount, user_address, TxExtra{}, payment_proposal_temp);
+        convert_outlay_to_payment_proposal(coinbase_amount,
+        user_address,
+        TxExtra{},
+        tools::add_element(payment_proposals));
 
-        // get output proposal
-        SpOutputProposalV1 output_proposal;
-        payment_proposal_temp.get_output_proposal_v1(mock_input_context, output_proposal);
-
-        // save enote and ephemeral pubkey
-        output_proposal.get_enote_v1(add_element(coinbase_enotes));
-        tx_supplement.m_output_enote_ephemeral_pubkeys.emplace_back(output_proposal.m_enote_ephemeral_pubkey);
+        // accumulate the block reward
+        block_reward += coinbase_amount;
     }
 
-    // commit coinbase enotes as new block
-    ledger_context_inout.commit_unconfirmed_txs_v1(mock_input_context,
-        std::move(tx_supplement),
-        std::move(coinbase_enotes));
+    // make a coinbase tx
+    SpTxCoinbaseV1 coinbase_tx;
+    make_seraphis_tx_coinbase_v1(SpTxCoinbaseV1::SemanticRulesVersion::MOCK,
+        ledger_context_inout.chain_height() + 1,
+        block_reward,
+        std::move(payment_proposals),
+        {},
+        coinbase_tx);
+
+    // validate the coinbase tx
+    const TxValidationContextMock tx_validation_context{ledger_context_inout};
+    CHECK_AND_ASSERT_THROW_MES(validate_tx(coinbase_tx, tx_validation_context),
+        "send sp coinbase amounts to user (mock): failed to validate coinbase tx.");
+
+    // commit coinbase tx as new block
+    ledger_context_inout.commit_unconfirmed_txs_v1(coinbase_tx);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void send_sp_coinbase_amounts_to_users(const std::vector<std::vector<rct::xmr_amount>> &coinbase_amounts_per_user,
@@ -192,26 +173,44 @@ void send_sp_coinbase_amounts_to_users(const std::vector<std::vector<rct::xmr_am
     MockLedgerContext &ledger_context_inout)
 {
     CHECK_AND_ASSERT_THROW_MES(coinbase_amounts_per_user.size() == user_addresses.size(),
-        "send sp coinbase amounts to users: amount : address mismatch.");
+        "send sp coinbase amounts to users (mock): amount : address mismatch.");
 
-    // prepare mock coinbase enotes
-    const rct::key mock_input_context{rct::pkGen()};
-    std::vector<SpEnoteV1> coinbase_enotes;
-    SpTxSupplementV1 tx_supplement;
+    // prepare payment proposals
+    std::vector<jamtis::JamtisPaymentProposalV1> payment_proposals;
+    payment_proposals.reserve(coinbase_amounts_per_user.size());
+    rct::xmr_amount block_reward{0};
 
     for (std::size_t user_index{0}; user_index < user_addresses.size(); ++user_index)
     {
-        add_sp_coinbase_enotes_for_user(mock_input_context,
-            coinbase_amounts_per_user[user_index],
-            user_addresses[user_index],
-            coinbase_enotes,
-            tx_supplement);
+        for (const rct::xmr_amount user_amount : coinbase_amounts_per_user[user_index])
+        {
+            // make payment proposal
+            convert_outlay_to_payment_proposal(user_amount,
+                user_addresses[user_index],
+                TxExtra{},
+                tools::add_element(payment_proposals));
+
+            // accumulate the block reward
+            block_reward += user_amount;
+        }
     }
 
-    // commit coinbase enotes as new block
-    ledger_context_inout.commit_unconfirmed_txs_v1(mock_input_context,
-        std::move(tx_supplement),
-        std::move(coinbase_enotes));
+    // make a coinbase tx
+    SpTxCoinbaseV1 coinbase_tx;
+    make_seraphis_tx_coinbase_v1(SpTxCoinbaseV1::SemanticRulesVersion::MOCK,
+        ledger_context_inout.chain_height() + 1,
+        block_reward,
+        std::move(payment_proposals),
+        {},
+        coinbase_tx);
+
+    // validate the coinbase tx
+    const TxValidationContextMock tx_validation_context{ledger_context_inout};
+    CHECK_AND_ASSERT_THROW_MES(validate_tx(coinbase_tx, tx_validation_context),
+        "send sp coinbase amounts to user (mock): failed to validate coinbase tx.");
+
+    // commit coinbase tx as new block
+    ledger_context_inout.commit_unconfirmed_txs_v1(coinbase_tx);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void construct_tx_for_mock_ledger_v1(const legacy_mock_keys &local_user_legacy_keys,
@@ -245,7 +244,7 @@ void construct_tx_for_mock_ledger_v1(const legacy_mock_keys &local_user_legacy_k
         convert_outlay_to_payment_proposal(std::get<rct::xmr_amount>(outlay),
             std::get<jamtis::JamtisDestinationV1>(outlay),
             std::get<TxExtra>(outlay),
-            add_element(normal_payment_proposals));
+            tools::add_element(normal_payment_proposals));
     }
 
     // 3. prepare inputs and finalize outputs

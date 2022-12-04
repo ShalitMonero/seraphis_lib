@@ -28,7 +28,7 @@
 
 // NOT FOR PRODUCTION
 
-// Supporting types for Jamtis (address index, address tag mac, address tag, etc.).
+// Supporting types for Jamtis (address index, address tag hint, address tag, etc.).
 
 
 #pragma once
@@ -70,24 +70,24 @@ struct address_index_t final
     bool operator!=(const address_index_t &other_index) const { return !(*this == other_index); }
 };
 
-/// MAC for address tags (little-endian): addr_tag_MAC
-constexpr std::size_t ADDRESS_TAG_MAC_BYTES{2};
-struct address_tag_MAC_t final
+/// hint for address tags (little-endian): addr_tag_hint
+constexpr std::size_t ADDRESS_TAG_HINT_BYTES{2};
+struct address_tag_hint_t final
 {
-    unsigned char bytes[ADDRESS_TAG_MAC_BYTES];
+    unsigned char bytes[ADDRESS_TAG_HINT_BYTES];
 
-    /// default constructor: default initializes MAC to 0 bytes
-    address_tag_MAC_t();
+    /// default constructor: default initializes hint to 0 bytes
+    address_tag_hint_t();
 
     /// comparison operators
-    bool operator==(const address_tag_MAC_t &other_mac) const;
-    bool operator!=(const address_tag_MAC_t &other_mac) const { return !(*this == other_mac); }
+    bool operator==(const address_tag_hint_t &other_hint) const;
+    bool operator!=(const address_tag_hint_t &other_hint) const { return !(*this == other_hint); }
 };
 
-/// index ciphered with a cipher key: addr_tag = enc[cipher_key](little_endian(j) || little_endian(addr_tag_MAC))
+/// index ciphered with a cipher key: addr_tag = enc[cipher_key](little_endian(j) || little_endian(addr_tag_hint))
 struct address_tag_t final
 {
-    unsigned char bytes[ADDRESS_INDEX_BYTES + ADDRESS_TAG_MAC_BYTES];
+    unsigned char bytes[ADDRESS_INDEX_BYTES + ADDRESS_TAG_HINT_BYTES];
 
     address_tag_t() = default;
     address_tag_t(const address_index_t &j);
@@ -105,10 +105,10 @@ using encrypted_address_tag_t = address_tag_t;
 
 /// sizes are consistent
 static_assert(
-    sizeof(address_index_t)   == ADDRESS_INDEX_BYTES                          &&
-    sizeof(address_tag_MAC_t) == ADDRESS_TAG_MAC_BYTES                        &&
-    sizeof(address_tag_t)     == ADDRESS_INDEX_BYTES + ADDRESS_TAG_MAC_BYTES  &&
-    sizeof(address_tag_t)     == sizeof(encrypted_address_tag_t),
+    sizeof(address_index_t)    == ADDRESS_INDEX_BYTES                           &&
+    sizeof(address_tag_hint_t) == ADDRESS_TAG_HINT_BYTES                        &&
+    sizeof(address_tag_t)      == ADDRESS_INDEX_BYTES + ADDRESS_TAG_HINT_BYTES  &&
+    sizeof(address_tag_t)      == sizeof(encrypted_address_tag_t),
     ""
 );
 

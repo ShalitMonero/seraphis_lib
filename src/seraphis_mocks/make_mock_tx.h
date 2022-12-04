@@ -46,10 +46,11 @@
 namespace rct { using xmr_amount = uint64_t; }
 namespace sp
 {
-    class TxValidationContext;
-    class MockLedgerContext;
-    struct SpTxSquashedV1;
     struct DiscretizedFee;
+    class MockLedgerContext;
+    struct SpTxCoinbaseV1;
+    struct SpTxSquashedV1;
+    class TxValidationContext;
 }
 
 
@@ -88,6 +89,23 @@ struct SpTxParamPackV1
     std::size_t num_random_memo_elements{0};
     SpBinnedReferenceSetConfigV1 bin_config{0, 0};
 };
+/**
+* brief: make_mock_tx - make an SpTxCoinbaseV1 transaction
+* param: params -
+* param: legacy_in_amounts -
+* param: sp_in_amounts -
+* param: out_amounts -
+* inoutparam: ledger_context_inout -
+* outparam: tx_out -
+*/
+template <>
+void make_mock_tx<SpTxCoinbaseV1>(const SpTxParamPackV1 &params,
+    const std::vector<rct::xmr_amount> &legacy_in_amounts,
+    const std::vector<rct::xmr_amount> &sp_in_amounts,
+    const std::vector<rct::xmr_amount> &out_amounts,
+    const DiscretizedFee &discretized_transaction_fee,
+    MockLedgerContext &ledger_context_inout,
+    SpTxCoinbaseV1 &tx_out);
 /**
 * brief: make_mock_tx - make an SpTxSquashedV1 transaction
 * param: params -
