@@ -298,4 +298,6 @@ void make_v1_partial_tx_v1(const SpTxProposalV1 &tx_proposal,
     const crypto::secret_key &k_view_balance,
     SpPartialTxV1 &partial_tx_out);
 
+void sp_enote_records_to_input_proposals(const std::list<SpContextualEnoteRecordV1> &sp_contextual_records,
+    std::vector<SpInputProposalV1> &sp_input_proposals_out);
 } //namespace sp

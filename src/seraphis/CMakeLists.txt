@@ -65,6 +65,7 @@ set(seraphis_sources
   tx_fee_calculator_squashed_v1.cpp
   tx_input_selection.cpp
   tx_input_selection_output_context_v1.cpp
+  tx_knowledge_proofs.cpp
   tx_ref_set_index_mapper_flat.cpp
   tx_validators.cpp
   txtype_coinbase_v1.cpp

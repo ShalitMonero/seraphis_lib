@@ -39,6 +39,7 @@
 //local headers
 #include "crypto/crypto.h"
 #include "ringct/rctTypes.h"
+#include "seraphis/tx_knowledge_proofs.h"
 #include "serialization/binary_archive.h"
 #include "serialization/serialization.h"
 #include "serialization_demo_types.h"
@@ -124,6 +125,11 @@ void make_serializable_discretized_fee(const DiscretizedFee &discretized_fee,
 void make_serializable_sp_tx_coinbase_v1(const SpTxCoinbaseV1 &tx, ser_SpTxCoinbaseV1 &serializable_tx_out);
 void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquashedV1 &serializable_tx_out);
 
+void make_serializable_jamtis_destination_v1(const jamtis::JamtisDestinationV1 &destination, ser_JamtisDestinationV1 &destination_out);
+void make_serializable_sp_knowledge_proof_enote_send_v1(const SpKnowledgeProofEnoteSentV1 &proof, ser_SpKnowledgeProofEnoteSentV1 &serializable_proof_out);
+void make_serializable_sp_knowledge_proof_enote_ownership_v1(const SpKnowledgeProofEnoteOwnershipV1 &proof, ser_SpKnowledgeProofEnoteOwnershipV1 &serializable_proof_out);
+
+
 //todo
 void recover_bpp2(ser_BulletproofPlus2_PARTIAL &serializable_bpp2_in,
     std::vector<rct::key> balance_proof_commitments_mulinv8,
@@ -170,6 +176,10 @@ bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,
     const std::size_t sp_ref_set_decomp_m,
     SpTxSquashedV1 &tx_out);
 bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxSquashedV1 &tx_out);
+
+void recover_jamtis_destination_v1(const ser_JamtisDestinationV1 &ser_destination, jamtis::JamtisDestinationV1 &destination_out);
+void recover_sp_knowledge_proof_enote_send_v1(ser_SpKnowledgeProofEnoteSentV1 &serializable_proof, SpKnowledgeProofEnoteSentV1 &proof);
+void recover_sp_knowledge_proof_enote_ownership_v1(ser_SpKnowledgeProofEnoteOwnershipV1 &serializable_proof, SpKnowledgeProofEnoteOwnershipV1 &proof_out);
 
 } //namespace serialization
 } //namespace sp

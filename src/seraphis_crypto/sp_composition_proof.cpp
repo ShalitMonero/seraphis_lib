@@ -318,4 +318,13 @@ bool verify_sp_composition_proof(const SpCompositionProof &proof,
     return challenge_nom == proof.c;
 }
 //-------------------------------------------------------------------------------------------------------------------
+bool operator==(const SpCompositionProof &a, const SpCompositionProof &b)
+{
+    return a.c == b.c &&
+        a.K_t1 == b.K_t1 &&
+        a.r_ki == b.r_ki &&
+        a.r_t1 == b.r_t1 &&
+        a.r_t2 == b.r_t2; 
+}
+//-------------------------------------------------------------------------------------------------------------------
 } //namespace sp

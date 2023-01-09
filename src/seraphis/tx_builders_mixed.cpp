@@ -197,7 +197,7 @@ static void legacy_enote_records_to_input_proposals(
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void sp_enote_records_to_input_proposals(const std::list<SpContextualEnoteRecordV1> &sp_contextual_records,
+void sp_enote_records_to_input_proposals(const std::list<SpContextualEnoteRecordV1> &sp_contextual_records,
     std::vector<SpInputProposalV1> &sp_input_proposals_out)
 {
     sp_input_proposals_out.clear();

@@ -147,6 +147,8 @@ bool verify_sp_composition_proof(const SpCompositionProof &proof,
     const crypto::key_image &KI);
 
 
+bool operator==(const SpCompositionProof &a, const SpCompositionProof &b);
+
 ////
 // detail namespace for internal proof computations
 // - these are needed for e.g. multisig

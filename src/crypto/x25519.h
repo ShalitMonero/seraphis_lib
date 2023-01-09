@@ -35,6 +35,7 @@
 #include "generic-ops.h"
 #include "memwipe.h"
 #include "mlocker.h"
+#include "serialization/serialization.h"
 
 //third party headers
 
@@ -121,3 +122,7 @@ void x25519_invmul_key(std::vector<x25519_secret_key> privkeys_to_invert,
 CRYPTO_MAKE_HASHABLE(x25519_pubkey)
 CRYPTO_MAKE_HASHABLE_CONSTANT_TIME(x25519_scalar)
 CRYPTO_MAKE_HASHABLE_CONSTANT_TIME(x25519_secret_key)
+
+BLOB_SERIALIZER(crypto::x25519_secret_key);
+// BLOB_SERIALIZER(crypto::x25519_scalar);
+// BLOB_SERIALIZER(crypto::x25519_pubkey);

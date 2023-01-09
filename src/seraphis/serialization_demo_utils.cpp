@@ -386,7 +386,34 @@ void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquas
     make_serializable_discretized_fee(tx.m_tx_fee, serializable_tx_out.m_tx_fee);
 }
 //-------------------------------------------------------------------------------------------------------------------
+void make_serializable_jamtis_destination_v1(const jamtis::JamtisDestinationV1 &destination, ser_JamtisDestinationV1 &destination_out)
+{
+   destination_out.m_addr_K1 = destination.m_addr_K1; 
+   destination_out.m_addr_K2 = destination.m_addr_K2;
+   destination_out.m_addr_K3 = destination.m_addr_K3;
 
+   memcpy(destination_out.m_addr_tag.bytes,
+        destination.m_addr_tag.bytes,
+        sizeof(destination.m_addr_tag));
+}
+
+void make_serializable_sp_knowledge_proof_enote_send_v1(const SpKnowledgeProofEnoteSentV1 &proof, ser_SpKnowledgeProofEnoteSentV1 &serializable_proof_out)
+{
+    serializable_proof_out.one_time_address = proof.one_time_address;
+    make_serializable_jamtis_destination_v1(proof.destination_address, serializable_proof_out.destination_address);
+    serializable_proof_out.amount = proof.amount;
+    serializable_proof_out.enote_ephemeral_privkey = proof.enote_ephemeral_privkey;
+    serializable_proof_out.input_context = proof.input_context;
+}
+
+void make_serializable_sp_knowledge_proof_enote_ownership_v1(const SpKnowledgeProofEnoteOwnershipV1 &proof, ser_SpKnowledgeProofEnoteOwnershipV1 &serializable_proof_out)
+{
+    serializable_proof_out.one_time_address = proof.one_time_address;
+    make_serializable_sp_composition_proof(proof.comp_proof, serializable_proof_out.comp_proof);
+    serializable_proof_out.fake_key_image = proof.fake_key_image;
+}
+
+//-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 void recover_bpp2(ser_BulletproofPlus2_PARTIAL &serializable_bpp2_in,
     std::vector<rct::key> balance_proof_commitments_mulinv8,
@@ -676,5 +703,32 @@ bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxS
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
+void recover_jamtis_destination_v1(const ser_JamtisDestinationV1 &ser_destination, jamtis::JamtisDestinationV1 &destination_out)
+{
+    destination_out.m_addr_K1 = ser_destination.m_addr_K1;
+    destination_out.m_addr_K2 = ser_destination.m_addr_K2;
+    destination_out.m_addr_K3 = ser_destination.m_addr_K3;
+
+    memcpy(destination_out.m_addr_tag.bytes,
+        ser_destination.m_addr_tag.bytes,
+        sizeof(ser_destination.m_addr_tag));
+}
+
+void recover_sp_knowledge_proof_enote_send_v1(ser_SpKnowledgeProofEnoteSentV1 &serializable_proof, SpKnowledgeProofEnoteSentV1 &proof_out)
+{
+    recover_jamtis_destination_v1(serializable_proof.destination_address, proof_out.destination_address);
+    proof_out.one_time_address = serializable_proof.one_time_address;
+    proof_out.amount = serializable_proof.amount;
+    proof_out.enote_ephemeral_privkey = serializable_proof.enote_ephemeral_privkey;
+    proof_out.input_context = serializable_proof.input_context;
+}
+
+void recover_sp_knowledge_proof_enote_ownership_v1(ser_SpKnowledgeProofEnoteOwnershipV1 &serializable_proof, SpKnowledgeProofEnoteOwnershipV1 &proof_out)
+{
+    recover_sp_composition_proof(serializable_proof.comp_proof, proof_out.comp_proof);
+    proof_out.one_time_address = serializable_proof.one_time_address;
+    proof_out.fake_key_image = serializable_proof.fake_key_image;
+}
+
 } //namespace serialization
 } //namespace sp

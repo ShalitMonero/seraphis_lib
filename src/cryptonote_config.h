@@ -279,6 +279,9 @@ namespace config
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_COINBASE_V1[] = "sp_transaction_type_coinbase_v1";
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1[] = "sp_transaction_type_squashed_v1";
 
+
+  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_PREFIX_V1[] = "sp_knowledge_proofs_prefix_v1";
+
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT[] = "bpp2_transcript";
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT_UPDATE[] = "bpp2_tupdate";
   const constexpr char HASH_KEY_DUAL_BASE_VECTOR_PROOF_AGGREGATION_COEFF[] = "dual_base_vector_proof_aggregation_coeff";

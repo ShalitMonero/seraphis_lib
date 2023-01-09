@@ -408,6 +408,57 @@ struct ser_SpTxSquashedV1 final
     END_SERIALIZE()
 };
 
+
+struct ser_JamtisDestinationV1 final
+{
+    /// K_1 = k^j_g G + k^j_x X + k^j_u U + K_s   (address spend key)
+    rct::key m_addr_K1;
+    /// xK_2 = xk^j_a xK_fr                       (address view key)
+    crypto::x25519_pubkey m_addr_K2;
+    /// xK_3 = xk^j_a xK_ua                       (DH base key)
+    crypto::x25519_pubkey m_addr_K3;
+    /// addr_tag
+    ser_encrypted_address_tag_t m_addr_tag;
+
+    BEGIN_SERIALIZE()
+        FIELD(m_addr_K1)
+        FIELD(m_addr_K2)
+        FIELD(m_addr_K3)
+        FIELD(m_addr_tag)
+    END_SERIALIZE()
+};
+
+struct ser_SpKnowledgeProofEnoteSentV1 final
+{
+    rct::key one_time_address;
+    ser_JamtisDestinationV1 destination_address;
+    rct::xmr_amount amount;
+    crypto::x25519_secret_key enote_ephemeral_privkey;
+    rct::key input_context;
+
+    BEGIN_SERIALIZE()
+        FIELD(one_time_address)
+        FIELD(destination_address)
+        VARINT_FIELD(amount)
+        FIELD(enote_ephemeral_privkey)
+        FIELD(input_context)
+    END_SERIALIZE()
+};
+
+struct ser_SpKnowledgeProofEnoteOwnershipV1 final
+{
+
+    rct::key one_time_address;
+    crypto::key_image fake_key_image;
+    ser_SpCompositionProof comp_proof;
+
+    BEGIN_SERIALIZE()
+        FIELD(one_time_address)
+        FIELD(fake_key_image)
+        FIELD(comp_proof)
+    END_SERIALIZE()
+};
+
 } //namespace serialization
 } //namespace sp
 
