@@ -38,10 +38,12 @@
 #pragma once
 
 //local headers
+#include "crypto/chacha.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/jamtis_destination.h"
+#include "serialization/keyvalue_serialization.h"
 
 //third party headers
 
@@ -72,6 +74,26 @@ struct jamtis_mock_keys
     rct::key K_1_base;        //wallet spend base = k_vb X + k_m U
     crypto::x25519_pubkey xK_ua;     //unlock-amounts pubkey = xk_ua xG
     crypto::x25519_pubkey xK_fr;     //find-received pubkey = xk_fr xk_ua xG
+    crypto::chacha_iv m_encryption_iv;
+
+  BEGIN_KV_SERIALIZE_MAP()
+  // KV_SERIALIZE(m_account_address)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_m)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_vb)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xk_ua)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xk_fr)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(s_ga)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(s_ct)
+
+  // const crypto::chacha_iv default_iv{{0, 0, 0, 0, 0, 0, 0, 0}};
+  // KV_SERIALIZE_VAL_POD_AS_BLOB_OPT(m_encryption_iv, default_iv)
+  END_KV_SERIALIZE_MAP()
+
+  void encrypt(const crypto::chacha_key &key);
+  void decrypt(const crypto::chacha_key &key);
+
+private:
+  void xor_with_key_stream(const crypto::chacha_key &key);
 };
 
 /**
@@ -79,6 +101,7 @@ struct jamtis_mock_keys
 * outparam: jamtis_mock_keys -
 */
 void make_jamtis_mock_keys(jamtis_mock_keys &keys_out);
+void make_jamtis_mock_keys_viewbalance(jamtis_mock_keys &keys_out);
 //todo
 void make_random_address_for_user(const jamtis_mock_keys &user_keys, JamtisDestinationV1 &user_address_out);
 

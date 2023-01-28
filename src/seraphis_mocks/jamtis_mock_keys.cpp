@@ -64,6 +64,18 @@ void make_jamtis_mock_keys(jamtis_mock_keys &keys_out)
     make_jamtis_unlockamounts_pubkey(keys_out.xk_ua, keys_out.xK_ua);
     make_jamtis_findreceived_pubkey(keys_out.xk_fr, keys_out.xK_ua, keys_out.xK_fr);
 }
+void make_jamtis_mock_keys_viewbalance(jamtis_mock_keys &keys_out)
+{
+    keys_out.k_m = rct::rct2sk(rct::zero());
+    keys_out.k_vb = rct::rct2sk(rct::skGen());
+    make_jamtis_unlockamounts_key(keys_out.k_vb, keys_out.xk_ua);
+    make_jamtis_findreceived_key(keys_out.k_vb, keys_out.xk_fr);
+    make_jamtis_generateaddress_secret(keys_out.k_vb, keys_out.s_ga);
+    make_jamtis_ciphertag_secret(keys_out.s_ga, keys_out.s_ct);
+    make_seraphis_spendkey(keys_out.k_vb, keys_out.k_m, keys_out.K_1_base);
+    make_jamtis_unlockamounts_pubkey(keys_out.xk_ua, keys_out.xK_ua);
+    make_jamtis_findreceived_pubkey(keys_out.xk_fr, keys_out.xK_ua, keys_out.xK_fr);
+}
 //-------------------------------------------------------------------------------------------------------------------
 void make_random_address_for_user(const jamtis_mock_keys &user_keys, JamtisDestinationV1 &user_address_out)
 {
@@ -78,6 +90,60 @@ void make_random_address_for_user(const jamtis_mock_keys &user_keys, JamtisDesti
         user_address_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void derive_key(const crypto::chacha_key &base_key,
+                       crypto::chacha_key &key) {
+  static_assert(sizeof(base_key) == sizeof(crypto::hash),
+                "chacha key and hash should be the same size");
+  epee::mlocked<tools::scrubbed_arr<char, sizeof(base_key) + 1>> data;
+  memcpy(data.data(), &base_key, sizeof(base_key));
+  data[sizeof(base_key)] = 'k';
+  crypto::generate_chacha_key(data.data(), sizeof(data), key, 1);
+}
+//-----------------------------------------------------------------
+static epee::wipeable_string get_key_stream(const crypto::chacha_key &base_key,
+                                            const crypto::chacha_iv &iv,
+                                            size_t bytes) {
+  // derive a new key
+  crypto::chacha_key key;
+  derive_key(base_key, key);
+
+  // chacha
+  epee::wipeable_string buffer0(std::string(bytes, '\0'));
+  epee::wipeable_string buffer1 = buffer0;
+  crypto::chacha20(buffer0.data(), buffer0.size(), key, iv, buffer1.data());
+  return buffer1;
+}
+//-----------------------------------------------------------------
+void jamtis_mock_keys::xor_with_key_stream(const crypto::chacha_key &key) {
+  // encrypt a large enough byte stream with chacha20
+  epee::wipeable_string key_stream =
+      get_key_stream(key, m_encryption_iv,
+                     sizeof(crypto::secret_key) * (6));
+  const char *ptr = key_stream.data();
+  for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
+    k_m.data[i] ^= *ptr++;
+  for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
+    k_vb.data[i] ^= *ptr++;
+  for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
+    xk_ua.data[i] ^= *ptr++;
+  for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
+    xk_fr.data[i] ^= *ptr++;
+  for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
+    s_ga.data[i] ^= *ptr++;
+  for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
+    s_ct.data[i] ^= *ptr++;
+}
+//-----------------------------------------------------------------
+void jamtis_mock_keys::encrypt(const crypto::chacha_key &key) {
+  m_encryption_iv = crypto::rand<crypto::chacha_iv>();
+  xor_with_key_stream(key);
+}
+//-----------------------------------------------------------------
+void jamtis_mock_keys::decrypt(const crypto::chacha_key &key) {
+  xor_with_key_stream(key);
+}
+
 } //namespace mocks
 } //namespace jamtis
 } //namespace sp
