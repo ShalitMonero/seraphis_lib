@@ -282,6 +282,11 @@ namespace config
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_COINBASE_V1[] = "sp_transaction_type_coinbase_v1";
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1[] = "sp_transaction_type_squashed_v1";
 
+  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_MESSAGE_V1[] = "sp_seraphis_knowledge_proofs_message_v1";
+  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_MESSAGE_V2[] = "sp_seraphis_knowledge_proofs_message_v2";
+  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_MESSAGE_V3[] = "sp_seraphis_knowledge_proofs_message_v3";
+  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_OFFSET_V1[] = "sp_seraphis_knowledge_proofs_offset_v1";
+
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT[] = "bpp2_transcript";
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT_UPDATE[] = "bpp2_tupdate";
   const constexpr char HASH_KEY_MATRIX_PROOF_AGGREGATION_COEFF[] = "matrix_proof_aggregation_coeff";

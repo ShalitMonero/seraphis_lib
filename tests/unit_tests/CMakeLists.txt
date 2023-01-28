@@ -86,6 +86,7 @@ set(unit_tests_sources
   seraphis_basic.cpp
   seraphis_crypto.cpp
   seraphis_enote_scanning.cpp
+  seraphis_knowledge_proofs.cpp
   seraphis_input_selection.cpp
   seraphis_integration.cpp
   seraphis_legacy.cpp
