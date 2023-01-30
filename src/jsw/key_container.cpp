@@ -37,6 +37,7 @@
 #include "include_base_utils.h"
 #include "crypto/crypto.h"
 #include "seraphis_core/jamtis_core_utils.h"
+#include "seraphis_core/sp_core_enote_utils.h"
 #include "seraphis_mocks/jamtis_mock_keys.h"
 #include "warnings.h"
 extern "C" {
@@ -252,29 +253,37 @@ void key_container_base::set_wallet_type(size_t wallet_type)
     m_wallet_type = wallet_type;
 }
 
-void key_container_base::generate() 
+void key_container_base::generate(size_t type)
 {
-
   //Master wallet
-  if (m_wallet_type == 0)
+  if (type== 0)
   {
     make_jamtis_mock_keys(m_keys);
   }
 
   //View only wallet
-  if (m_wallet_type == 1)
+  if (type== 1)
   {
     make_jamtis_mock_keys_viewbalance(m_keys);
   }
 
 
   m_creation_timestamp = time(NULL);
+
 }
 
+bool key_container_base::verify_keys()
+{
+  rct::key spendkey_out;
+  make_seraphis_spendkey(m_keys.k_vb, m_keys.k_m, spendkey_out);
+  return (m_keys.K_1_base == spendkey_out);
+    
+}
+// void key_container_base::generate() 
+// {
+//     make_jamtis_mock_keys(m_keys);
+// }
 
-// //-----------------------------------------------------------------
-
-// const key_container_master &key_container_master_base::get_keys() const { return m_keys; }
 
 } // namespace jamtis
 } // namespace sp

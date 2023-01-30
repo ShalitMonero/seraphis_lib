@@ -115,7 +115,10 @@ public:
   /**
    * MOCK generate private keys
    */
-  void generate();
+  // void generate();
+  void generate(size_t type);
+
+  bool verify_keys();
 
   /**
    * Get the jamtis keys struct
