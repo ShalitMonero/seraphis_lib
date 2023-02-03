@@ -77,16 +77,15 @@ struct jamtis_mock_keys
     crypto::chacha_iv m_encryption_iv;
 
   BEGIN_KV_SERIALIZE_MAP()
-  // KV_SERIALIZE(m_account_address)
   KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_m)
   KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_vb)
   KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xk_ua)
   KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xk_fr)
   KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(s_ga)
   KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(s_ct)
-
-  // const crypto::chacha_iv default_iv{{0, 0, 0, 0, 0, 0, 0, 0}};
-  // KV_SERIALIZE_VAL_POD_AS_BLOB_OPT(m_encryption_iv, default_iv)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(K_1_base)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xK_ua)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xK_fr)
   END_KV_SERIALIZE_MAP()
 
   void encrypt(const crypto::chacha_key &key);

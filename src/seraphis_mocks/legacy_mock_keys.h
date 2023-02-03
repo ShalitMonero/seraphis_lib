@@ -59,6 +59,13 @@ struct legacy_mock_keys final
     crypto::secret_key k_v;  //view privkey
     rct::key Ks;             //main spend pubkey: Ks = k_s G
     rct::key Kv;             //main view pubkey:  Kv = k_v G
+
+    BEGIN_KV_SERIALIZE_MAP()
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_s)
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_v)
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(Ks)
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(Kv)
+    END_KV_SERIALIZE_MAP()
 };
 
 //todo

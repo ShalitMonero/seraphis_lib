@@ -26,21 +26,29 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-//paired header
+// paired header
 #include "key_container.h"
 
 // local headers
-#include "crypto/blake2b.h"
 #include "common/base58.h"
-// #include "common/jamtis_keysbase32.h"
-#include "include_base_utils.h"
+#include "crypto/blake2b.h"
+// #include "common/base32.h"
+#include "common/base32codec/cppcodec/base32_monero.hpp"
+
 #include "crypto/crypto.h"
+#include "include_base_utils.h"
 #include "seraphis_core/jamtis_core_utils.h"
+#include "seraphis_core/jamtis_destination.h"
+#include "seraphis_core/jamtis_support_types.h"
 #include "seraphis_core/sp_core_enote_utils.h"
+#include "seraphis_main/serialization_demo_types.h"
+#include "seraphis_main/serialization_demo_utils.h"
 #include "seraphis_mocks/jamtis_mock_keys.h"
+#include "seraphis_mocks/legacy_mock_keys.h"
+#include "string_tools.h"
 #include "warnings.h"
-extern "C" {
+extern "C"
+{
 #include "crypto/keccak.h"
 }
 #include "cryptonote_basic/cryptonote_basic_impl.h"
@@ -50,240 +58,189 @@ extern "C" {
 #include "ringct/rctTypes.h"
 
 // standard headers
+#include <fstream>
 #include <iostream>
 #include <string>
-#include <fstream>
+#include <ostream>
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "account"
 
 using namespace std;
+using base32 = cppcodec::base32_monero;
 
-namespace sp {
-namespace jamtis {
+namespace sp
+{
+namespace jamtis
+{
 
-static const std::vector<int64_t> GEN{0x7a46a12681, 0xf48d424822, 0xab58143444,
-                               0x1eb0286888, 0x377244f510};
-static const int64_t M = 0xffeffffeff;
-static const std::string alphabet = "ybndrfg8ejkmcpqxot1uwis2a345h769";
-
-//-----------------------------------------------------------------
-static void derive_key(const crypto::chacha_key &base_key,
-                       crypto::chacha_key &key) {
-  static_assert(sizeof(base_key) == sizeof(crypto::hash),
-                "chacha key and hash should be the same size");
-  epee::mlocked<tools::scrubbed_arr<char, sizeof(base_key) + 1>> data;
-  memcpy(data.data(), &base_key, sizeof(base_key));
-  data[sizeof(base_key)] = 'k';
-  crypto::generate_chacha_key(data.data(), sizeof(data), key, 1);
-}
-//-----------------------------------------------------------------
-static epee::wipeable_string get_key_stream(const crypto::chacha_key &base_key,
-                                            const crypto::chacha_iv &iv,
-                                            size_t bytes) {
-  // derive a new key
-  crypto::chacha_key key;
-  derive_key(base_key, key);
-
-  // chacha
-  epee::wipeable_string buffer0(std::string(bytes, '\0'));
-  epee::wipeable_string buffer1 = buffer0;
-  crypto::chacha20(buffer0.data(), buffer0.size(), key, iv, buffer1.data());
-  return buffer1;
-}
-//-----------------------------------------------------------------
-// void key_container::xor_with_key_stream(const crypto::chacha_key &key) {
-//   // encrypt a large enough byte stream with chacha20
-//   epee::wipeable_string key_stream =
-//       get_key_stream(key, m_encryption_iv,
-//                      sizeof(crypto::secret_key) * (6));
-//   const char *ptr = key_stream.data();
-//   for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
-//     k_m.data[i] ^= *ptr++;
-//   for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
-//     k_vb.data[i] ^= *ptr++;
-//   for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
-//     xk_ua.data[i] ^= *ptr++;
-//   for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
-//     xk_fr.data[i] ^= *ptr++;
-//   for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
-//     s_ga.data[i] ^= *ptr++;
-//   for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
-//     s_ct.data[i] ^= *ptr++;
-// }
-// //-----------------------------------------------------------------
-// void key_container::encrypt(const crypto::chacha_key &key) {
-//   m_encryption_iv = crypto::rand<crypto::chacha_iv>();
-//   xor_with_key_stream(key);
-// }
-// //-----------------------------------------------------------------
-// void key_container::decrypt(const crypto::chacha_key &key) {
-//   xor_with_key_stream(key);
-// }
-// //-----------------------------------------------------------------
-// void key_container::encrypt_viewkey(const crypto::chacha_key &key) {
-//   // encrypt a large enough byte stream with chacha20
-//   epee::wipeable_string key_stream =
-//       get_key_stream(key, m_encryption_iv, sizeof(crypto::secret_key) * 2);
-//   const char *ptr = key_stream.data();
-//   ptr += sizeof(crypto::secret_key);
-//   for (size_t i = 0; i < sizeof(crypto::secret_key); ++i)
-//     k_vb.data[i] ^= *ptr++;
-// }
-// //-----------------------------------------------------------------
-// void key_container::decrypt_viewkey(const crypto::chacha_key &key) {
-//   encrypt_viewkey(key);
-// }
+static const std::vector<int64_t> GEN{0x1ae45cd581, 0x359aad8f02, 0x61754f9b24, 0xc2ba1bb368, 0xcd2623e3f0};
+static const int64_t M = 0xffffffffff;
+static const std::string alphabet = "xmrbase32cdfghijknpqtuwy01456789";
 
 //-----------------------------------------------------------------
 key_container_base::key_container_base() { set_null(); }
 //-----------------------------------------------------------------
-void key_container_base::set_null() {
-  m_keys = mocks::jamtis_mock_keys();
-  m_wallet_type = 0;
-  m_creation_timestamp = 0;
-}
-//-----------------------------------------------------------------
-
-// std::string key_container_master_base::get_address_tag(const crypto::secret_key sk,
-//                                           const std::string tag) {
-//   std::string m_k_et_tag = std::string(sk.data, 32);
-//   m_k_et_tag.append(tag);
-
-//   unsigned char hash_out[8];
-//   size_t outlen = 8;
-//   std::string address_tag;
-
-//   blake2b(hash_out, outlen, m_k_et_tag.data(), m_k_et_tag.size(), nullptr, 0);
-
-//   char *hash_data = reinterpret_cast<char *>(hash_out);
-//   address_tag = std::string(hash_data, outlen);
-
-//   return tools::base32::encode(address_tag);
-// }
-
-int64_t key_container_base::jamtis_polymod(const std::vector<int> data) {
-  int64_t c = 1;
-  int64_t b = 0;
-  for (const auto v : data) {
-    b = (c >> 35);
-    c = ((c & 0x07ffffffff) << 5) ^ v;
-    for (int64_t j = 0; j < 5; j++) {
-      if ((b >> j) & 1) {
-        c ^= GEN[j];
-      } else {
-        c ^= 0;
-      }
-    }
-  }
-  return c;
-}
-
-bool key_container_base::jamtis_verify_checksum(const std::string data) {
-  std::vector<int> addr_data;
-  for (auto x : data) {
-    addr_data.push_back(alphabet.find(x));
-  }
-  return jamtis_polymod(addr_data) == M;
-}
-
-std::string key_container_base::get_checksum(const std::string addr_without_checksum) {
-
-  std::vector<int> addr_data;
-  for (auto x : addr_without_checksum) {
-    addr_data.push_back(alphabet.find(x));
-  }
-
-  std::vector<int> data_extended{addr_data};
-  data_extended.resize(addr_data.size() + 8);
-  int64_t polymod = jamtis_polymod(data_extended) ^ M;
-  for (int64_t i = 0; i < 8; i++) {
-    data_extended[addr_data.size() + i] = ((polymod >> 5 * (7 - i)) & 31);
-  }
-
-  std::string addr_with_checksum{};
-  for (uint64_t j = 0; j < data_extended.size(); j++) {
-    addr_with_checksum.push_back(alphabet[data_extended[j]]);
-  }
-
-  return addr_with_checksum;
-}
-
-std::string key_container_base::get_public_address_str() {
-
-  // Fixed parameters for version 1 mainnet anonymous address
-  std::string address_prefix = "xmr";
-  std::string address_version = "1";
-  std::string address_network = "m";
-  std::string address_type = "a";
-  std::string str_tag = "1";
-  // std::string address_main_ser =
-  //     cryptonote::t_serializable_object_to_blob(m_keys.m_account_address);
-  // std::string address_main = tools::base32::encode(address_main_ser);
-  std::string address_main{};
-  std::string address_tag{};
-  std::string address_checksum;
-  std::string address_without_checksum;
-
-  // address_tag = get_address_tag(m_keys.s_ct, str_tag);
-
-  address_without_checksum = address_prefix + address_version +
-                             address_network + address_type + address_main +
-                             address_tag;
-
-  cout << "Address without checksum: " << address_without_checksum << endl;
-  address_checksum = get_checksum(address_without_checksum);
-  cout << "Address with checksum:    " << address_checksum << endl;
-
-  cout << "\n---Public keys---" << endl;
-  // cout << "K1: " << m_keys.m_account_address.K_1 << endl;
-  // cout << "K2: " << m_keys.m_account_address.K_2 << endl;
-  // cout << "K3: " << m_keys.m_account_address.K_3 << endl;
-
-  cout << "\n+++Private keys+++" << endl;
-  cout << "m_k_m: " << m_keys.k_m << endl;
-
-  cout << "\n***Wallet address***" << endl;
-
-  return address_checksum;
-}
-//-----------------------------------------------------------------
-void key_container_base::set_wallet_type(size_t wallet_type)
+void key_container_base::set_null()
 {
-    m_wallet_type = wallet_type;
+    m_sp_keys = mocks::jamtis_mock_keys();
+    m_wallet_type = 0;
+    m_creation_timestamp = 0;
 }
+//-----------------------------------------------------------------
+int64_t key_container_base::jamtis_polymod(const std::vector<int> data) const
+{
+    int64_t c = 1;
+    int64_t b = 0;
+    for (const auto v : data)
+    {
+        b = (c >> 35);
+        c = ((c & 0x07ffffffff) << 5) ^ v;
+        for (int64_t j = 0; j < 5; j++)
+        {
+            if ((b >> j) & 1)
+            {
+                c ^= GEN[j];
+            }
+            else
+            {
+                c ^= 0;
+            }
+        }
+    }
+    return c;
+}
+//-----------------------------------------------------------------
+bool key_container_base::jamtis_verify_checksum(const std::string data) const
+{
+    std::vector<int> addr_data;
+    for (auto x : data)
+    {
+        addr_data.push_back(alphabet.find(x));
+    }
+    return jamtis_polymod(addr_data) == M;
+}
+//-----------------------------------------------------------------
+std::string key_container_base::add_checksum(const std::string addr_without_checksum) const
+{
 
+    std::vector<int> addr_data;
+    for (auto x : addr_without_checksum)
+    {
+        addr_data.push_back(alphabet.find(x));
+    }
+
+    std::vector<int> data_extended{addr_data};
+    data_extended.resize(addr_data.size() + 8);
+    int64_t polymod = jamtis_polymod(data_extended) ^ M;
+    for (int64_t i = 0; i < 8; i++)
+    {
+        data_extended[addr_data.size() + i] = ((polymod >> 5 * (7 - i)) & 31);
+    }
+
+    std::string addr_with_checksum{};
+    for (uint64_t j = 0; j < data_extended.size(); j++)
+    {
+        addr_with_checksum.push_back(alphabet[data_extended[j]]);
+    }
+
+    return addr_with_checksum;
+}
+//-----------------------------------------------------------------
+std::string key_container_base::get_public_address_str(const address_index_t &t) const
+{
+
+    JamtisDestinationV1 destination_address;
+    make_jamtis_destination_v1(m_sp_keys.K_1_base, m_sp_keys.xK_ua, m_sp_keys.xK_fr, m_sp_keys.s_ga, t,
+                               destination_address);
+
+    // Fixed parameters for version 1 mainnet anonymous address
+    std::string address_prefix = "xmr";
+    std::string address_type = "a";
+    std::string address_version = "1";
+    std::string address_network = "m";
+
+    // Encode ------------------------
+    serialization::ser_JamtisDestinationV1 serializable_destination;
+    serialization::make_serializable_sp_destination_v1(destination_address, serializable_destination);
+    std::string serialized_address;
+    serialization::try_append_serializable(serializable_destination, serialized_address);
+
+    std::string address_main = base32::encode(serialized_address);
+    // std::string address_main = tools::base58::encode(serialized_address);
+
+    std::string address;
+
+    address = address_prefix + address_type + address_version + address_network + address_main;
+    std::string address_with_checksum{add_checksum(address)};
+
+    // cout << "\n---Public keys---" << endl;
+    // std::cout << "K_1: " << m_address_zero.m_addr_K1 << std::endl;
+    // std::cout << "K_2: " << epee::string_tools::pod_to_hex(m_address_zero.m_addr_K2) << std::endl;
+    // std::cout << "K_3: " << epee::string_tools::pod_to_hex(m_address_zero.m_addr_K3) << std::endl;
+    // std::cout << "t: " << epee::string_tools::pod_to_hex(m_address_zero.m_addr_tag) << std::endl;
+
+    // cout << "\n+++Private keys+++" << endl;
+    // cout << "m_k_m: " << m_sp_keys.k_m << endl;
+
+    // // address += address_checksum;
+    // cout << "\n***Address for index 0***" << endl;
+
+    // return address_with_checksum;
+    return address_with_checksum;
+}
+//-----------------------------------------------------------------
+void key_container_base::get_destination_from_str(const std::string &address, JamtisDestinationV1 &dest_out)
+{
+    std::string main_address = address.substr(6, address.length() - 14);
+    std::string checksum = address.substr(address.length() - 8);
+
+    // CHECK_AND_ASSERT_THROW_MES(add_checksum(main_address) == (main_address+checksum), "get_destination_from_str:
+    // Invalid checksum.");
+    // Throw wallet message
+
+    std::string serialized_address;
+    base32::decode(serialized_address, main_address);
+    // tools::base58::decode(main_address,serialized_address);
+    serialization::ser_JamtisDestinationV1 serializable_destination_recovered;
+    serialization::try_get_serializable(epee::strspan<std::uint8_t>(serialized_address),
+                                        serializable_destination_recovered);
+    serialization::recover_sp_destination_v1(serializable_destination_recovered, dest_out);
+
+    // std::cout << "K_1: " << dest_out.m_addr_K1 << std::endl;
+    // std::cout << "K_2: " << epee::string_tools::pod_to_hex(dest_out.m_addr_K2) << std::endl;
+    // std::cout << "K_3: " << epee::string_tools::pod_to_hex(dest_out.m_addr_K3) << std::endl;
+    // std::cout << "t: " << epee::string_tools::pod_to_hex(dest_out.m_addr_tag) << std::endl;
+}
+//-----------------------------------------------------------------
+void key_container_base::set_wallet_type(size_t wallet_type) { m_wallet_type = wallet_type; }
+//-----------------------------------------------------------------
 void key_container_base::generate(size_t type)
 {
-  //Master wallet
-  if (type== 0)
-  {
-    make_jamtis_mock_keys(m_keys);
-  }
+    // Master wallet
+    if (type == 0)
+    {
+        make_jamtis_mock_keys(m_sp_keys);
+        address_index_t t{make_address_index(0, 0)};
+        make_jamtis_destination_v1(m_sp_keys.K_1_base, m_sp_keys.xK_ua, m_sp_keys.xK_fr, m_sp_keys.s_ga, t,
+                                   m_address_zero);
+        make_legacy_mock_keys(m_legacy_keys);
+    }
 
-  //View only wallet
-  if (type== 1)
-  {
-    make_jamtis_mock_keys_viewbalance(m_keys);
-  }
+    // View only wallet
+    if (type == 1)
+    {
+        make_jamtis_mock_keys_viewbalance(m_sp_keys);
+    }
 
-
-  m_creation_timestamp = time(NULL);
-
+    m_creation_timestamp = time(NULL);
 }
-
+//-----------------------------------------------------------------
 bool key_container_base::verify_keys()
 {
-  rct::key spendkey_out;
-  make_seraphis_spendkey(m_keys.k_vb, m_keys.k_m, spendkey_out);
-  return (m_keys.K_1_base == spendkey_out);
-    
+    rct::key spendkey_out;
+    make_seraphis_spendkey(m_sp_keys.k_vb, m_sp_keys.k_m, spendkey_out);
+    return (m_sp_keys.K_1_base == spendkey_out);
 }
-// void key_container_base::generate() 
-// {
-//     make_jamtis_mock_keys(m_keys);
-// }
-
-
-} // namespace jamtis
-} // namespace sp
+}  // namespace jamtis
+}  // namespace sp

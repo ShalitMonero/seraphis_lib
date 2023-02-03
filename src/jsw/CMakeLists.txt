@@ -29,8 +29,6 @@
 set(jsw_sources
   wallet3.cpp
   key_container.cpp
-  mock_transfer.cpp
-  w3_generation_load_store.cpp
   )
 
 set(jsw_headers)
