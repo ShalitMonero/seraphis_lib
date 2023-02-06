@@ -386,6 +386,17 @@ void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquas
     make_serializable_discretized_fee(tx.m_tx_fee, serializable_tx_out.m_tx_fee);
 }
 //-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest_addr, ser_JamtisDestinationV1 &serializable_destination_out)
+{
+    serializable_destination_out.K_1 = dest_addr.m_addr_K1;
+    serializable_destination_out.K_2 = dest_addr.m_addr_K2;
+    serializable_destination_out.K_3 = dest_addr.m_addr_K3;
+    serializable_destination_out.t = dest_addr.m_addr_tag;
+    // memcpy(serializable_destination_out.t.bytes,
+    // dest_addr.m_addr_tag.bytes,
+    // sizeof(dest_addr.m_addr_tag));
+}
+//-------------------------------------------------------------------------------------------------------------------
 
 //-------------------------------------------------------------------------------------------------------------------
 void recover_bpp2(ser_BulletproofPlus2_PARTIAL &serializable_bpp2_in,
@@ -644,6 +655,17 @@ void recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxSquas
         seraphis_ref_set_config.m_decomp_n_min,
         seraphis_ref_set_config.m_decomp_m_min,
         tx_out);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_destination_v1(ser_JamtisDestinationV1 &serializable_destination_v1, jamtis::JamtisDestinationV1 &destination_out)
+{
+    destination_out.m_addr_K1 = serializable_destination_v1.K_1;
+    destination_out.m_addr_K2 = serializable_destination_v1.K_2;
+    destination_out.m_addr_K3 = serializable_destination_v1.K_3;
+    destination_out.m_addr_tag = serializable_destination_v1.t;
+    // memcpy(destination_out.m_addr_tag.bytes,
+    //     serializable_destination_v1.t.bytes,
+    //     sizeof(serializable_destination_v1.t));
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,

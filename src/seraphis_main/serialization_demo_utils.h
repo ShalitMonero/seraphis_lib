@@ -41,6 +41,7 @@
 #include "ringct/rctTypes.h"
 #include "seraphis_core/binned_reference_set.h"
 #include "seraphis_core/discretized_fee.h"
+#include "seraphis_core/jamtis_destination.h"
 #include "seraphis_core/sp_core_types.h"
 #include "serialization/binary_archive.h"
 #include "serialization/serialization.h"
@@ -123,6 +124,7 @@ void make_serializable_discretized_fee(const DiscretizedFee discretized_fee,
     unsigned char &serializable_discretized_fee_out);
 void make_serializable_sp_tx_coinbase_v1(const SpTxCoinbaseV1 &tx, ser_SpTxCoinbaseV1 &serializable_tx_out);
 void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquashedV1 &serializable_tx_out);
+void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest_addr, ser_JamtisDestinationV1 &serializable_destination_out);
 
 //todo
 void recover_bpp2(ser_BulletproofPlus2_PARTIAL &serializable_bpp2_in,
@@ -170,6 +172,8 @@ bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,
     const std::size_t sp_ref_set_decomp_m,
     SpTxSquashedV1 &tx_out);
 bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxSquashedV1 &tx_out);
+
+void recover_sp_destination_v1(ser_JamtisDestinationV1 &serializable_destination_v1, jamtis::JamtisDestinationV1 &destination_out);
 
 } //namespace serialization
 } //namespace sp
