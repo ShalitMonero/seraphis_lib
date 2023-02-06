@@ -46,6 +46,7 @@
 #include "rapidjson/writer.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/jamtis_destination.h"
+#include "seraphis_mocks/jamtis_mock_keys.h"
 #include "serialization/binary_utils.h"
 #include "serialization/json_object.h"
 #include "serialization/string.h"
@@ -91,13 +92,14 @@ using namespace sp::mocks;
 
 static const std::string ASCII_OUTPUT_MAGIC = "MoneroAsciiDataV1";
 
-#define REFRESH_PERIOD 90                    // seconds
+#define REFRESH_PERIOD 90                   // seconds
 #define DEFAULT_INACTIVITY_LOCK_TIMEOUT 90  // seconds
 
 #define PRINT_USAGE(usage_help) fail_msg_writer() << boost::format(tr("usage: %s")) % usage_help;
 
 const char *USAGE_SHOW_BALANCE("balance [detail]");
 const char *USAGE_SHOW_TRANSFER("transfer <address> <amount>");
+const char *USAGE_SHOW_VIEWBALANCE("save_viewbalance");
 
 int main(int argc, char *argv[])
 {
@@ -138,6 +140,11 @@ wallet3::wallet3()
       m_in_command(false),
       m_inactivity_lock_timeout(DEFAULT_INACTIVITY_LOCK_TIMEOUT)
 {
+    m_cmd_binder.set_handler("help", boost::bind(&wallet3::on_command, this, &wallet3::help, _1),
+                             tr(USAGE_SHOW_VIEWBALANCE), tr("Show help."));
+    m_cmd_binder.set_handler("save_viewbalance",
+                             boost::bind(&wallet3::on_command, this, &wallet3::save_viewbalance, _1),
+                             tr(USAGE_SHOW_VIEWBALANCE), tr("Create a viewbalance wallet from a master wallet."));
     m_cmd_binder.set_handler("transfer", boost::bind(&wallet3::on_command, this, &wallet3::transfer, _1),
                              tr(USAGE_SHOW_TRANSFER), tr("Transfer <address> <amount>."));
     m_cmd_binder.set_handler("balance", boost::bind(&wallet3::on_command, this, &wallet3::show_balance, _1),
@@ -185,8 +192,7 @@ bool wallet3::on_command(bool (wallet3::*cmd)(const std::vector<std::string> &),
 std::string wallet3::get_prompt() const
 {
     if (m_locked) return std::string("[") + tr("locked due to inactivity") + "]";
-    std::string prompt =
-        std::string("[") + tr("wallet ") + m_key_container.get_public_address_str(m_current_index).substr(0, 16);
+    std::string prompt = std::string("[") + tr("wallet ") + m_key_container.get_public_address_str().substr(0, 16);
     prompt += "]: ";
     return prompt;
 }
@@ -225,7 +231,9 @@ void wallet3::check_for_inactivity_lock(bool user)
                                 << "^   .=.| _.|__  ^       ~  /| \\  " << std::endl
                                 << " ~ /:. \\  _|_/\\    ~      /_| _\\  ^ " << std::endl
                                 << ".-/::.  |   |::|-._    ^  \\____/ " << std::endl
-                                << "  `===-'-----'""`  '-.              ~" << std::endl
+                                << "  `===-'-----'"
+                                   "`  '-.              ~"
+                                << std::endl
                                 << "" << std::endl;
         }
         while (1)
@@ -273,13 +281,6 @@ void wallet3::wallet_idle_thread()
 #ifndef _WIN32
             m_inactivity_checker.do_call(boost::bind(&wallet3::check_inactivity, this));
 #endif
-            // m_refresh_checker.do_call(boost::bind(&simple_wallet::check_refresh,
-            // this));
-            // m_mms_checker.do_call(boost::bind(&simple_wallet::check_mms,
-            // this));
-            // m_rpc_payment_checker.do_call(boost::bind(&simple_wallet::check_rpc_payment,
-            // this));
-
             if (!m_idle_run.load(std::memory_order_relaxed)) break;
         }
 
@@ -416,7 +417,8 @@ bool wallet3::create_or_open_wallet(key_container_base &key_container)
                     }
                     else
                     {
-                        // wallet3 loaded
+                        // wallet3 loaded print wallet type and 0 address
+                        print_wallet_type();
                         std::cout << get_public_address_w3(key_container) << std::endl;
                     }
                     wallet_name_valid = true;
@@ -467,21 +469,38 @@ void wallet3::create_new_keys_w3(std::string &wallet_path, const epee::wipeable_
                                  key_container_base &key_container)
 {
     m_is_wallet3 = true;
-    generate_keys(key_container);
+    key_container.generate_master();
     prepare_file_names(wallet_path);
-    store_keys(m_keys_file, password, false, key_container);
+    store_keys(m_keys_file, password, key_container);
 }
-
 //----------------------------------------------------------------------------------------------------
-void wallet3::generate_keys(key_container_base &key_container) { key_container.generate(0); }
+void wallet3::create_viewbalance(const epee::wipeable_string &password, key_container_base &key_container)
+{
+    m_is_wallet3 = true;
+    key_container_base keys_new;
+    key_container.get_viewbalance(keys_new);
+    store_keys(m_wallet_file + "_viewbalance.keys", password, keys_new);
+}
+//----------------------------------------------------------------------------------------------------
+void wallet3::print_wallet_type()
+{
+    switch (m_wallet_type)
+    {
+        case 0:
+            tools::msg_writer() << tr("Master wallet loaded.");
+            break;
+        case 1:
+            tools::msg_writer() << tr("View-balance wallet loaded.");
+            break;
+        default:
+            tools::fail_msg_writer() << tr("Failed loading wallet type.");
+    }
+}
 //----------------------------------------------------------------------------------------------------
 boost::optional<wallet3::keys_file_data> wallet3::get_keys_file_data(const epee::wipeable_string &password,
-                                                                     size_t wallet_type,
                                                                      key_container_base &key_container)
 {
     epee::byte_slice key_container_data;
-    // cryptonote::account_base account = m_account;
-    // key_container_base account = key_container;
 
     crypto::chacha_key key;
     crypto::generate_chacha_key(password.data(), password.size(), key, m_kdf_rounds);
@@ -498,8 +517,8 @@ boost::optional<wallet3::keys_file_data> wallet3::get_keys_file_data(const epee:
     value_wallet_type.SetInt(m_is_wallet3 ? 1 : 0);
     json.AddMember("is_wallet3", value_wallet_type, json.GetAllocator());
 
-    value_wallet_type.SetInt(wallet_type);
-    json.AddMember("wallet_type", value_wallet_type, json.GetAllocator());
+    // value_wallet_type.SetInt(wallet_type);
+    // json.AddMember("wallet_type", value_wallet_type, json.GetAllocator());
 
     rapidjson::Value value(rapidjson::kStringType);
     value.SetString(reinterpret_cast<const char *>(key_container_data.data()), key_container_data.size());
@@ -545,10 +564,10 @@ bool wallet3::save_to_file(const std::string &path_to_file, const std::string &r
     }
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet3::store_keys(const std::string &keys_file_name, const epee::wipeable_string &password, bool watch_only,
+bool wallet3::store_keys(const std::string &keys_file_name, const epee::wipeable_string &password,
                          key_container_base &key_container)
 {
-    boost::optional<keys_file_data> keys_file_data = get_keys_file_data(password, watch_only, key_container);
+    boost::optional<keys_file_data> keys_file_data = get_keys_file_data(password, key_container);
     CHECK_AND_ASSERT_MES(keys_file_data != boost::none, false, "failed to generate wallet keys data");
 
     std::string tmp_file_name = keys_file_name + ".new";
@@ -609,8 +628,7 @@ bool wallet3::load_keys_buf_w3(const std::string &keys_buf, const epee::wipeable
     bool encrypted_secret_keys = false;
     bool r = ::serialization::parse_binary(keys_buf, keys_file_data);
     CHECK_AND_ASSERT_MES(r, false, "Load keys buf: Failed to parse binary");
-    // THROW_WALLET_EXCEPTION_IF(!r, error::wallet_internal_error, "internal
-    // error: failed to deserialize keys buffer");
+
     crypto::chacha_key key;
     crypto::generate_chacha_key(password.data(), password.size(), key, m_kdf_rounds);
     std::string account_data;
@@ -648,8 +666,8 @@ bool wallet3::load_keys_buf_w3(const std::string &keys_buf, const epee::wipeable
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, is_wallet3, int, Int, false, false);
     m_is_wallet3 = field_is_wallet3;
 
-    GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, wallet_type, int, Int, false, false);
-    key_container_out.set_wallet_type(field_wallet_type);
+    // GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, wallet_type, int, Int, false, false);
+    // key_container_out.set_wallet_type(field_wallet_type);
 
     if (r)
     {
@@ -663,8 +681,12 @@ bool wallet3::load_keys_buf_w3(const std::string &keys_buf, const epee::wipeable
         }
     }
 
+    set_wallet_type(key_container_out.get_wallet_type());
+
     return true;
 }
+//----------------------------------------------------------------------------------------------------
+void wallet3::set_wallet_type(size_t type) { m_wallet_type = type; }
 //----------------------------------------------------------------------------------------------------
 bool wallet3::load_from_file(const std::string &path_to_file, std::string &target_str, size_t max_size)
 {
@@ -775,8 +797,7 @@ bool wallet_valid_path_format(const std::string &file_path) { return !file_path.
 //----------------------------------------------------------------------------------------------------
 std::string wallet3::get_public_address_w3(key_container_base &key_container)
 {
-    address_index_t t{make_address_index(0, 0)};
-    return key_container.get_public_address_str(t);
+    return key_container.get_public_address_str();
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet3::verify_password(const epee::wipeable_string &password)
@@ -835,8 +856,8 @@ bool wallet3::verify_password(const std::string &keys_file_name, const epee::wip
     GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, is_wallet3, int, Int, false, false);
     m_is_wallet3 = field_is_wallet3;
 
-    GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, wallet_type, int, Int, false, false);
-    key_container.set_wallet_type(field_wallet_type);
+    // GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, wallet_type, int, Int, false, false);
+    // key_container.set_wallet_type(field_wallet_type);
 
     if (r)
     {
@@ -884,6 +905,23 @@ bool wallet3::is_keys_file_locked() const
 {
     if (m_wallet_file.empty()) return false;
     return m_keys_file_locker->locked();
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::save_viewbalance(const std::vector<std::string> &args)
+{
+    auto pw = password_prompter(tr("Enter your wallet password"), false);
+    if (load_keys_w3(m_keys_file, pw->password(), m_key_container))
+    {
+        // create_new_keys_w3(wallet_path, pw->password(), key_container);
+        create_viewbalance(pw->password(), m_key_container);
+        tools::success_msg_writer() << tr("Viewbalance wallet created.");
+    }
+    else
+    {
+        tools::fail_msg_writer() << tr("Failed. Wrong password.");
+    }
+
+    return true;
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet3::create_money(const std::vector<std::string> &args)
@@ -956,12 +994,11 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 
     refresh_user_enote_store(m_key_container.get_keys_sp(), refresh_config, m_ledger_context, m_enote_store);
     auto balance = m_enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN}, {SpEnoteSpentStatus::SPENT_ONCHAIN});
-    if (amount>=balance)
+    if (amount >= balance)
     {
-        tools::fail_msg_writer() << tr("Fail. You are trying to spend more than your available balance."); 
+        tools::fail_msg_writer() << tr("Fail. You are trying to spend more than your available balance.");
         return true;
     }
-
 
     const FeeCalculatorMockTrivial fee_calculator;  // just do a trivial calculator
                                                     // for now (fee = fee/weight
@@ -975,7 +1012,6 @@ bool wallet3::transfer(const std::vector<std::string> &args)
     const std::size_t legacy_ring_size{2};
     const std::size_t ref_set_decomp_n{2};
     const std::size_t ref_set_decomp_m{2};
-
 
     //  make sure to have enough fake enotes to the ledger so we can reliably
     //  make seraphis membership proofs
@@ -1002,6 +1038,23 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 
     tools::msg_writer() << tr("Transaction ") << epee::string_tools::pod_to_hex(tx_id) << tr(" submitted to network.");
 
+    return true;
+}
+
+bool wallet3::help(const std::vector<std::string> &args)
+{
+    if (args.empty())
+    {
+        message_writer() << "";
+        message_writer() << tr("Important commands:");
+        message_writer() << "";
+        message_writer() << tr("\"help <command>\" - Show a command's documentation.");
+        message_writer() << "";
+        message_writer() << tr("\"create_money \" - Creates 5 enotes of 1000 each to own wallet.");
+        message_writer() << tr("\"transfer <address> <amount>\" - Send XMR to an address.");
+        message_writer() << tr("\"balance\" - Show balance.");
+        message_writer() << tr("\"save_viewbalance\" - Save view-balance wallet.");
+    }
     return true;
 }
 }  // namespace jsw

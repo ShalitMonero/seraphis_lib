@@ -100,7 +100,6 @@ private:
 * outparam: jamtis_mock_keys -
 */
 void make_jamtis_mock_keys(jamtis_mock_keys &keys_out);
-void make_jamtis_mock_keys_viewbalance(jamtis_mock_keys &keys_out);
 //todo
 void make_random_address_for_user(const jamtis_mock_keys &user_keys, JamtisDestinationV1 &user_address_out);
 

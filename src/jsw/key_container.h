@@ -57,8 +57,10 @@ class key_container_base
      */
 
     // void generate();
-    void generate(size_t type);
-    void set_null();
+    void generate_master();
+    void generate_master(const address_index_t &t);
+    size_t get_wallet_type();
+    void get_viewbalance(key_container_base &new_sp_keys);
 
     bool verify_keys();
 
@@ -72,6 +74,7 @@ class key_container_base
      * Get the public addresses keys
      */
     std::string get_public_address_str(const address_index_t &t) const;
+    std::string get_public_address_str() const;
 
     void get_destination_from_str(const std::string &address, JamtisDestinationV1 &dest_out);
 
@@ -102,21 +105,22 @@ class key_container_base
     template <class t_archive>
     inline void serialize(t_archive &a, const unsigned int /*ver*/)
     {
-        a &m_wallet_type;
         a &m_sp_keys;
+        a &m_legacy_keys;
         a &m_creation_timestamp;
+        a &m_address_zero;
     }
 
     BEGIN_KV_SERIALIZE_MAP()
-    KV_SERIALIZE(m_wallet_type)
     KV_SERIALIZE(m_sp_keys)
+    KV_SERIALIZE(m_legacy_keys)
     KV_SERIALIZE(m_creation_timestamp)
+    KV_SERIALIZE(m_address_zero)
     END_KV_SERIALIZE_MAP()
 
    private:
     jamtis_mock_keys m_sp_keys;
     legacy_mock_keys m_legacy_keys;
-    size_t m_wallet_type;  // 0 - master, 1 - view-balance, ...
     uint64_t m_creation_timestamp;
     JamtisDestinationV1 m_address_zero;
 };

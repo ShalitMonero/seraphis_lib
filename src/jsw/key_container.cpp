@@ -79,12 +79,9 @@ static const int64_t M = 0xffffffffff;
 static const std::string alphabet = "xmrbase32cdfghijknpqtuwy01456789";
 
 //-----------------------------------------------------------------
-key_container_base::key_container_base() { set_null(); }
-//-----------------------------------------------------------------
-void key_container_base::set_null()
+key_container_base::key_container_base()
 {
     m_sp_keys = mocks::jamtis_mock_keys();
-    m_wallet_type = 0;
     m_creation_timestamp = 0;
 }
 //-----------------------------------------------------------------
@@ -147,6 +144,30 @@ std::string key_container_base::add_checksum(const std::string addr_without_chec
     return addr_with_checksum;
 }
 //-----------------------------------------------------------------
+std::string key_container_base::get_public_address_str() const
+{
+
+    // Fixed parameters for version 1 mainnet anonymous address
+    std::string address_prefix = "xmr";
+    std::string address_type = "a";
+    std::string address_version = "1";
+    std::string address_network = "m";
+
+    // Encode ------------------------
+    serialization::ser_JamtisDestinationV1 serializable_destination;
+    serialization::make_serializable_sp_destination_v1(m_address_zero, serializable_destination);
+    std::string serialized_address;
+    serialization::try_append_serializable(serializable_destination, serialized_address);
+
+    std::string address_main = base32::encode(serialized_address);
+    std::string address;
+
+    address = address_prefix + address_type + address_version + address_network + address_main;
+    std::string address_with_checksum{add_checksum(address)};
+
+    return address_with_checksum;
+
+}
 std::string key_container_base::get_public_address_str(const address_index_t &t) const
 {
 
@@ -213,29 +234,71 @@ void key_container_base::get_destination_from_str(const std::string &address, Ja
     // std::cout << "t: " << epee::string_tools::pod_to_hex(dest_out.m_addr_tag) << std::endl;
 }
 //-----------------------------------------------------------------
-void key_container_base::set_wallet_type(size_t wallet_type) { m_wallet_type = wallet_type; }
+size_t key_container_base::get_wallet_type()
+{ 
+    if (m_sp_keys.k_m == rct::rct2sk(rct::zero()))
+    {
+        if (m_sp_keys.k_vb == rct::rct2sk(rct::zero()))
+        {
+        // Derived from viewbalance
+            return 999;
+
+        }
+        else
+        {
+            return size_t{1}; // View-balance 
+        }
+
+    }
+    else
+    {
+        return size_t{0}; // Master
+    }
+}
 //-----------------------------------------------------------------
-void key_container_base::generate(size_t type)
+void key_container_base::generate_master(const address_index_t &t)
 {
     // Master wallet
-    if (type == 0)
-    {
-        make_jamtis_mock_keys(m_sp_keys);
-        address_index_t t{make_address_index(0, 0)};
-        make_jamtis_destination_v1(m_sp_keys.K_1_base, m_sp_keys.xK_ua, m_sp_keys.xK_fr, m_sp_keys.s_ga, t,
-                                   m_address_zero);
-        make_legacy_mock_keys(m_legacy_keys);
-    }
-
-    // View only wallet
-    if (type == 1)
-    {
-        make_jamtis_mock_keys_viewbalance(m_sp_keys);
-    }
+    make_jamtis_mock_keys(m_sp_keys);
+    make_jamtis_destination_v1(m_sp_keys.K_1_base, m_sp_keys.xK_ua, m_sp_keys.xK_fr, m_sp_keys.s_ga, t,
+                                m_address_zero);
+    make_legacy_mock_keys(m_legacy_keys);
 
     m_creation_timestamp = time(NULL);
 }
 //-----------------------------------------------------------------
+void key_container_base::generate_master()
+{
+    make_jamtis_mock_keys(m_sp_keys);
+    address_index_t t{make_address_index(0, 0)};
+    make_jamtis_destination_v1(m_sp_keys.K_1_base, m_sp_keys.xK_ua, m_sp_keys.xK_fr, m_sp_keys.s_ga, t,
+                                m_address_zero);
+    make_legacy_mock_keys(m_legacy_keys);
+
+    m_creation_timestamp = time(NULL);
+}
+//-----------------------------------------------------------------
+void key_container_base::get_viewbalance(key_container_base &new_keys)
+{
+    // jamtis_mock_keys new_sp_keys;
+    new_keys.m_sp_keys.k_m = rct::rct2sk(rct::zero());
+    new_keys.m_sp_keys.k_vb = m_sp_keys.k_vb;
+    new_keys.m_sp_keys.xk_ua = m_sp_keys.xk_ua;
+    new_keys.m_sp_keys.xk_fr = m_sp_keys.xk_fr;
+    new_keys.m_sp_keys.s_ga = m_sp_keys.s_ct;
+    new_keys.m_sp_keys.K_1_base = m_sp_keys.K_1_base;
+    new_keys.m_sp_keys.xK_ua = m_sp_keys.xK_ua;
+    new_keys.m_sp_keys.xK_fr = m_sp_keys.xK_fr;
+
+    new_keys.m_legacy_keys.k_s = rct::rct2sk(rct::zero()); 
+    new_keys.m_legacy_keys.k_v = m_legacy_keys.k_v;
+    new_keys.m_legacy_keys.Ks = m_legacy_keys.Ks;
+    new_keys.m_legacy_keys.Kv = m_legacy_keys.Kv;
+
+    new_keys.m_creation_timestamp = m_creation_timestamp;
+    new_keys.m_address_zero = m_address_zero;
+    
+}
 bool key_container_base::verify_keys()
 {
     rct::key spendkey_out;
