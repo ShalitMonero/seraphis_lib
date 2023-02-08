@@ -34,6 +34,7 @@
 #include "crypto/blake2b.h"
 // #include "common/base32.h"
 #include "common/base32codec/cppcodec/base32_monero.hpp"
+#include "common/checksum_jamtis.h"
 
 #include "crypto/crypto.h"
 #include "include_base_utils.h"
@@ -68,15 +69,13 @@ extern "C"
 
 using namespace std;
 using base32 = cppcodec::base32_monero;
+using namespace tools::jamtis_checksum;
 
 namespace sp
 {
 namespace jamtis
 {
 
-static const std::vector<int64_t> GEN{0x1ae45cd581, 0x359aad8f02, 0x61754f9b24, 0xc2ba1bb368, 0xcd2623e3f0};
-static const int64_t M = 0xffffffffff;
-static const std::string alphabet = "xmrbase32cdfghijknpqtuwy01456789";
 
 //-----------------------------------------------------------------
 key_container_base::key_container_base()
@@ -84,66 +83,6 @@ key_container_base::key_container_base()
     m_sp_keys = mocks::jamtis_mock_keys();
     m_creation_timestamp = 0;
 }
-//-----------------------------------------------------------------
-int64_t key_container_base::jamtis_polymod(const std::vector<int> data) const
-{
-    int64_t c = 1;
-    int64_t b = 0;
-    for (const auto v : data)
-    {
-        b = (c >> 35);
-        c = ((c & 0x07ffffffff) << 5) ^ v;
-        for (int64_t j = 0; j < 5; j++)
-        {
-            if ((b >> j) & 1)
-            {
-                c ^= GEN[j];
-            }
-            else
-            {
-                c ^= 0;
-            }
-        }
-    }
-    return c;
-}
-//-----------------------------------------------------------------
-bool key_container_base::jamtis_verify_checksum(const std::string data) const
-{
-    std::vector<int> addr_data;
-    for (auto x : data)
-    {
-        addr_data.push_back(alphabet.find(x));
-    }
-    return jamtis_polymod(addr_data) == M;
-}
-//-----------------------------------------------------------------
-std::string key_container_base::add_checksum(const std::string addr_without_checksum) const
-{
-
-    std::vector<int> addr_data;
-    for (auto x : addr_without_checksum)
-    {
-        addr_data.push_back(alphabet.find(x));
-    }
-
-    std::vector<int> data_extended{addr_data};
-    data_extended.resize(addr_data.size() + 8);
-    int64_t polymod = jamtis_polymod(data_extended) ^ M;
-    for (int64_t i = 0; i < 8; i++)
-    {
-        data_extended[addr_data.size() + i] = ((polymod >> 5 * (7 - i)) & 31);
-    }
-
-    std::string addr_with_checksum{};
-    for (uint64_t j = 0; j < data_extended.size(); j++)
-    {
-        addr_with_checksum.push_back(alphabet[data_extended[j]]);
-    }
-
-    return addr_with_checksum;
-}
-//-----------------------------------------------------------------
 std::string key_container_base::get_public_address_str() const
 {
 
@@ -163,7 +102,7 @@ std::string key_container_base::get_public_address_str() const
     std::string address;
 
     address = address_prefix + address_type + address_version + address_network + address_main;
-    std::string address_with_checksum{add_checksum(address)};
+    std::string address_with_checksum{jamtis_add_checksum(address)};
 
     return address_with_checksum;
 
@@ -193,7 +132,7 @@ std::string key_container_base::get_public_address_str(const address_index_t &t)
     std::string address;
 
     address = address_prefix + address_type + address_version + address_network + address_main;
-    std::string address_with_checksum{add_checksum(address)};
+    std::string address_with_checksum{jamtis_add_checksum(address)};
 
     // cout << "\n---Public keys---" << endl;
     // std::cout << "K_1: " << m_address_zero.m_addr_K1 << std::endl;

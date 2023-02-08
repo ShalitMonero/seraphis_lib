@@ -98,9 +98,6 @@ class key_container_base
     /**
      * get checksum in base32
      */
-    std::string add_checksum(const std::string addr_without_checksum) const;
-    bool jamtis_verify_checksum(const std::string data) const;
-    int64_t jamtis_polymod(const std::vector<int> data) const;
 
     template <class t_archive>
     inline void serialize(t_archive &a, const unsigned int /*ver*/)

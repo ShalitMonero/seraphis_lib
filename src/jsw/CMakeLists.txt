@@ -27,8 +27,8 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 set(jsw_sources
-  wallet3.cpp
   key_container.cpp
+  wallet3.cpp
   )
 
 set(jsw_headers)
