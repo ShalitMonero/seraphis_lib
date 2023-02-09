@@ -406,8 +406,26 @@ struct ser_SpTxSquashedV1 final
     END_SERIALIZE()
 };
 
+struct ser_JamtisDestinationV1 final
+{
+    /// Destination public address 
+    rct::key K_1;  
+    crypto::x25519_pubkey K_2;
+    crypto::x25519_pubkey K_3;
+    jamtis::address_tag_t t;
+    // ser_encrypted_address_tag_t t;
+
+    BEGIN_SERIALIZE()
+        FIELD(K_1)
+        FIELD(K_2)
+        FIELD(K_3)
+        FIELD(t)
+    END_SERIALIZE()
+};
+
 } //namespace serialization
 } //namespace sp
 
 BLOB_SERIALIZER(sp::serialization::ser_encrypted_address_tag_t);
+BLOB_SERIALIZER(sp::jamtis::address_tag_t);
 BLOB_SERIALIZER(sp::serialization::ser_encoded_amount_t);

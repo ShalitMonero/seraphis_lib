@@ -32,6 +32,7 @@ set(unit_tests_sources
   address_from_url.cpp
   async.cpp
   base58.cpp
+  base32.cpp
   blockchain_db.cpp
   block_queue.cpp
   block_reward.cpp
@@ -42,6 +43,7 @@ set(unit_tests_sources
   canonical_amounts.cpp
   chacha.cpp
   checkpoints.cpp
+  checksum_jamtis.cpp
   command_line.cpp
   crypto.cpp
   decompose_amount_into_digits.cpp

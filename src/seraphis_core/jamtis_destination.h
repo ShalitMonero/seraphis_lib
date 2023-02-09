@@ -35,6 +35,7 @@
 #include "crypto/x25519.h"
 #include "jamtis_support_types.h"
 #include "ringct/rctTypes.h"
+#include "serialization/keyvalue_serialization.h"
 
 //third party headers
 
@@ -62,6 +63,13 @@ struct JamtisDestinationV1 final
     crypto::x25519_pubkey m_addr_K3;
     /// addr_tag
     address_tag_t m_addr_tag;
+
+    BEGIN_KV_SERIALIZE_MAP()
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_addr_K1)
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_addr_K2)
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_addr_K3)
+    KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(m_addr_tag)
+    END_KV_SERIALIZE_MAP()
 };
 
 /// equivalence test (false on partial equality)
