@@ -37,10 +37,12 @@
 #pragma once
 
 //local headers
+#include "crypto/chacha.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/jamtis_destination.h"
+#include "serialization/keyvalue_serialization.h"
 
 //third party headers
 
@@ -66,11 +68,30 @@ struct jamtis_mock_keys
     crypto::secret_key k_vb;          //view-balance
     crypto::x25519_secret_key xk_ua;  //unlock-amounts
     crypto::x25519_secret_key xk_fr;  //find-received
-    crypto::secret_key s_ga;          //generate-address
-    crypto::secret_key s_ct;          //cipher-tag
-    rct::key K_1_base;                //jamtis spend base     = k_vb X + k_m U
-    crypto::x25519_pubkey xK_ua;      //unlock-amounts pubkey = xk_ua xG
-    crypto::x25519_pubkey xK_fr;      //find-received pubkey  = xk_fr xk_ua xG
+    crypto::secret_key s_ga;  //generate-address
+    crypto::secret_key s_ct;  //cipher-tag
+    rct::key K_1_base;        //wallet spend base = k_vb X + k_m U
+    crypto::x25519_pubkey xK_ua;     //unlock-amounts pubkey = xk_ua xG
+    crypto::x25519_pubkey xK_fr;     //find-received pubkey = xk_fr xk_ua xG
+    crypto::chacha_iv m_encryption_iv;
+
+  BEGIN_KV_SERIALIZE_MAP()
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_m)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(k_vb)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xk_ua)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xk_fr)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(s_ga)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(s_ct)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(K_1_base)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xK_ua)
+  KV_SERIALIZE_VAL_POD_AS_BLOB_FORCE(xK_fr)
+  END_KV_SERIALIZE_MAP()
+
+  void encrypt(const crypto::chacha_key &key);
+  void decrypt(const crypto::chacha_key &key);
+
+private:
+  void xor_with_key_stream(const crypto::chacha_key &key);
 };
 
 /// make a set of mock jamtis keys (for mock-ups/unit testing)

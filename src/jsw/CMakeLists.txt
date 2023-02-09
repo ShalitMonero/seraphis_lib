@@ -26,66 +26,46 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
+set(jsw_sources
+  key_container.cpp
+  wallet3.cpp
+  )
 
-set(common_sources
-  base58.cpp
-  base32.cpp
-  command_line.cpp
-  checksum_jamtis.cpp
-  dns_utils.cpp
-  download.cpp
-  error.cpp
-  expect.cpp
-  util.cpp
-  i18n.cpp
-  notify.cpp
-  password.cpp
-  perf_timer.cpp
-  pruning.cpp
-  spawn.cpp
-  threadpool.cpp
-  updates.cpp
-  aligned.c
-  timings.cc
-  combinator.cpp)
+set(jsw_headers)
 
-if (STACK_TRACE)
-  list(APPEND common_sources stack_trace.cpp)
-endif()
+monero_find_all_headers(jsw_private_headers "${CMAKE_CURRENT_SOURCE_DIR}")
 
-if (BACKCOMPAT)
-  list(APPEND common_sources compat/glibc_compat.cpp)
-endif()
-
-set(common_headers)
-
-monero_find_all_headers(common_private_headers "${CMAKE_CURRENT_SOURCE_DIR}")
-
-monero_private_headers(common
-  ${common_private_headers})
-monero_add_library(common
-  ${common_sources}
-  ${common_headers}
-  ${common_private_headers}
-  DEPENDS generate_translations_header)
-target_link_libraries(common
-  PUBLIC
+monero_private_headers(jsw
+  ${jsw_private_headers})
+monero_add_executable(jsw
+  ${jsw_sources}
+  ${jsw_headers}
+  ${jsw_private_headers})
+target_link_libraries(jsw
+  PRIVATE
+    wallet
+    rpc_base
+    cryptonote_core
     cncrypto
-    ${UNBOUND_LIBRARIES}
-    ${LIBUNWIND_LIBRARIES}
-    ${Boost_DATE_TIME_LIBRARY}
-    ${Boost_FILESYSTEM_LIBRARY}
-    ${Boost_SYSTEM_LIBRARY}
-    ${Boost_THREAD_LIBRARY}
-    ${Boost_REGEX_LIBRARY}
+    common
+    mnemonics
+    seraphis_core
+    seraphis_main
+    seraphis_crypto
+    seraphis_mocks
+    ${EPEE_READLINE}
+    qrcodegen
+    version
     ${Boost_CHRONO_LIBRARY}
-  PRIVATE
-    ${OPENSSL_LIBRARIES}
+    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+    ${Boost_FILESYSTEM_LIBRARY}
+    ${Boost_LOCALE_LIBRARY}
+    ${ICU_LIBRARIES}
+    ${Boost_THREAD_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${GNU_READLINE_LIBRARY}
     ${EXTRA_LIBRARIES})
-target_include_directories(common
-  PRIVATE
-    ${Boost_INCLUDE_DIRS})
-
-#monero_install_headers(common
-#  ${common_headers})
+set_property(TARGET jsw
+  PROPERTY
+    OUTPUT_NAME "monero-jsw")
+install(TARGETS jsw DESTINATION bin)
