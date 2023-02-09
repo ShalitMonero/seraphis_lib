@@ -32,8 +32,7 @@
 // local headers
 #include "common/base58.h"
 #include "crypto/blake2b.h"
-// #include "common/base32.h"
-#include "common/base32codec/cppcodec/base32_monero.hpp"
+#include "common/base32.h"
 #include "common/checksum_jamtis.h"
 
 #include "crypto/crypto.h"
@@ -68,7 +67,6 @@ extern "C"
 #define MONERO_DEFAULT_LOG_CATEGORY "account"
 
 using namespace std;
-using base32 = cppcodec::base32_monero;
 using namespace tools::jamtis_checksum;
 
 namespace sp
@@ -98,10 +96,10 @@ std::string key_container_base::get_public_address_str() const
     std::string serialized_address;
     serialization::try_append_serializable(serializable_destination, serialized_address);
 
-    std::string address_main = base32::encode(serialized_address);
-    std::string address;
+    std::string address_main;
+    tools::base32::encode(serialized_address,address_main);
 
-    address = address_prefix + address_type + address_version + address_network + address_main;
+    std::string address = address_prefix + address_type + address_version + address_network + address_main;
     std::string address_with_checksum{jamtis_add_checksum(address)};
 
     return address_with_checksum;
@@ -126,12 +124,11 @@ std::string key_container_base::get_public_address_str(const address_index_t &t)
     std::string serialized_address;
     serialization::try_append_serializable(serializable_destination, serialized_address);
 
-    std::string address_main = base32::encode(serialized_address);
+    std::string address_main;
+    tools::base32::encode(serialized_address,address_main);
     // std::string address_main = tools::base58::encode(serialized_address);
 
-    std::string address;
-
-    address = address_prefix + address_type + address_version + address_network + address_main;
+    std::string address = address_prefix + address_type + address_version + address_network + address_main;
     std::string address_with_checksum{jamtis_add_checksum(address)};
 
     // cout << "\n---Public keys---" << endl;
@@ -160,7 +157,7 @@ void key_container_base::get_destination_from_str(const std::string &address, Ja
     // Throw wallet message
 
     std::string serialized_address;
-    base32::decode(serialized_address, main_address);
+    tools::base32::decode(serialized_address, main_address);
     // tools::base58::decode(main_address,serialized_address);
     serialization::ser_JamtisDestinationV1 serializable_destination_recovered;
     serialization::try_get_serializable(epee::strspan<std::uint8_t>(serialized_address),
