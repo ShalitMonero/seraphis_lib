@@ -310,8 +310,7 @@ boost::optional<task_t> ThreadPool::try_get_sleepy_task_to_run(const std::uint16
     // wait until we have an awake task while listening to the task notification system
     SleepyTask* sleepytask{nullptr};
     boost::optional<task_t> final_task;
-    boost::shared_lock<boost::shared_mutex> lock{m_worker_wait_mutex};
-    lock.unlock();
+    boost::shared_lock<boost::shared_mutex> lock{m_worker_wait_mutex, boost::defer_lock};
 
     while (true)
     {
@@ -381,8 +380,7 @@ void ThreadPool::run()
     increment_thread_callstack_depth();
 
     const std::uint16_t worker_id{threadpool_worker_id()};
-    boost::shared_lock<boost::shared_mutex> lock{m_worker_wait_mutex};
-    lock.unlock();
+    boost::shared_lock<boost::shared_mutex> lock{m_worker_wait_mutex, boost::defer_lock};
 
     while (true)
     {
