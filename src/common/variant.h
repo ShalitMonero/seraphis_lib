@@ -109,15 +109,9 @@ public:
 
     /// try to get a handle to the embedded value (return nullptr on failure)
     template <typename T>
-    T* try_unwrap()
-    {
-        return boost::strict_get<T>(&m_value);
-    }
+          T* try_unwrap()       noexcept { return boost::strict_get<      T>(&m_value); }
     template <typename T>
-    const T* try_unwrap() const
-    {
-        return boost::strict_get<T>(&m_value);
-    }
+    const T* try_unwrap() const noexcept { return boost::strict_get<const T>(&m_value); }
 
     /// get a handle to the embedded value
     template <typename T>

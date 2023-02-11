@@ -111,7 +111,7 @@ public:
 //constructors
     /// normal constructor
     ScopedNotification(std::function<void()> notification_func) :
-        m_notification_func{notification_func}
+        m_notification_func{std::move(notification_func)}
     {}
 
     /// disable copies (this is a scoped manager)
@@ -127,7 +127,7 @@ public:
     {
         this->notify();
         this->m_notification_func = std::move(other).m_notification_func;
-        other.m_notification_func = nullptr;  //a moved-from std::function is in an unspecified state
+        other.m_notification_func = nullptr;  //nullify the moved-from function
     }
 
 //destructor
@@ -313,15 +313,14 @@ class SleepyTaskQueue final
 ///     triggered, implying it will go down some custom upstream control path instead of the normal path that
 ///     'notify_one()' is aimed at (e.g. 'go find a task to work on'); (this marginally reduces throughput under moderate
 ///     to high load)
-/// - conditional waiting is designed so a conditional waiter will never wait after its corresponding conditional notify
-///   has been executed (i.e. after the condition has been set)
-///   - COST: conditional waiters protect the condition setting/checking with a unique lock, so any real system WILL
-///     waste time fighting over those locks (to maximize throughput, consider using large task graphs that don't require
-///     manual joining or other mechanisms that use conditional waits)
+/// - conditional waiting is designed so a conditional waiter will never wait after its condition is set if a conditional
+///   notify is used to set the condition
+///   - COST: the condition setting/checking is protected by a unique lock, so any real system WILL waste time fighting
+///     over those locks (to maximize throughput, consider using large task graphs to avoid manual joining and other
+///     mechanisms that use conditional waits)
 /// - 'shutting down' the manager means
 ///   A) existing waiters will all be woken up
 ///   B) future waiters using 'ShutdownPolicy::EXIT_EARLY' will simply exit without waiting
-///   C) all wait functions return 'true' when shutting down
 class WaiterManager final
 {
     struct ConditionalWaiterContext final
@@ -340,9 +339,10 @@ public:
 
     enum class Result : unsigned char
     {
-        DONE_WAITING,
         CONDITION_TRIGGERED,
-        SHUTTING_DOWN
+        SHUTTING_DOWN,
+        TIMEOUT,
+        DONE_WAITING
     };
 
 //constructors
@@ -399,7 +399,7 @@ public:
         // tap the mutex here to synchronize with conditional waiters
         { boost::lock_guard<boost::shared_mutex> lock{conditional_waiter.mutex} };
         // notify all because if there are multiple threads waiting on this index (not recommended, but possible),
-        //   we don't know which one actually corresponds to this condition function
+        //   we don't know which one actually cares about this condition function
         conditional_waiter.cond_var.notify_all();
     }
 
@@ -408,8 +408,10 @@ public:
         return this->wait_impl(m_num_normal_waiters,
                 m_normal_shared_cond_var,
                 [](std::condition_variable_any &cond_var, boost::shared_lock<boost::shared_mutex> &lock)
+                -> std::cv_status
                 {
                     cond_var.wait(lock);
+                    return std::cv_status::no_timeout;
                 },
                 shutdown_policy
             );
@@ -419,8 +421,9 @@ public:
         return this->wait_impl(m_num_sleepy_waiters,
                 m_sleepy_shared_cond_var,
                 [&duration](std::condition_variable_any &cond_var, boost::shared_lock<boost::shared_mutex> &lock)
+                -> std::cv_status
                 {
-                    cond_var.wait_for(lock, duration);
+                    return cond_var.wait_for(lock, duration);
                 },
                 shutdown_policy
             );
@@ -430,8 +433,9 @@ public:
         return this->wait_impl(m_num_sleepy_waiters,
                 m_sleepy_shared_cond_var,
                 [&timepoint](std::condition_variable_any &cond_var, boost::shared_lock<boost::shared_mutex> &lock)
+                -> std::cv_status
                 {
-                    cond_var.wait_until(lock, timepoint);
+                    return cond_var.wait_until(lock, timepoint);
                 },
                 shutdown_policy
             );
@@ -443,8 +447,10 @@ public:
         return this->conditional_wait_impl(waiter_index,
                 condition_checker_func,
                 [](std::condition_variable &cond_var, boost::shared_lock<boost::shared_mutex> &lock)
+                -> std::cv_status
                 {
                     cond_var.wait(lock);
+                    return std::cv_status::no_timeout;
                 },
                 shutdown_policy
             );
@@ -457,8 +463,9 @@ public:
         return this->conditional_wait_impl(waiter_index,
                 condition_checker_func,
                 [&duration](std::condition_variable &cond_var, boost::shared_lock<boost::shared_mutex> &lock)
+                -> std::cv_status
                 {
-                    cond_var.wait_for(lock, duration);
+                    return cond_var.wait_for(lock, duration);
                 },
                 shutdown_policy
             );
@@ -471,8 +478,9 @@ public:
         return this->conditional_wait_impl(waiter_index,
                 condition_checker_func,
                 [&timepoint](std::condition_variable &cond_var, boost::shared_lock<boost::shared_mutex> &lock)
+                -> std::cv_status
                 {
-                    cond_var.wait_until(lock, timepoint);
+                    return cond_var.wait_until(lock, timepoint);
                 },
                 shutdown_policy
             );
@@ -503,9 +511,10 @@ private:
         return nominal_index;
     }
 
-    Result wait_impl(std::atomic<std::uint16_t> &counter,
+    Result wait_impl(std::atomic<std::uint16_t> &counter_inout,
         std::condition_variable_any &cond_var,
-        const std::function<void(boost::shared_lock<boost::shared_mutex>&, std::condition_variable_any&)> &wait_func,
+        const std::function<std::cv_status(std::condition_variable_any&, boost::shared_lock<boost::shared_mutex>&)>
+            &wait_func,
         const ShutdownPolicy shutdown_policy)
     {
         boost::shared_lock<boost::shared_mutex> lock{m_shared_mutex};
@@ -514,18 +523,21 @@ private:
         if (shutdown_policy == ShutdownPolicy::EXIT_EARLY && this->is_shutting_down()) return Result::SHUTTING_DOWN;
 
         // wait
-        counter.fetch_add(1, std::memory_order_relaxed);
-        wait_func(cond_var, lock);
-        counter.fetch_sub(1, std::memory_order_relaxed);
+        counter_inout.fetch_add(1, std::memory_order_relaxed);
+        const std::cv_status wait_status{wait_func(cond_var, lock)};
+        counter_inout.fetch_sub(1, std::memory_order_relaxed);
 
         // post-wait check
-        if (this->is_shutting_down()) return Result::SHUTTING_DOWN;
+        // - note: the order of these checks is intentional based on their assumed importance to the caller
+        if (this->is_shutting_down())               return Result::SHUTTING_DOWN;
+        if (wait_status == std::cv_status::timeout) return Result::TIMEOUT;
 
         return Result::DONE_WAITING;
     }
     Result conditional_wait_impl(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
-        const std::function<void(std::condition_variable&, boost::shared_mutex<boost::shared_mutex>&)> &wait_func,
+        const std::function<std::cv_status(std::condition_variable&, boost::shared_mutex<boost::shared_mutex>&)>
+            &wait_func,
         const ShutdownPolicy shutdown_policy)
     {
         ConditionalWaiterContext &conditional_waiter{m_conditional_waiters[this->clamp_waiter_index(waiter_index)]};
@@ -539,13 +551,15 @@ private:
 
         // wait
         conditional_waiter.is_waiting.fetch_add(1, std::memory_order_relaxed);
-        wait_func(conditional_waiter.cond_var, lock);
+        const std::cv_status wait_status{wait_func(conditional_waiter.cond_var, lock)};
         conditional_waiter.is_waiting.fetch_sub(1, std::memory_order_relaxed);
 
         // post-wait checks
-        try { if (condition_checker_func()) return Result::CONDITION_TRIGGERED; }
-        catch (...)                       { return Result::CONDITION_TRIGGERED; }
-        if (this->is_shutting_down())       return Result::SHUTTING_DOWN;
+        // - note: the order of these checks is intentional based on their assumed importance to the caller
+        try { if (condition_checker_func())         return Result::CONDITION_TRIGGERED; }
+        catch (...)                               { return Result::CONDITION_TRIGGERED; }
+        if (this->is_shutting_down())               return Result::SHUTTING_DOWN;
+        if (wait_status == std::cv_status::timeout) return Result::TIMEOUT;
 
         return Result::DONE_WAITING;
     }
@@ -608,8 +622,9 @@ private:
 
     /// queues
     std::vector<std::vector<TaskQueue>> m_task_queues;  //outer vector: priorities, inner vector: workers
-    std::atomic<unsigned int> m_queue_submission_counter{0};
     std::vector<SleepyTaskQueue> m_sleepy_task_queues;  //vector: workers
+    std::atomic<std::uint16_t> m_normal_queue_submission_counter{0};
+    std::atomic<std::uint16_t> m_sleepy_queue_submission_counter{0};
 
     // waiter manager
     WaiterManager m_waiter_manager;
