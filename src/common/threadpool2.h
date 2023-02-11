@@ -306,9 +306,13 @@ class SleepyTaskQueue final
 ///   up threads needlessly (and also increase lock contention somewhat)
 ///   - it IS possible for multiple threads to wait on the same condition by sharing an index, possibly an interesting
 ///     use-case
-/// - WaiterManager::notify_one() prioritizes: normal waiters > sleepy waiters > conditional waiters
+/// - notify_one() prioritizes: normal waiters > sleepy waiters > conditional waiters
 ///   - this function has several race conditions that can mean no worker gets notified even if there are several actually
 ///     waiting (these are non-critical race conditions that marginally reduce throughput under low to moderate load)
+///   - there is also a race condition where a conditional waiter gets notified but ends up detecting its condition was
+///     triggered, implying it will go down some custom upstream control path instead of the normal path that
+///     'notify_one()' is aimed at (e.g. 'go find a task to work on'); (this marginally reduces throughput under moderate
+///     to high load)
 /// - conditional waiting is designed so a conditional waiter will never wait after its corresponding conditional notify
 ///   has been executed (i.e. after the condition has been set)
 ///   - COST: conditional waiters protect the condition setting/checking with a unique lock, so any real system WILL
@@ -332,6 +336,13 @@ public:
     {
         WAIT,
         EXIT_EARLY
+    };
+
+    enum class Result : unsigned char
+    {
+        DONE_WAITING,
+        CONDITION_TRIGGERED,
+        SHUTTING_DOWN
     };
 
 //constructors
@@ -392,7 +403,7 @@ public:
         conditional_waiter.cond_var.notify_all();
     }
 
-    bool wait(const ShutdownPolicy shutdown_policy)
+    Result wait(const ShutdownPolicy shutdown_policy)
     {
         return this->wait_impl(m_num_normal_waiters,
                 m_normal_shared_cond_var,
@@ -403,7 +414,7 @@ public:
                 shutdown_policy
             );
     }
-    bool wait_for(const std::chrono::duration &duration, const ShutdownPolicy shutdown_policy)
+    Result wait_for(const std::chrono::duration &duration, const ShutdownPolicy shutdown_policy)
     {
         return this->wait_impl(m_num_sleepy_waiters,
                 m_sleepy_shared_cond_var,
@@ -414,7 +425,7 @@ public:
                 shutdown_policy
             );
     }
-    bool wait_until(const std::time_point<std::chrono::steady_clock> &timepoint, const ShutdownPolicy shutdown_policy)
+    Result wait_until(const std::time_point<std::chrono::steady_clock> &timepoint, const ShutdownPolicy shutdown_policy)
     {
         return this->wait_impl(m_num_sleepy_waiters,
                 m_sleepy_shared_cond_var,
@@ -425,7 +436,7 @@ public:
                 shutdown_policy
             );
     }
-    bool conditional_wait(const std::uint16_t waiter_index,
+    Result conditional_wait(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
         const ShutdownPolicy shutdown_policy)
     {
@@ -438,7 +449,7 @@ public:
                 shutdown_policy
             );
     }
-    bool conditional_wait_for(const std::uint16_t waiter_index,
+    Result conditional_wait_for(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
         const std::chrono::duration &duration,
         const ShutdownPolicy shutdown_policy)
@@ -452,7 +463,7 @@ public:
                 shutdown_policy
             );
     }
-    bool conditional_wait_until(const std::uint16_t waiter_index,
+    Result conditional_wait_until(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
         const std::time_point<std::chrono::steady_clock> &timepoint,
         const ShutdownPolicy shutdown_policy)
@@ -482,6 +493,8 @@ public:
         this->notify_all();
     }
 
+    bool is_shutting_down() const { return m_shutting_down.load(std::memory_order_relaxed); }
+
 private:
     std::uint16_t clamp_waiter_index(const std::uint16_t nominal_index)
     {
@@ -490,36 +503,51 @@ private:
         return nominal_index;
     }
 
-    bool wait_impl(std::atomic<std::uint16_t> &counter,
+    Result wait_impl(std::atomic<std::uint16_t> &counter,
         std::condition_variable_any &cond_var,
         const std::function<void(boost::shared_lock<boost::shared_mutex>&, std::condition_variable_any&)> &wait_func,
         const ShutdownPolicy shutdown_policy)
     {
         boost::shared_lock<boost::shared_mutex> lock{m_shared_mutex};
-        if (shutdown_policy == ShutdownPolicy::EXIT_EARLY && m_shutting_down.load(std::memory_order_relaxed)) return true;
+
+        // pre-wait check
+        if (shutdown_policy == ShutdownPolicy::EXIT_EARLY && this->is_shutting_down()) return Result::SHUTTING_DOWN;
+
+        // wait
         counter.fetch_add(1, std::memory_order_relaxed);
         wait_func(cond_var, lock);
         counter.fetch_sub(1, std::memory_order_relaxed);
-        return m_shutting_down.load(std::memory_order_relaxed);
+
+        // post-wait check
+        if (this->is_shutting_down()) return Result::SHUTTING_DOWN;
+
+        return Result::DONE_WAITING;
     }
-    bool conditional_wait_impl(const std::uint16_t waiter_index,
+    Result conditional_wait_impl(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
         const std::function<void(std::condition_variable&, boost::shared_mutex<boost::shared_mutex>&)> &wait_func,
         const ShutdownPolicy shutdown_policy)
     {
         ConditionalWaiterContext &conditional_waiter{m_conditional_waiters[this->clamp_waiter_index(waiter_index)]};
         boost::shared_mutex<boost::shared_mutex> lock{conditional_waiter.mutex};
-        try
-        {
-            if (condition_checker_func()) return m_shutting_down.load(std::memory_order_relaxed);
-        // assume an exception in the condition checker means the condition MIGHT be set
-        } catch (...) { return m_shutting_down.load(std::memory_order_relaxed); }
-        // test the shutdown policy after checking the condition in case the condition checker has side effects
-        if (shutdown_policy == ShutdownPolicy::EXIT_EARLY && m_shutting_down.load(std::memory_order_relaxed)) return true;
+
+        // pre-wait checks
+        // note: test the shutdown policy after checking the condition in case the condition checker has side effects
+        try { if (condition_checker_func()) return Result::CONDITION_TRIGGERED; }
+        catch (...)                       { return Result::CONDITION_TRIGGERED; }
+        if (shutdown_policy == ShutdownPolicy::EXIT_EARLY && this->is_shutting_down()) return Result::SHUTTING_DOWN;
+
+        // wait
         conditional_waiter.is_waiting.fetch_add(1, std::memory_order_relaxed);
         wait_func(conditional_waiter.cond_var, lock);
         conditional_waiter.is_waiting.fetch_sub(1, std::memory_order_relaxed);
-        return m_shutting_down.load(std::memory_order_relaxed);
+
+        // post-wait checks
+        try { if (condition_checker_func()) return Result::CONDITION_TRIGGERED; }
+        catch (...)                       { return Result::CONDITION_TRIGGERED; }
+        if (this->is_shutting_down())       return Result::SHUTTING_DOWN;
+
+        return Result::DONE_WAITING;
     }
 
 //member variables
@@ -568,25 +596,23 @@ public:
 
 private:
 //member variables
-    /// threadpool status
-    std::atomic<bool> m_shutting_down{false};
+    /// config
+    const unsigned char m_max_priority_level;  //note: priority 0 is the 'highest' priority
+    const std::uint16_t m_num_queues;  //num workers + 1 for the main thread
+    const unsigned char m_num_submit_cycle_attempts;
+    const std::uint32_t m_max_queue_size;
+    const std::chrono::duration m_max_wait_duration;
 
     /// worker context
     std::vector<std::thread> m_workers;
-    boost::shared_mutex m_worker_wait_mutex;
-    std::condition_variable_any m_worker_cond_var;
-    std::chrono::duration m_max_wait_duration;
 
     /// queues
     std::vector<std::vector<TaskQueue>> m_task_queues;  //outer vector: priorities, inner vector: workers
     std::atomic<unsigned int> m_queue_submission_counter{0};
     std::vector<SleepyTaskQueue> m_sleepy_task_queues;  //vector: workers
 
-    /// config
-    const unsigned char m_num_priority_levels;  //priority 0 is the 'highest' priority
-    const std::uint16_t m_num_queues;  //num workers + 1 for the main thread
-    const unsigned char m_num_submit_cycle_attempts;
-    const std::uint32_t m_max_queue_size;
+    // waiter manager
+    WaiterManager m_waiter_manager;
 };
 
 } //namespace tools

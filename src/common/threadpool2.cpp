@@ -36,6 +36,7 @@
 #include <boost/thread/shared_mutex.hpp>
 
 //standard headers
+#include <cassert>
 #include <list>
 #include <thread>
 #include <vector>
@@ -126,25 +127,26 @@ static TaskVariant execute_task(task_t &task)
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-ThreadPool::ThreadPool(const unsigned char num_priority_levels,
+ThreadPool::ThreadPool(const unsigned char max_priority_level,
     const std::uint16_t num_managed_workers,
     const std::uint32_t max_queue_size,
     const unsigned char num_submit_cycle_attempts,
     const std::chrono::duration max_wait_duration) :
-        m_num_priority_levels{num_priority_levels},
+        m_max_priority_level{max_priority_level},
         m_num_queues{num_managed_workers + 1},  //+1 to include the threadpool owner
         m_max_queue_size{max_queue_size},
         m_num_submit_cycle_attempts{num_submit_cycle_attempts},
-        m_max_wait_duration{max_wait_duration}
+        m_max_wait_duration{max_wait_duration},
+        m_waiter_manager{m_num_queues}
 {
     // create task queues
-    m_task_queues.resize(m_num_priority_levels, std::vector<TaskQueue>(m_num_queues, TaskQueue{max_queue_size}));
+    m_task_queues.resize(m_max_priority_level + 1, std::vector<TaskQueue>(m_num_queues, TaskQueue{max_queue_size}));
 
     // create sleepy task queues
     m_sleepy_task_queues.resize(m_num_queues);
 
     // launch workers
-    // - note: we reserve worker index 0 for the threadpool owner
+    // - note: we reserve worker index 0 for the threadpool owner (and any other threads that try to use the threadpool)
     m_workers.reserve(m_num_queues - 1);
     for (std::uint16_t worker_index{1}; worker_index < m_num_queues; ++worker_index)
     {
@@ -162,12 +164,18 @@ ThreadPool::ThreadPool(const unsigned char num_priority_levels,
 //-------------------------------------------------------------------------------------------------------------------
 ThreadPool::~ThreadPool()
 {
-    // shut down the pool (at least one worker will continue running until there are no more tasks)
+    // shut down the pool
     this->shut_down();
 
     // join all workers
     for (std::thread &worker : m_workers)
         worker.join();
+
+    // clear out any tasks lingering in the pool
+    // - this can happen due to a race condition around this thread manually shutting down the threadpool and also
+    //   waiting as a worker on the pool before this destructor call
+    assert(threadpool_worker_id() == 0);
+    this->run();
 }
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::perform_sleepy_queue_maintenance()
@@ -193,7 +201,8 @@ void ThreadPool::perform_sleepy_queue_maintenance()
 TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ignore_queue_size_limit)
 {
     // spin through the simple task queues at our task's priority level
-    const unsigned char clamped_priority{clamp_priority(m_num_priority_levels, simple_task.m_priority)};
+    // - start at the task queue one-after the previous start queue as a naive/simple way to spread tasks out evenly
+    const unsigned char clamped_priority{clamp_priority(m_max_priority_level, simple_task.m_priority)};
     const std::uint16_t start_counter{m_queue_submission_counter.fetch_add(1, std::memory_order_relaxed)};
     boost::optional<std::uint16_t> full_queue_index;
 
@@ -211,7 +220,7 @@ TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ig
         // leave if submitting the task succeeded
         else if (result == TaskQueue::Result::SUCCESS)
         {
-            m_worker_cond_var.notify_one();
+            m_waiter_manager.notify_one();
             return boost::none;
         }
     }
@@ -231,7 +240,7 @@ TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ig
 
     // fallback: force insert
     m_task_queues[clamped_priority][start_counter % m_num_queues].force_push(std::move(simple_task.m_task));
-    m_worker_cond_var.notify_one();
+    m_waiter_manager.notify_one();
     return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -241,7 +250,7 @@ TaskVariant ThreadPool::submit_sleepy_task(SleepyTask task)
     set_current_time_if_undefined(task.m_wake_time.m_start_time);
 
     // initialize the status of the sleepy task
-    task.m_status.load(SleepyTaskStatus::UNCLAIMED, std::memory_order_relaxed);
+    task.m_status.store(SleepyTaskStatus::UNCLAIMED, std::memory_order_release);
 
     // if the sleepy task is awake, unwrap its internal simple task
     if (sleepy_task_is_awake(task))
@@ -291,7 +300,7 @@ boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const std::uint16
     // cycle the simple queues once, from highest to lowest priority
     task_t new_task;
 
-    for (unsigned char priority{0}; priority < m_num_priority_levels; ++priority)
+    for (unsigned char priority{0}; priority <= m_max_priority_level; ++priority)
     {
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
         {
@@ -325,11 +334,11 @@ boost::optional<task_t> ThreadPool::try_get_sleepy_task_to_run(const std::uint16
         // wait while listening
         // - when shutting down, aggressively awaken sleepy tasks (this tends to burn CPU for tasks that really
         //   do need to wait, but improves shutdown responsiveness)
-        lock.lock();
-        if (m_shutting_down.load(std::memory_order_relaxed)) sleepytask->m_wake_time = WakeTime{};
-        m_worker_cond_var.wait_until(lock, wake_time(sleepytask->m_wake_time));
-        if (m_shutting_down.load(std::memory_order_relaxed)) sleepytask->m_wake_time = WakeTime{};
-        lock.unlock();
+        const WaiterManager::Result wait_result{
+                m_waiter_manager.wait_until(wake_time(sleepytask->m_wake_time), WaiterManager::ShutdownPolicy::EXIT_EARLY)
+            };
+        if (wait_result == WaiterManager::Result::SHUTTING_DOWN)
+            sleepytask->m_wake_time = WakeTime{};
 
         // if our sleepy task is awake then we can extract its internal task
         if (sleepy_task_is_awake(*sleepytask))
@@ -342,7 +351,7 @@ boost::optional<task_t> ThreadPool::try_get_sleepy_task_to_run(const std::uint16
 
             // notify another worker in case we were woken up due to a task being submitted (which we won't be grabbing)
             // - this will spuriously wake up a worker if we woke up due to a timeout
-            m_worker_cond_var.notify_one();
+            m_waiter_manager.notify_one();
             break;
         }
 
@@ -353,7 +362,7 @@ boost::optional<task_t> ThreadPool::try_get_sleepy_task_to_run(const std::uint16
             sleepytask->m_status.store(SleepyTaskStatus::UNCLAIMED, std::memory_order_release);
 
             // notify another worker now that our sleepy task is available again
-            m_worker_cond_var.notify_one();
+            m_waiter_manager.notify_one();
             break;
         }
     }
@@ -396,13 +405,13 @@ void ThreadPool::run()
         // we failed to get a task, so wait until some other worker submits a task and notifies us
         // - we only test the shutdown condition after failing to get a task because we want the pool to continue draining
         //   tasks until it is completely empty (users should directly/manually cancel in-flight tasks if that is needed)
+        //   - due to race conditions in the waiter manager, it is possible for workers to shut down even with tasks in
+        //     the queues; however, the worker that submits a task will always be able to pick up that task and finish it
         // - we periodically wake up to check the queues in case of race conditions around task submission (submitted
         //   tasks will always be executed eventually, but may be excessively delayed if we don't wake up here)
-        lock.lock();
-        if (m_shutting_down.load(std::memory_order_relaxed))
+        if (m_waiter_manager.is_shutting_down())
             break;
-        m_worker_cond_var.wait_for(lock, m_max_wait_duration);
-        lock.unlock();
+        m_waiter_manager.wait_for(m_max_wait_duration, WaiterManager::ShutdownPolicy::EXIT_EARLY);
     }
 
     decrement_thread_callstack_depth();
@@ -418,12 +427,8 @@ void ThreadPool::work_while_waiting(
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::shut_down()
 {
-    // notify the pool workers
-    {
-        boost::unique_lock<boost::shared_mutex> lock{m_worker_wait_mutex};
-        m_shutting_down = true;
-    }
-    m_worker_cond_var.notify_all();
+    // notify anyone waiting
+    m_waiter_manager->shut_down();
 
     // shut down all the queues
     // - note(todo): currently we don't call force_pop() on the queues, so shutting them down doesn't do much for us
