@@ -45,33 +45,35 @@
 
 namespace tools
 {
-
+namespace detail
+{
 static std::thread_local std::uint16_t tl_thread_id{0};  //thread id '0' is reserved for the threadpool owner
 static std::thread_local std::uint32_t tl_thread_call_stack_depth{0};  //mainly for tracking nested splits
+} //namespace detail
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static void initialize_threadpool_worker(const std::uint16_t thread_id)
 {
-    tl_thread_id = thread_id;
+    detail::tl_thread_id = thread_id;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static std::uint16_t threadpool_worker_id()
 {
-    return tl_thread_id;
+    return detail::tl_thread_id;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static void increment_thread_callstack_depth()
 {
-    ++tl_thread_call_stack_depth;
+    ++detail::tl_thread_call_stack_depth;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static void decrement_thread_callstack_depth()
 {
-    --tl_thread_call_stack_depth;
+    --detail::tl_thread_call_stack_depth;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -80,30 +82,6 @@ static unsigned char clamp_priority(const unsigned char max_priority_level, cons
     if (priority > max_priority_level)
         return max_priority_level;
     return priority;
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static std::chrono::time_point<std::chrono::steady_clock> wake_time(const WakeTime waketime)
-{
-    return waketime.m_start_time + waketime.m_duration;
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static bool sleepy_task_is_awake(const SleepyTask &task)
-{
-    return wake_time(task.m_wake_time) <= std::chrono::steady_clock::now();
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static bool sleepy_task_is_unclaimed(const SleepyTask &task)
-{
-    return task.m_status.load(std::memory_order_acquire) == SleepyTaskStatus::UNCLAIMED;
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static bool sleepy_task_is_dead(const SleepyTask &task)
-{
-    return task.m_status.load(std::memory_order_acquire) == SleepyTaskStatus::DEAD;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -126,6 +104,41 @@ static TaskVariant execute_task(task_t &task)
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
+std::chrono::time_point<std::chrono::steady_clock> wake_time(const WakeTime waketime)
+{
+    return waketime.m_start_time + waketime.m_duration;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void unclaim_sleepy_task(SleepyTask &sleepytask_inout)
+{
+    sleepytask_inout.m_status.store(SleepyTaskStatus::UNCLAIMED, std::memory_order_release)
+}
+//-------------------------------------------------------------------------------------------------------------------
+void reserve_sleepy_task(SleepyTask &sleepytask_inout)
+{
+    sleepytask_inout.m_status.store(SleepyTaskStatus::RESERVED, std::memory_order_release)
+}
+//-------------------------------------------------------------------------------------------------------------------
+void kill_sleepy_task(SleepyTask &sleepytask_inout)
+{
+    sleepytask_inout.m_status.store(SleepyTaskStatus::DEAD, std::memory_order_release)
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool sleepy_task_is_awake(const SleepyTask &task)
+{
+    return wake_time(task.m_wake_time) <= std::chrono::steady_clock::now();
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool sleepy_task_is_unclaimed(const SleepyTask &task)
+{
+    return task.m_status.load(std::memory_order_acquire) == SleepyTaskStatus::UNCLAIMED;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool sleepy_task_is_dead(const SleepyTask &task)
+{
+    return task.m_status.load(std::memory_order_acquire) == SleepyTaskStatus::DEAD;
+}
+//-------------------------------------------------------------------------------------------------------------------
 ThreadPool::ThreadPool(const unsigned char max_priority_level,
     const std::uint16_t num_managed_workers,
     const std::uint32_t max_queue_size,
@@ -139,7 +152,7 @@ ThreadPool::ThreadPool(const unsigned char max_priority_level,
         m_waiter_manager{m_num_queues}
 {
     // create task queues
-    m_task_queues.resize(m_max_priority_level + 1, std::vector<TaskQueue>(m_num_queues, TaskQueue{max_queue_size}));
+    m_task_queues.resize(m_max_priority_level + 1, std::vector<TokenQueue>(m_num_queues, TokenQueue{max_queue_size}));
 
     // create sleepy task queues
     m_sleepy_task_queues.resize(m_num_queues);
@@ -179,21 +192,19 @@ ThreadPool::~ThreadPool()
 void ThreadPool::perform_sleepy_queue_maintenance()
 {
     // cycle through the sleepy queues once, cleaning up each queue as we go
-    std::list<SleepyTask> awakened_tasks;
     for (std::uint16_t queue_index{0}; queue_index < m_num_queues; ++queue_index)
     {
-        // remove dead tasks
+        // perform maintenance on this queue
+        std::list<SleepyTask> awakened_tasks{m_sleepy_task_queues[queue_index].try_perform_maintenance()};
 
-        // extract awakened tasks
+        // force submit the awakened sleepy tasks
+        // - note: elements at the bottom of the awakened sleepy tasks are assumed to be higher priority, so we submit
+        //   those first
+        // - note: we ignore the queue size limit so that none of our awakened tasks get stuck waiting for overflowing
+        //   queues to be dealt with
+        for (SleepyTask &task : awakened_tasks)
+            this->submit_simple_task(std::move(task).m_task, true);
     }
-
-    // force submit the awakened sleepy tasks
-    // - note: elements at the bottom of the awakened sleepy tasks are assumed to be higher priority, so we submit
-    //   those first
-    // - note: we ignore the queue size limit so that none of our awakened tasks get stuck waiting for overflowing
-    //   queues to be dealt with
-    for (SleepyTask &task : awakened_tasks)
-        this->submit_simple_task(std::move(task.m_task), true);
 }
 //-------------------------------------------------------------------------------------------------------------------
 TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ignore_queue_size_limit)
@@ -209,7 +220,7 @@ TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ig
         // try to push into the specified queue
         const std::uint16_t queue_index{(i + start_counter) % m_num_queues};
         const TaskQueue::Result result{
-                m_task_queues[clamped_priority][queue_index].try_push(std::move(simple_task.m_task))
+                m_task_queues[clamped_priority][queue_index].try_push(std::move(simple_task).m_task)
             };
 
         // if the queue is full, save its index (we always save the last confirmed-full queue's index)
@@ -231,31 +242,46 @@ TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ig
     if (!ignore_queue_size_limit && full_queue_index)
     {
         task_t next_task{
-                m_task_queues[clamped_priority][*full_queue_index].force_push_pop(std::move(simple_task.m_task))
+                m_task_queues[clamped_priority][*full_queue_index].force_push_pop(std::move(simple_task).m_task)
             };
         return execute_task(next_task);
     }
 
     // fallback: force insert
-    m_task_queues[clamped_priority][start_counter % m_num_queues].force_push(std::move(simple_task.m_task));
+    m_task_queues[clamped_priority][start_counter % m_num_queues].force_push(std::move(simple_task).m_task);
     m_waiter_manager.notify_one();
     return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
-TaskVariant ThreadPool::submit_sleepy_task(SleepyTask task)
+TaskVariant ThreadPool::submit_sleepy_task(SleepyTask sleepy_task)
 {
     // set the start time of sleepy tasks with undefined start time
-    set_current_time_if_undefined(task.m_wake_time.m_start_time);
+    set_current_time_if_undefined(sleepy_task.m_wake_time.m_start_time);
 
     // initialize the status of the sleepy task
-    task.m_status.store(SleepyTaskStatus::UNCLAIMED, std::memory_order_release);
+    unclaim_sleepy_task(sleepy_task);
 
     // if the sleepy task is awake, unwrap its internal simple task
-    if (sleepy_task_is_awake(task))
-        return std::move(task).m_task;
+    if (sleepy_task_is_awake(sleepy_task))
+        return std::move(sleepy_task).m_task;
 
-    // ..
+    // cycle the sleepy queues 
+    const std::uint16_t start_counter{m_sleepy_queue_submission_counter.fetch_add(1, std::memory_order_relaxed)};
 
+    for (std::uint32_t i{0}; i < m_num_queues * m_num_submit_cycle_attempts; ++i)
+    {
+        // try to push into a queue
+        if (!m_sleepy_task_queues[(i + start_counter) % m_num_queues].try_push(std::move(sleepy_task)))
+            continue;
+
+        // success
+        m_waiter_manager.notify_one();
+        return boost::none;
+    }
+
+    // fallback: force insert
+    m_sleepy_task_queues[start_counter % m_num_queues].force_push(std::move(sleepy_task));
+    m_waiter_manager.notify_one();
     return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -311,7 +337,14 @@ boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const std::uint16
     return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
-boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::uint16_t worker_index)
+boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::uint16_t worker_index,
+    const std::function<
+            WaiterManager::Result(
+                    const std::uint16_t,
+                    const std::time_point<std::chrono::steady_clock>&,
+                    const ShutdownPolicy
+                )
+        > &custom_wait_until)
 {
     // wait until we have an awake task while listening to the task notification system
     SleepyTask* sleepytask{nullptr};
@@ -321,7 +354,7 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::u
     {
         // try to grab a sleepy task with the lowest waketime possible
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
-            m_sleepy_task_queues[(i + worker_index) % m_num_queues].try_swap_task(sleepytask);
+            m_sleepy_task_queues[(i + worker_index) % m_num_queues].try_swap(sleepytask);
 
         // failure: no sleepy task available
         if (!sleepytask)
@@ -331,19 +364,30 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::u
         // - when shutting down, aggressively awaken sleepy tasks (this tends to burn CPU for tasks that really
         //   do need to wait, but improves shutdown responsiveness)
         const WaiterManager::Result wait_result{
-                m_waiter_manager.wait_until(wake_time(sleepytask->m_wake_time), WaiterManager::ShutdownPolicy::EXIT_EARLY)
+                custom_wait_until(worker_index,
+                    wake_time(sleepytask->m_wake_time),
+                    WaiterManager::ShutdownPolicy::EXIT_EARLY)
             };
-        if (wait_result == WaiterManager::Result::SHUTTING_DOWN)
-            sleepytask->m_wake_time = WakeTime{};
+
+        // if we stopped waiting due to a wait condition being satisfied, return our sleepy task
+        if (wait_result == WaiterManager::Result::CONDITION_TRIGGERED)
+        {
+            // release our sleepy task
+            unclaim_sleepy_task(*sleepytask);
+
+            // notify another worker now that our sleepy task is available again
+            m_waiter_manager.notify_one();
+            break;
+        }
 
         // if our sleepy task is awake then we can extract its internal task
-        if (sleepy_task_is_awake(*sleepytask))
+        if (sleepy_task_is_awake(*sleepytask) || wait_result == WaiterManager::Result::SHUTTING_DOWN)
         {
             // get the task
             final_task = std::move(*sleepytask).m_task.m_task;
 
-            // mark the sleepy task as 'dead' so it can be cleaned up
-            sleepytask->m_status.store(SleepyTaskStatus::DEAD, std::memory_order_release);
+            // kill the sleepy task so it can be cleaned up
+            kill_sleepy_task(*sleepytask);
 
             // if we finished waiting due to something other than a timeout, notify another worker
             // - ending waiting due to a notification means there is another task in the pool that can be worked on, but
@@ -358,8 +402,8 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::u
         // try to replace our sleepy task with a simple task
         if (final_task = try_get_simple_task_to_run(worker_index))
         {
-            // 'return' our sleepy task to its queue
-            sleepytask->m_status.store(SleepyTaskStatus::UNCLAIMED, std::memory_order_release);
+            // release our sleepy task
+            unclaim_sleepy_task(*sleepytask);
 
             // notify another worker now that our sleepy task is available again
             m_waiter_manager.notify_one();
@@ -370,14 +414,21 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::u
     return final_task;
 }
 //-------------------------------------------------------------------------------------------------------------------
-boost::optional<task_t> ThreadPool::try_get_task_to_run(const std::uint16_t worker_index)
+boost::optional<task_t> ThreadPool::try_get_task_to_run(const std::uint16_t worker_index,
+    const std::function<
+            WaiterManager::Result(
+                    const std::uint16_t,
+                    const std::time_point<std::chrono::steady_clock>&,
+                    const ShutdownPolicy
+                )
+        > &custom_wait_until)
 {
     // try to find a simple task
     if (auto task = try_get_simple_task_to_run(worker_index))
         return task;
 
     // try to wait on a sleepy task
-    if (auto task = try_wait_for_sleepy_task_to_run(worker_index))
+    if (auto task = try_wait_for_sleepy_task_to_run(worker_index, custom_wait_until))
         return task;
 
     // failure
@@ -390,20 +441,40 @@ void ThreadPool::run()
 
     const std::uint16_t worker_id{threadpool_worker_id()};
 
+    // prepare custom wait-until function
+    std::function<
+            WaiterManager::Result(
+                    const std::uint16_t,
+                    const std::time_point<std::chrono::steady_clock>&,
+                    const ShutdownPolicy
+                )
+        > custom_wait_until{
+            [&m_waiter_manager]
+            (
+                const std::uint16_t,
+                const std::time_point<std::chrono::steady_clock> &timepoint,
+                const ShutdownPolicy shutdown_policy
+            ) mutable -> WaiterManager::Result
+            {
+                return m_waiter_manager.wait_until(timepoint, shutdown_policy);
+            }
+        };
+
     while (true)
     {
         // try to get the next task, then run it and immediately submit its continuation
         // - note: we don't immediately run task continuations because we want to always be pulling tasks from
         //   the bottom of the task pile
-        if (auto task = this->try_get_task_to_run(worker_id))
+        if (auto task = this->try_get_task_to_run(worker_id, custom_wait_until))
         {
             this->submit(execute_task(*task));
             continue;
         }
 
         // we failed to get a task, so wait until some other worker submits a task and notifies us
-        // - we only test the shutdown condition after failing to get a task because we want the pool to continue draining
-        //   tasks until it is completely empty (users should directly/manually cancel in-flight tasks if that is needed)
+        // - we only test the shutdown condition immediately after failing to get a task because we want the pool to
+        //   continue draining tasks until it is completely empty (users should directly/manually cancel in-flight tasks
+        //   if that is needed)
         //   - due to race conditions in the waiter manager, it is possible for workers to shut down even with tasks in
         //     the queues; typically, the worker that submits a task will be able to pick up that task and finish it, but
         //     as a fall-back the thread that destroys the threadpool will purge the pool of all tasks
@@ -417,26 +488,67 @@ void ThreadPool::run()
     decrement_thread_callstack_depth();
 }
 //-------------------------------------------------------------------------------------------------------------------
-void ThreadPool::work_while_waiting(
-    std::function<bool(const std::chrono::time_point<std::chrono::steady_clock>)> wait_condition)
+void ThreadPool::work_while_waiting(std::function<bool()> wait_condition)
 {
     //todo: this function must only be called by the thread that owns the threadpool or by one of the threadpool's workers
     //work until the wait condition returns true
     //todo: use shared_ptr<atomic<bool>> for the signaling channel so it can be copied into a std::function
+    increment_thread_callstack_depth();
+
+    const std::uint16_t worker_id{threadpool_worker_id()};
+
+    // prepare custom wait-until function
+    std::function<
+            WaiterManager::Result(
+                    const std::uint16_t,
+                    const std::time_point<std::chrono::steady_clock>&,
+                    const ShutdownPolicy
+                )
+        > custom_wait_until{
+            [&m_waiter_manager, &wait_condition]
+            (
+                const std::uint16_t worker_id,
+                const std::time_point<std::chrono::steady_clock> &timepoint,
+                const ShutdownPolicy shutdown_policy
+            ) mutable -> WaiterManager::Result
+            {
+                return m_waiter_manager.conditional_wait_until(worker_id,
+                    wait_condition,
+                    timepoint,
+                    shutdown_policy);
+            }
+        };
+
+    // work until the wait condition is satisfied
+    while (wait_condition())
+    {
+        // try to get the next task, then run it and immediately submit its continuation
+        if (auto task = this->try_get_task_to_run(worker_id, custom_wait_until))
+        {
+            this->submit(execute_task(*task));
+            continue;
+        }
+
+        // we failed to get a task, so wait until the condition is satisfied
+        const WaiterManager::Result wait_result{
+                m_waiter_manager.conditional_wait_for(worker_id,
+                    wait_condition,
+                    m_max_wait_duration,
+                    WaiterManager::ShutdownPolicy::WAIT)
+            };
+
+        // exist immediately if the condition was triggered (don't re-test it)
+        if (wait_result == WaiterManager::Result::CONDITION_TRIGGERED)
+            break;
+    }
+
+    decrement_thread_callstack_depth();
 }
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::shut_down()
 {
     // shut down the waiter manager, which should notify any waiting workers
     m_waiter_manager->shut_down();
-
-    // shut down all the queues
-    // - note(todo): currently we don't call force_pop() on the queues, so shutting them down doesn't do much for us
-    for (auto &priority_queues : m_task_queues)
-    {
-        for (TaskQueue &queue : priority_queues)
-            queue.shut_down();
-    }
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace tools

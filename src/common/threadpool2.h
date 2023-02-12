@@ -32,6 +32,7 @@
 #include "variant.h"
 
 //third-party headers
+#include <boost/container/map.hpp>
 #include <boost/optional/optional.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
@@ -65,6 +66,9 @@ struct WakeTime final
     std::chrono::duration m_duration{0};
 };
 
+//todo
+std::chrono::time_point<std::chrono::steady_clock> wake_time(const WakeTime waketime);
+
 /// possible statuses of a sleepy task in a sleepy queue
 enum class SleepyTaskStatus : unsigned char
 {
@@ -80,7 +84,6 @@ enum class SleepyTaskStatus : unsigned char
 struct SimpleTask;
 struct SleepyTask;
 struct ScopedNotification;
-class WaiterManager;
 
 /// task
 //todo: std::packaged_task is inefficient, all we need is std::move_only_function (C++23)
@@ -99,8 +102,16 @@ struct SleepyTask final
 {
     SimpleTask m_task;
     WakeTime m_wake_time;
-    std::atomic<SleepyTaskStatus> m_status;
+    std::atomic<SleepyTaskStatus> m_status{SleepyTaskStatus::UNCLAIMED};
 };
+
+//todo
+void unclaim_sleepy_task(SleepyTask &sleepytask_inout);
+void reserve_sleepy_task(SleepyTask &sleepytask_inout);
+void kill_sleepy_task(SleepyTask &sleepytask_inout);
+bool sleepy_task_is_awake(const SleepyTask &task);
+bool sleepy_task_is_unclaimed(const SleepyTask &task);
+bool sleepy_task_is_dead(const SleepyTask &task)
 
 /// scoped notification (notifies on destruction)
 /// - only use this if you can GUARANTEE the lifetimes of any references in the notification function are longer
@@ -173,8 +184,10 @@ SleepyTask make_sleepy_task(const unsigned char priority, const WakeTime &waketi
 }
 
 
-/// task queue
-class TaskQueue final
+/// token queue
+/// - does not include a force_pop() method
+template <typename TokenT>
+class TokenQueue final
 {
 public:
 //member types
@@ -183,63 +196,56 @@ public:
         SUCCESS,
         QUEUE_FULL,
         QUEUE_EMPTY,
-        TRY_LOCK_FAIL,
-        SHUTTING_DOWN
+        TRY_LOCK_FAIL
     };
 
 //constructors
-    TaskQueue(const std::uint32_t max_queue_size) : m_max_queue_size{max_queue_size}
+    TokenQueue(const std::uint32_t max_queue_size) : m_max_queue_size{max_queue_size}
     {}
 
 //member functions
     /// try to add an element to the top
-    template <typename F>
-    Result try_push(F &&new_task_function)
+    template <typename T>
+    Result try_push(T &&new_element)
     {
-        {
-            std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
-            if (!lock.owns_lock())
-                return Result::TRY_LOCK_FAIL;
-            if (m_queue.size() >= m_max_queue_size)
-                return Result::QUEUE_FULL;
+        std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+        if (!lock.owns_lock())
+            return Result::TRY_LOCK_FAIL;
+        if (m_queue.size() >= m_max_queue_size)
+            return Result::QUEUE_FULL;
 
-            m_queue.emplace_back(std::forward<F>(new_task_function));
-        }
-        m_cond_var.notify_one();
+        m_queue.emplace_back(std::forward<T>(new_element));
         return Result::SUCCESS;
     }
     /// add an element to the top (always succeeds)
-    template <typename F>
-    void force_push(F &&new_task_function)
+    template <typename T>
+    void force_push(T &&new_element)
     {
-        {
-            std::lock_guard<std::mutex> lock{m_mutex};
-            m_queue.emplace_back(std::forward<F>(new_task_function));
-        }
-        m_cond_var.notify_one();
+        std::lock_guard<std::mutex> lock{m_mutex};
+        m_queue.emplace_back(std::forward<T>(new_element));
     }
 
     /// add an element to the top (always succeeds), then pop the element at the bottom
-    template <typename F>
-    task_t force_push_pop(F &&new_task_function)
+    template <typename T>
+    TokenT force_push_pop(T &&new_element)
     {
         std::lock_guard<std::mutex> lock{m_mutex};
 
         // special case
         if (m_queue.size() == 0)
-            return std::forward<F>(new_task_function);
+            return std::forward<T>(new_element);
 
         // push back
-        m_queue.emplace_back(std::forward<F>(new_task_function));
+        m_queue.emplace_back(std::forward<T>(new_element));
 
         // pop front
-        task_t temp_task = std::move(m_queue.front());
+        TokenT temp_token = std::move(m_queue.front());
         m_queue.pop_front();
-        return temp_task;
+        return temp_token;
     }
 
     /// try to remove an element from the bottom
-    Result try_pop(task_t &task_out)
+    Result try_pop(TokenT &token_out)
     {
         // try to lock the queue, then check if there are any elements
         std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
@@ -249,55 +255,145 @@ public:
             return Result::QUEUE_EMPTY;
 
         // pop the bottom element
-        task_out = std::move(m_queue.front());
+        token_out = std::move(m_queue.front());
         m_queue.pop_front();
         return Result::SUCCESS;
-    }
-    /// remove an element from the bottom (wait until an element is available unless shutting down)
-    Result force_pop(task_t &task_out)
-    {
-        // wait until the queue has an element or the pool is shutting down
-        std::lock_guard<std::mutex> lock{m_mutex};
-        while (m_queue.size() == 0 && !m_shutting_down)
-            m_cond_var.wait(lock);
-
-        if (m_queue.size() == 0)
-            return Result::SHUTTING_DOWN;
-
-        // pop the bottom element
-        task_out = std::move(m_queue.front());
-        m_queue.pop_front();
-        return Result::SUCCESS;
-    }
-
-    /// shut down the queue
-    void shut_down()
-    {
-        {
-            std::lock_guard<std::mutex> lock{m_mutex};
-            m_shutting_down = true;
-        }
-        m_cond_var.notify_all();
     }
 
 private:
 //member variables
-    /// queue status
-    bool m_shutting_down;
-
     /// queue context
-    std::queue<task_t> m_queue;
+    std::queue<TokenT> m_queue;
     std::mutex m_mutex;
-    std::condition_variable m_cond_var;
 
     /// config
     const std::uint32_t m_max_queue_size;
 };
 
 
+/// - PRECONDITION: a user of a sleepy task queue with a pointer/reference to a task in that queue should ONLY change
+///   the task's status from RESERVED to UNCLAIMED/DEAD (and not any other direction)
+///   - once a RESERVED task's status has been changed, the user should assume they no longer have valid access to the
+///     task
+///   - only change a task's status from RESERVED -> UNCLAIMED if its contents will be left in a valid state after the
+///     change (e.g. the internal task shouldn't be in a moved-from state)
 class SleepyTaskQueue final
 {
-    //todo
+public:
+//member functions
+    /// force push a sleepy task into the queue
+    void force_push(SleepyTask &&task)
+    {
+        std::lock_guard<std::mutex> lock{m_mutex};
+        m_queue.insert({wake_time(task.m_wake_time).duration().count(), std::forward<SleepyTask>(task)});
+        return true;
+    }
+    /// try to push a sleepy task into the queue
+    bool try_push(SleepyTask &&task)
+    {
+        std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+        if (!lock.owns_lock())
+            return false;
+        m_queue.insert({wake_time(task.m_wake_time).duration().count(), std::forward<SleepyTask>(task)});
+        return true;
+    }
+
+    /// try to swap an existing sleepy task with a task that wakes up sooner
+    /// - this function does not add/remove elements from the queue; instead, it simply adjusts task statuses then
+    ///   swaps pointers
+    /// - if 'task_inout == nullptr', then we set it to the unclaimed task with the lowest waketime
+    bool try_swap(SleepyTask* &task_inout)
+    {
+        // initialize the current task's waketime (set to max if there is no task)
+        auto current_task_waketime_count = 
+            task_inout
+            ? wake_time(task_inout->m_wake_time).duration().count()
+            : std::chrono::time_point<std::chrono::steady_clock>::max().duration().count();
+
+        // lock the queue
+        std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+        if (!lock.owns_lock())
+            return false;
+
+        // try to find an unclaimed task that wakes up sooner than our input task
+        for (auto &candidate_task : m_queue)
+        {
+            const SleepyTaskStatus candidate_status{candidate_task.second.m_status.load(std::memory_order_acquire)};
+
+            // skip reserved and dead tasks
+            if (candidate_status == SleepyTaskStatus::RESERVED ||
+                candidate_status == SleepyTaskStatus::DEAD)
+                continue;
+
+            // give up: the first unclaimed task does not wake up sooner than our input task
+            if (current_task_waketime_count <= candidate_task.first)
+                return false;
+
+            // success
+            // a. release our input task if we have one
+            if (task_inout)
+                unclaim_sleepy_task(*task_inout);
+
+            // b. acquire this candidate
+            task_inout = &(candidate_task.first);
+            reserve_sleepy_task(*task_inout);
+            return true;
+        }
+
+        return false;
+    }
+
+    std::list<SleepyTask> try_perform_maintenance()
+    {
+        // current time
+        auto now_count = std::chrono::steady_clock::now().duration().count();
+
+        // lock the queue
+        std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+        if (!lock.owns_lock())
+            return {};
+
+        // delete dead tasks and extract awake tasks until the lowest sleeping unclaimed task is encountered
+        std::list<SleepyTask> awakened_tasks;
+
+        for (auto queue_it = m_queue.begin(); queue_it != m_queue.end();)
+        {
+            const SleepyTaskStatus task_status{queue_it->second.m_status.load(std::memory_order_acquire)};
+
+            // skip reserved tasks
+            if (task_status == SleepyTaskStatus::RESERVED)
+            {
+                ++queue_it;
+                continue;
+            }
+
+            // delete dead tasks
+            if (task_status == SleepyTaskStatus::DEAD)
+            {
+                queue_it = m_queue.erase(queue_it);
+                continue;
+            }
+
+            // extract awake unclaimed tasks
+            if (queue_it->first <= now_count)
+            {
+                awakened_tasks.emplace_back(std::move(queue_it->second));
+                queue_it = m_queue.erase(queue_it);
+                continue;
+            }
+
+            // exit when we found an asleep unclaimed task
+            break;
+        }
+
+        return awakened_tasks;
+    }
+
+private:
+//member variables
+    /// queue context (sorted by waketime)
+    boost::multimap<std::chrono::time_point<std::chrono::steady_clock>::rep, SleepyTask> m_queue;
+    std::mutex m_mutex;
 };
 
 
@@ -621,8 +717,8 @@ private:
     std::vector<std::thread> m_workers;
 
     /// queues
-    std::vector<std::vector<TaskQueue>> m_task_queues;  //outer vector: priorities, inner vector: workers
-    std::vector<SleepyTaskQueue> m_sleepy_task_queues;  //vector: workers
+    std::vector<std::vector<TokenQueue>> m_task_queues;  //outer vector: priorities, inner vector: workers
+    std::vector<SleepyTokenQueue> m_sleepy_task_queues;   //vector: workers
     std::atomic<std::uint16_t> m_normal_queue_submission_counter{0};
     std::atomic<std::uint16_t> m_sleepy_queue_submission_counter{0};
 
