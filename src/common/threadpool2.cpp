@@ -295,8 +295,10 @@ void ThreadPool::submit(TaskVariant task)
     //   long continuation chains (only a very long series of task splits should cause a blow-out)
     do
     {
+        // case: empty task
+        if (!task) ; //do nothing
         // case: simple task
-        if (SimpleTask *simpletask = task.try_unwrap<SimpleTask>())
+        else if (SimpleTask *simpletask = task.try_unwrap<SimpleTask>())
             task = this->submit_simple_task(std::move(*simpletask), false);
         // case: sleepy task
         else if (SleepyTask *sleepytask = task.try_unwrap<SleepyTask>())
@@ -305,11 +307,9 @@ void ThreadPool::submit(TaskVariant task)
         // - we break here since a notification is simply a marker on the end of a task chain, and we don't want to
         //   perform sleepy queue maintenance excessively
         else if (task.try_unwrap<ScopedNotification>())
-            break;  //destroy the notification at function exit to send it
-        // case: empty task
-        //do nothing
+            break;  //the notification is sent at function exit when the task gets destroyed
 
-        // maintain the sleepy queue
+        // maintain the sleepy queues
         this->perform_sleepy_queue_maintenance();
     } while (task);
 
@@ -451,12 +451,12 @@ void ThreadPool::run()
         > custom_wait_until{
             [&m_waiter_manager]
             (
-                const std::uint16_t,
+                const std::uint16_t worker_id,
                 const std::time_point<std::chrono::steady_clock> &timepoint,
                 const ShutdownPolicy shutdown_policy
             ) mutable -> WaiterManager::Result
             {
-                return m_waiter_manager.wait_until(timepoint, shutdown_policy);
+                return m_waiter_manager.wait_until(worker_id, timepoint, shutdown_policy);
             }
         };
 
@@ -482,13 +482,76 @@ void ThreadPool::run()
         //   tasks will always be executed eventually, but may be excessively delayed if we don't wake up here)
         if (m_waiter_manager.is_shutting_down())
             break;
-        m_waiter_manager.wait_for(m_max_wait_duration, WaiterManager::ShutdownPolicy::EXIT_EARLY);
+        m_waiter_manager.wait_for(worker_id, m_max_wait_duration, WaiterManager::ShutdownPolicy::EXIT_EARLY);
     }
 
     decrement_thread_callstack_depth();
 }
 //-------------------------------------------------------------------------------------------------------------------
-void ThreadPool::work_while_waiting(std::function<bool()> wait_condition)
+void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::steady_clock> &deadline)
+{
+    //todo: this function must only be called by the thread that owns the threadpool or by one of the threadpool's workers
+    //work until the deadline is reached
+    increment_thread_callstack_depth();
+
+    const std::uint16_t worker_id{threadpool_worker_id()};
+
+    // prepare custom wait-until function
+    std::function<
+            WaiterManager::Result(
+                    const std::uint16_t,
+                    const std::time_point<std::chrono::steady_clock>&,
+                    const ShutdownPolicy
+                )
+        > custom_wait_until{
+            [&m_waiter_manager, &deadline]
+            (
+                const std::uint16_t worker_id,
+                const std::time_point<std::chrono::steady_clock> &timepoint,
+                const ShutdownPolicy shutdown_policy
+            ) mutable -> WaiterManager::Result
+            {
+                const WaiterManager::Result wait_result{
+                        m_waiter_manager.wait_until(worker_id,
+                            wait_condition,
+                            timepoint < deadline ? timepoint : deadline,  //don't wait longer than the deadline
+                            shutdown_policy)
+                    };
+
+                // treat the deadline as a condition
+                if (std::chrono::steady_clock::now() >= deadline)
+                    return WaiterManager::Result::CONDITION_TRIGGERED;
+                return wait_result;
+            }
+        };
+
+    // work until the deadline
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        // try to get the next task, then run it and immediately submit its continuation
+        if (auto task = this->try_get_task_to_run(worker_id, custom_wait_until))
+        {
+            this->submit(execute_task(*task));
+            continue;
+        }
+
+        // we failed to get a task, so wait until the deadline
+        const WaiterManager::Result wait_result{
+                m_waiter_manager.conditional_wait_for(worker_id,
+                    wait_condition,
+                    m_max_wait_duration,
+                    WaiterManager::ShutdownPolicy::WAIT)
+            };
+
+        // exit immediately if the deadline condition was triggered (don't re-test it)
+        if (wait_result == WaiterManager::Result::CONDITION_TRIGGERED)
+            break;
+    }
+
+    decrement_thread_callstack_depth();
+}
+//-------------------------------------------------------------------------------------------------------------------
+void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition)
 {
     //todo: this function must only be called by the thread that owns the threadpool or by one of the threadpool's workers
     //work until the wait condition returns true
@@ -537,7 +600,7 @@ void ThreadPool::work_while_waiting(std::function<bool()> wait_condition)
                     WaiterManager::ShutdownPolicy::WAIT)
             };
 
-        // exist immediately if the condition was triggered (don't re-test it)
+        // exit immediately if the condition was triggered (don't re-test it)
         if (wait_result == WaiterManager::Result::CONDITION_TRIGGERED)
             break;
     }
