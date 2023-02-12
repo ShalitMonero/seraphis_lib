@@ -184,8 +184,8 @@ SleepyTask make_sleepy_task(const unsigned char priority, const WakeTime &waketi
 }
 
 
-/// token queue
-/// - does not include a force_pop() method
+/// async token queue
+/// - does not include a force_pop() method for simplicity
 template <typename TokenT>
 class TokenQueue final
 {
