@@ -301,7 +301,9 @@ public:
     /// - this function does not add/remove elements from the queue; instead, it simply adjusts task statuses then
     ///   swaps pointers
     /// - if 'task_inout == nullptr', then we set it to the unclaimed task with the lowest waketime
-    bool try_swap(SleepyTask* &task_inout)
+    /// - the cost of this function may be higher than expected if there are many tasks with higher priority than our
+    ///   allowed max
+    bool try_swap(const unsigned char max_task_priority, SleepyTask* &task_inout)
     {
         // initialize the current task's waketime (set to max if there is no task)
         auto current_task_waketime_count = 
@@ -322,6 +324,10 @@ public:
             // skip reserved and dead tasks
             if (candidate_status == SleepyTaskStatus::RESERVED ||
                 candidate_status == SleepyTaskStatus::DEAD)
+                continue;
+
+            // skip tasks with too-high priority
+            if (candidate_task.second.m_task.m_priority < max_task_priority)
                 continue;
 
             // give up: the first unclaimed task does not wake up sooner than our input task
@@ -428,17 +434,18 @@ class WaiterManager final
         return nominal_index;
     }
 
+    /// wait
+    /// - note: the order of result checks is intentional based on their assumed importance to the caller
     Result wait_impl(std::mutex &mutex_inout,
         std::condition_variable &condvar_inout,
         std::atomic<std::uint16_t> &counter_inout,
         const std::function<bool()> &condition_checker_func,
-        const std::function<std::cv_status(std::condition_variable&, std::lock_guard<std::mutex>&)> &wait_func,
+        const std::function<std::cv_status(std::condition_variable&, std::unique_lock<std::mutex>&)> &wait_func,
         const ShutdownPolicy shutdown_policy)
     {
-        std::lock_guard<std::mutex> lock{mutex_inout};
+        std::unique_lock<std::mutex> lock{mutex_inout};
 
         // pre-wait checks
-        // note: test the shutdown policy after checking the condition in case the condition checker has side effects
         if (condition_checker_func)
         {
             try { if (condition_checker_func()) return Result::CONDITION_TRIGGERED; }
@@ -453,7 +460,6 @@ class WaiterManager final
         counter_inout.fetch_sub(1, std::memory_order_relaxed);
 
         // post-wait checks
-        // - note: the order of these checks is intentional based on their assumed importance to the caller
         if (condition_checker_func)
         {
             try { if (condition_checker_func()) return Result::CONDITION_TRIGGERED; }
@@ -532,7 +538,7 @@ public:
         const std::uint16_t clamped_waiter_index{this->clamp_waiter_index(waiter_index)};
         if (condition_setter_func) try { condition_setter_func(); } catch (...) {}
         // tap the mutex here to synchronize with conditional waiters
-        { std::lock_guard<std::mutex> lock{m_waiter_mutexes[clamped_waiter_index]} };
+        { const std::lock_guard<std::mutex> lock{m_waiter_mutexes[clamped_waiter_index]}; };
         // notify all because if there are multiple threads waiting on this index (not recommended, but possible),
         //   we don't know which one actually cares about this condition function
         m_conditional_waiters[clamped_waiter_index].cond_var.notify_all();
@@ -544,7 +550,7 @@ public:
                 m_normal_shared_cond_var,
                 m_num_normal_waiters,
                 nullptr,
-                [](std::condition_variable &cv_inout, std::lock_guard<std::mutex> &lock) -> std::cv_status
+                [](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock) -> std::cv_status
                 {
                     cv_inout.wait(lock);
                     return std::cv_status::no_timeout;
@@ -560,7 +566,7 @@ public:
                 m_sleepy_shared_cond_var,
                 m_num_sleepy_waiters,
                 nullptr,
-                [&duration](std::condition_variable &cv_inout, std::lock_guard<std::mutex> &lock_inout) -> std::cv_status
+                [&duration](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
                 {
                     return cv_inout.wait_for(lock_inout, duration);
                 },
@@ -575,7 +581,7 @@ public:
                 m_sleepy_shared_cond_var,
                 m_num_sleepy_waiters,
                 nullptr,
-                [&timepoint](std::condition_variable &cv_inout, std::lock_guard<std::mutex> &lock_inout) -> std::cv_status
+                [&timepoint](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
                 {
                     return cv_inout.wait_until(lock_inout, timepoint);
                 },
@@ -591,7 +597,7 @@ public:
                 m_conditional_waiters[clamped_waiter_index].cond_var,
                 m_conditional_waiters[clamped_waiter_index].num_waiting,
                 condition_checker_func,
-                [](std::condition_variable &cv_inout, std::lock_guard<std::mutex> &lock_inout) -> std::cv_status
+                [](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
                 {
                     cv_inout.wait(lock_inout);
                     return std::cv_status::no_timeout;
@@ -609,7 +615,7 @@ public:
                 m_conditional_waiters[clamped_waiter_index].cond_var,
                 m_conditional_waiters[clamped_waiter_index].num_waiting,
                 condition_checker_func,
-                [&duration](std::condition_variable &cv_inout, std::lock_guard<std::mutex> &lock_inout) -> std::cv_status
+                [&duration](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
                 {
                     return cv_inout.wait_for(lock_inout, duration);
                 },
@@ -626,7 +632,7 @@ public:
                 m_conditional_waiters[clamped_waiter_index].cond_var,
                 m_conditional_waiters[clamped_waiter_index].num_waiting,
                 condition_checker_func,
-                [&timepoint](std::condition_variable &cv_inout, std::lock_guard<std::mutex> &lock_inout) -> std::cv_status
+                [&timepoint](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
                 {
                     return cv_inout.wait_until(lock_inout, timepoint);
                 },
@@ -641,7 +647,7 @@ public:
 
         // tap all the mutexes to synchronize with waiters
         for (std::mutex &mutex : m_waiter_mutexes)
-            std::lock_guard<std::mutex> lock{mutex};
+            const std::lock_guard<std::mutex> lock{mutex};
 
         // notify all waiters
         this->notify_all();
@@ -697,9 +703,15 @@ public:
     /// shut down the threadpool
     void shut_down();
 
+    /// id of this threadpool
+    std::uint64_t threadpool_id() const { return m_threadpool_id; }
+    std::uint64_t threadpool_owner_id() const { return m_threadpool_owner_id; }
+
 private:
 //member variables
     /// config
+    const std::uint64_t m_threadpool_id;  //unique identifier for this threadpool
+    const std::uint64_t m_threadpool_owner_id;  //unique identifier for the thread that owns this threadpool
     const unsigned char m_max_priority_level;  //note: priority 0 is the 'highest' priority
     const std::uint16_t m_num_queues;  //num workers + 1 for the main thread
     const unsigned char m_num_submit_cycle_attempts;

@@ -45,35 +45,61 @@
 
 namespace tools
 {
-namespace detail
-{
-static std::thread_local std::uint16_t tl_thread_id{0};  //thread id '0' is reserved for the threadpool owner
-static std::thread_local std::uint32_t tl_thread_call_stack_depth{0};  //mainly for tracking nested splits
-} //namespace detail
+// start at 1 so each thread's default context id does not match any actual context
+static std::atomic<std::uint64_t> s_context_id_counter{1};
+static std::thread_local std::uint64_t tl_context_id{0};  //context this thread is attached to
+static std::thread_local std::uint16_t tl_worker_id{0};   //this thread's id within its context
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void initialize_threadpool_worker(const std::uint16_t thread_id)
+static std::uint64_t initialize_threadpool_owner()
 {
-    detail::tl_thread_id = thread_id;
+    assert(tl_worker_id == 0);  //only threads with id = 0 may own threadpools
+
+    // the first time this function is called, initialize with a unique threadpool id
+    // - a threadpool owner gets its own unique threadpool id to facilitate owning multiple threadpools with
+    //   overlapping lifetimes
+    static const std::uint64_t id{
+            [&s_context_id_counter, &tl_context_id]()
+            {
+                tl_context_id = s_context_id_counter.fetch_add(1, std::memory_order_relaxed);
+                return tl_context_id;
+            }()
+        };
+
+    return id;
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void initialize_threadpool_worker_thread(const std::uint64_t threadpool_id, const std::uint16_t worker_id)
+{
+    assert(tl_context_id == 0);  //only threads without a context may be subthreads of a threadpool
+    assert(worker_id > 0);  //id 0 is reserved for pool owners
+    tl_context_id = threadpool_id;
+    tl_worker_id  = worker_id;
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static std::uint16_t thread_context_id()
+{
+    return tl_context_id;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static std::uint16_t threadpool_worker_id()
 {
-    return detail::tl_thread_id;
+    return tl_worker_id;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void increment_thread_callstack_depth()
+static bool test_threadpool_member_invariants(const std::uint64_t threadpool_id, const std::uint64_t owner_id)
 {
-    ++detail::tl_thread_call_stack_depth;
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static void decrement_thread_callstack_depth()
-{
-    --detail::tl_thread_call_stack_depth;
+    // if this thread owns the threadpool, its worker id should be 0
+    if (owner_id == thread_context_id())
+        return threadpool_worker_id() == 0;
+
+    // if this thread doesn't own the threadpool, it should be a subthread of the pool
+    return (threadpool_id == thread_context_id()) && (threadpool_worker_id() > 0);
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -96,9 +122,7 @@ static void set_current_time_if_undefined(std::chrono::time_point<std::chrono::s
 static TaskVariant execute_task(task_t &task)
 {
     std::future<TaskVariant> result{task.get_future()};
-    increment_thread_callstack_depth();
     task();
-    decrement_thread_callstack_depth();
     try { return result.get(); } catch (...) {}
     return boost::none;
 }
@@ -144,6 +168,8 @@ ThreadPool::ThreadPool(const unsigned char max_priority_level,
     const std::uint32_t max_queue_size,
     const unsigned char num_submit_cycle_attempts,
     const std::chrono::duration max_wait_duration) :
+        m_threadpool_id{s_context_id_counter.fetch_add(1, std::memory_order_relaxed)},
+        m_threadpool_owner_id{initialize_threadpool_owner()},
         m_max_priority_level{max_priority_level},
         m_num_queues{num_managed_workers + 1},  //+1 to include the threadpool owner
         m_max_queue_size{max_queue_size},
@@ -158,35 +184,41 @@ ThreadPool::ThreadPool(const unsigned char max_priority_level,
     m_sleepy_task_queues.resize(m_num_queues);
 
     // launch workers
-    // - note: we reserve worker index 0 for the threadpool owner (and any other threads that try to use the threadpool)
+    // - note: we reserve worker index 0 for the threadpool owner
     m_workers.reserve(m_num_queues - 1);
     for (std::uint16_t worker_index{1}; worker_index < m_num_queues; ++worker_index)
     {
-        m_workers.emplace_back(
-                [this, worker_index]()
-                {
-                    increment_thread_callstack_depth();
-                    initialize_threadpool_worker(worker_index);
-                    this->run();
-                    decrement_thread_callstack_depth();
-                }
-            );
+        try
+        {
+            m_workers.emplace_back(
+                    [this, worker_index]() mutable
+                    {
+                        initialize_threadpool_worker_thread(this->threadpool_id(), worker_index);
+                        try { this->run(); } catch (...) { /* can't do anything */ }
+                    }
+                );
+        }
+        catch (...) { /* can't do anything */ }
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
 ThreadPool::~ThreadPool()
 {
-    assert(threadpool_worker_id() == 0);
+    assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
+    assert(thread_context_id() == m_threadpool_owner_id);  //only the owner may destroy the object
 
     // shut down the pool
     this->shut_down();
 
     // join all workers
     for (std::thread &worker : m_workers)
-        worker.join();
+        try { worker.join(); } catch (...) {}
 
     // clear out any tasks lingering in the pool
     this->run();
+
+    // free this thread so it can potentially own another threadpool
+    free_thread_pool_id();
 }
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::perform_sleepy_queue_maintenance()
@@ -195,7 +227,9 @@ void ThreadPool::perform_sleepy_queue_maintenance()
     for (std::uint16_t queue_index{0}; queue_index < m_num_queues; ++queue_index)
     {
         // perform maintenance on this queue
-        std::list<SleepyTask> awakened_tasks{m_sleepy_task_queues[queue_index].try_perform_maintenance()};
+        std::list<SleepyTask> awakened_tasks{
+                m_sleepy_task_queues[queue_index].try_perform_maintenance()
+            };
 
         // force submit the awakened sleepy tasks
         // - note: elements at the bottom of the awakened sleepy tasks are assumed to be higher priority, so we submit
@@ -287,7 +321,7 @@ TaskVariant ThreadPool::submit_sleepy_task(SleepyTask sleepy_task)
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::submit(TaskVariant task)
 {
-    increment_thread_callstack_depth();
+    assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
 
     // submit tasks until no more are returned
     // - we use a submission loop for handling the continuations of tasks that get executed within the submission code
@@ -312,18 +346,21 @@ void ThreadPool::submit(TaskVariant task)
         // maintain the sleepy queues
         this->perform_sleepy_queue_maintenance();
     } while (task);
-
-    decrement_thread_callstack_depth();
 }
 //-------------------------------------------------------------------------------------------------------------------
-boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const std::uint16_t worker_index)
+boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const unsigned char max_task_priority,
+    const std::uint16_t worker_index)
 {
-    // cycle the simple queues once, from highest to lowest priority
+    // cycle the simple queues once, from highest to lowest priority (starting at the specified max task priority)
     // - note: priority '0' is the highest priority so if the threadpool user adds a priority level, all their highest
     //   priority tasks will remain highest priority until they manually change them
+    // - note: we include a 'max task priority' so a worker can choose to only work on low-priority tasks (useful for
+    //   purging the queue when you have multiple contending high-priority self-extending task loops)
     task_t new_task;
 
-    for (unsigned char priority{0}; priority <= m_max_priority_level; ++priority)
+    for (unsigned char priority{clamp_priority(m_max_priority_level, max_task_priority)};
+        priority <= m_max_priority_level;
+        ++priority)
     {
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
         {
@@ -337,7 +374,8 @@ boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const std::uint16
     return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
-boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::uint16_t worker_index,
+boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsigned char max_task_priority,
+    const std::uint16_t worker_index,
     const std::function<
             WaiterManager::Result(
                     const std::uint16_t,
@@ -354,7 +392,7 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::u
     {
         // try to grab a sleepy task with the lowest waketime possible
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
-            m_sleepy_task_queues[(i + worker_index) % m_num_queues].try_swap(sleepytask);
+            m_sleepy_task_queues[(i + worker_index) % m_num_queues].try_swap(max_task_priority, sleepytask);
 
         // failure: no sleepy task available
         if (!sleepytask)
@@ -414,7 +452,8 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const std::u
     return final_task;
 }
 //-------------------------------------------------------------------------------------------------------------------
-boost::optional<task_t> ThreadPool::try_get_task_to_run(const std::uint16_t worker_index,
+boost::optional<task_t> ThreadPool::try_get_task_to_run(const unsigned char max_task_priority,
+    const std::uint16_t worker_index,
     const std::function<
             WaiterManager::Result(
                     const std::uint16_t,
@@ -423,12 +462,14 @@ boost::optional<task_t> ThreadPool::try_get_task_to_run(const std::uint16_t work
                 )
         > &custom_wait_until)
 {
+    assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
+
     // try to find a simple task
-    if (auto task = try_get_simple_task_to_run(worker_index))
+    if (auto task = try_get_simple_task_to_run(max_task_priority, worker_index))
         return task;
 
     // try to wait on a sleepy task
-    if (auto task = try_wait_for_sleepy_task_to_run(worker_index, custom_wait_until))
+    if (auto task = try_wait_for_sleepy_task_to_run(max_task_priority, worker_index, custom_wait_until))
         return task;
 
     // failure
@@ -437,9 +478,9 @@ boost::optional<task_t> ThreadPool::try_get_task_to_run(const std::uint16_t work
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::run()
 {
-    increment_thread_callstack_depth();
-
+    assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
     const std::uint16_t worker_id{threadpool_worker_id()};
+    assert(worker_id > 0);  //only call run() from subthreads of the threadpool
 
     // prepare custom wait-until function
     std::function<
@@ -465,7 +506,7 @@ void ThreadPool::run()
         // try to get the next task, then run it and immediately submit its continuation
         // - note: we don't immediately run task continuations because we want to always be pulling tasks from
         //   the bottom of the task pile
-        if (auto task = this->try_get_task_to_run(worker_id, custom_wait_until))
+        if (auto task = this->try_get_task_to_run(0, worker_id, custom_wait_until))
         {
             this->submit(execute_task(*task));
             continue;
@@ -484,16 +525,12 @@ void ThreadPool::run()
             break;
         m_waiter_manager.wait_for(worker_id, m_max_wait_duration, WaiterManager::ShutdownPolicy::EXIT_EARLY);
     }
-
-    decrement_thread_callstack_depth();
 }
 //-------------------------------------------------------------------------------------------------------------------
-void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::steady_clock> &deadline)
+void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::steady_clock> &deadline,
+    const unsigned char max_task_priority = 0)
 {
-    //todo: this function must only be called by the thread that owns the threadpool or by one of the threadpool's workers
-    //work until the deadline is reached
-    increment_thread_callstack_depth();
-
+    assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
     const std::uint16_t worker_id{threadpool_worker_id()};
 
     // prepare custom wait-until function
@@ -513,7 +550,6 @@ void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::s
             {
                 const WaiterManager::Result wait_result{
                         m_waiter_manager.wait_until(worker_id,
-                            wait_condition,
                             timepoint < deadline ? timepoint : deadline,  //don't wait longer than the deadline
                             shutdown_policy)
                     };
@@ -529,7 +565,7 @@ void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::s
     while (std::chrono::steady_clock::now() < deadline)
     {
         // try to get the next task, then run it and immediately submit its continuation
-        if (auto task = this->try_get_task_to_run(worker_id, custom_wait_until))
+        if (auto task = this->try_get_task_to_run(max_task_priority, worker_id, custom_wait_until))
         {
             this->submit(execute_task(*task));
             continue;
@@ -537,27 +573,25 @@ void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::s
 
         // we failed to get a task, so wait until the deadline
         const WaiterManager::Result wait_result{
-                m_waiter_manager.conditional_wait_for(worker_id,
-                    wait_condition,
-                    m_max_wait_duration,
-                    WaiterManager::ShutdownPolicy::WAIT)
+                custom_wait_until(worker_id, deadline, WaiterManager::ShutdownPolicy::WAIT)
             };
 
         // exit immediately if the deadline condition was triggered (don't re-test it)
         if (wait_result == WaiterManager::Result::CONDITION_TRIGGERED)
             break;
     }
-
-    decrement_thread_callstack_depth();
 }
 //-------------------------------------------------------------------------------------------------------------------
-void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition)
+void ThreadPool::work_while_waiting(const std::chrono::duration &duration, const unsigned char max_task_priority = 0)
 {
-    //todo: this function must only be called by the thread that owns the threadpool or by one of the threadpool's workers
-    //work until the wait condition returns true
+    this->work_while_waiting(std::chrono::steady_clock::now() + duration, max_task_priority);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition,
+    const unsigned char max_task_priority = 0)
+{
     //todo: use shared_ptr<atomic<bool>> for the signaling channel so it can be copied into a std::function
-    increment_thread_callstack_depth();
-
+    assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
     const std::uint16_t worker_id{threadpool_worker_id()};
 
     // prepare custom wait-until function
@@ -586,7 +620,7 @@ void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition)
     while (wait_condition())
     {
         // try to get the next task, then run it and immediately submit its continuation
-        if (auto task = this->try_get_task_to_run(worker_id, custom_wait_until))
+        if (auto task = this->try_get_task_to_run(max_task_priority, worker_id, custom_wait_until))
         {
             this->submit(execute_task(*task));
             continue;
@@ -594,9 +628,8 @@ void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition)
 
         // we failed to get a task, so wait until the condition is satisfied
         const WaiterManager::Result wait_result{
-                m_waiter_manager.conditional_wait_for(worker_id,
-                    wait_condition,
-                    m_max_wait_duration,
+                custom_wait_until(worker_id,
+                    std::chrono::steady_clock::now() + m_max_wait_duration,
                     WaiterManager::ShutdownPolicy::WAIT)
             };
 
@@ -604,8 +637,6 @@ void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition)
         if (wait_result == WaiterManager::Result::CONDITION_TRIGGERED)
             break;
     }
-
-    decrement_thread_callstack_depth();
 }
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::shut_down()
