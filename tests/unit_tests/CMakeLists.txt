@@ -124,6 +124,7 @@ monero_add_minimal_executable(unit_tests
   ${unit_tests_headers})
 target_link_libraries(unit_tests
   PRIVATE
+    async
     ringct
     cryptonote_protocol
     cryptonote_core

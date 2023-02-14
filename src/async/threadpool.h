@@ -1,0 +1,169 @@
+// Copyright (c) 2023, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+/// threadpool
+
+//local headers
+#include "sleepy_task_queue.h"
+#include "tasks.h"
+#include "token_queue.h"
+#include "waiter_manager.h"
+
+//third-party headers
+#include <boost/container/map.hpp>
+#include <boost/optional/optional.hpp>
+
+//standard headers
+#include <atomic>
+#include <chrono>
+#include <memory>
+#include <mutex>
+#include <thread>
+
+//forward declarations
+
+
+namespace async
+{
+
+/// thread pool
+class ThreadPool final
+{
+    /// clean up pass on the sleepy queues
+    void perform_sleepy_queue_maintenance();
+
+    /// submit task types
+    TaskVariant submit_simple_task(SimpleTask simple_task, const bool ignore_queue_size_limit);
+    TaskVariant submit_sleepy_task(SleepyTask sleepy_task);
+
+    /// get a task to run
+    boost::optional<task_t> try_get_simple_task_to_run(const unsigned char max_task_priority,
+        const std::uint16_t worker_index);
+    boost::optional<task_t> try_wait_for_sleepy_task_to_run(const unsigned char max_task_priority,
+        const std::uint16_t worker_index,
+        const std::function<
+                WaiterManager::Result(
+                        const std::uint16_t,
+                        const std::time_point<std::chrono::steady_clock>&,
+                        const ShutdownPolicy
+                    )
+            > &custom_wait_until);
+    boost::optional<task_t> try_get_task_to_run(const unsigned char max_task_priority,
+        const std::uint16_t worker_index,
+        const std::function<
+                WaiterManager::Result(
+                        const std::uint16_t,
+                        const std::time_point<std::chrono::steady_clock>&,
+                        const ShutdownPolicy
+                    )
+            > &custom_wait_until) noexcept;
+
+public:
+    /// run as a pool worker
+    /// - this function is only invoked when launching pool workers and from within the pool destructor
+    void run_as_worker_DONT_CALL_ME();
+
+//constructors
+    /// default constructor: disabled
+    ThreadPool() = delete;
+    /// normal constructor: from config
+    ThreadPool(const unsigned char max_priority_level,
+        const std::uint16_t num_managed_workers,
+        const std::uint32_t max_queue_size,
+        const unsigned char num_submit_cycle_attempts,
+        const std::chrono::duration max_wait_duration);
+
+    /// disable copy/moves so references to this object can't be invalidated until this object's lifetime ends
+    ThreadPool& operator=(ThreadPool&&) = delete;
+
+//destructor
+    /// destroy the threadpool
+    /// 1) shuts down the pool
+    /// 2) joins all worker threads
+    /// 3) clears out any remaining tasks
+    ///    - note that this ensures any ScopedNotifications attached to tasks will be executed before the pool dies,
+    ///      which ensures references in those notifications
+    ~ThreadPool();
+
+//member functions
+    /// submit a task
+    /// - note: if submit() returns true, then it is guaranteed the submission succeeded; otherwise it is unspecified
+    ///   what happened to the task (it may have been submitted, or an exception may have caused it to be dropped)
+    bool submit(TaskVariant task) noexcept;
+
+    /// toolkit for manually joining on a set of tasks
+    /// - how to use this:
+    ///   1) make a new join signal in the thread that will be joining on a set of tasks yet to be launched
+    ///   2) [get_join_token()]: get a new join token using the join signal
+    ///   3) save a copy of the token in the lambda capture of each task in the set of tasks that you want to join on
+    ///   4) destroy the joining thread's copy of the token (e.g. set it to nullptr)
+    ///   5) [get_join_condition()]: get the join condition by consuming our join signal
+    ///   6) call ThreadPool::work_while_waiting() from the joining thread, using that join condition
+    ///
+    /// - PRECONDITION: the thread that joins on a join token must be the same thread that created that token
+    /// - PRECONDITION: there must be NO living copies of a join token after the corresponding threadpool has died
+    std::shared_ptr<ScopedNotification> get_join_token(std::shared_ptr<std::atomic<bool>> join_signal);
+    static std::function<bool()> get_join_condition(std::shared_ptr<std::atomic<bool>> &&join_signal);
+
+    void work_while_waiting(const std::chrono::time_point<std::chrono::steady_clock> &deadline,
+        const unsigned char max_task_priority = 0);
+    void work_while_waiting(const std::chrono::duration &duration, const unsigned char max_task_priority = 0);
+    void work_while_waiting(const std::function<bool()> &wait_condition_func, const unsigned char max_task_priority = 0);
+
+    /// shut down the threadpool
+    void shut_down() noexcept;
+
+    /// id of this threadpool
+    std::uint64_t threadpool_id()       const { return m_threadpool_id; }
+    std::uint64_t threadpool_owner_id() const { return m_threadpool_owner_id; }
+
+private:
+//member variables
+    /// config
+    const std::uint64_t m_threadpool_id;  //unique identifier for this threadpool
+    const std::uint64_t m_threadpool_owner_id;  //unique identifier for the thread that owns this threadpool
+    const unsigned char m_max_priority_level;  //note: priority 0 is the 'highest' priority
+    const std::uint16_t m_num_queues;  //num workers + 1 for the threadpool owner
+    const unsigned char m_num_submit_cycle_attempts;
+    const std::uint32_t m_max_queue_size;
+    const std::chrono::duration m_max_wait_duration;
+
+    /// worker context
+    std::vector<std::thread> m_workers;
+
+    /// queues
+    std::vector<std::vector<TokenQueue>> m_task_queues;  //outer vector: priorities, inner vector: workers
+    std::vector<SleepyTokenQueue> m_sleepy_task_queues;   //vector: workers
+    std::atomic<std::uint16_t> m_normal_queue_submission_counter{0};
+    std::atomic<std::uint16_t> m_sleepy_queue_submission_counter{0};
+
+    // waiter manager
+    WaiterManager m_waiter_manager;
+};
+
+} //namespace asyc

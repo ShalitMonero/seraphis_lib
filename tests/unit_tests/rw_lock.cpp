@@ -29,30 +29,30 @@
 
 #include <gtest/gtest.h>
 
-#include "common/rw_lock.h"
+#include "async/rw_lock.h"
 
 //-------------------------------------------------------------------------------------------------------------------
 TEST(rw_lock, int_mutable)
 {
     // manage an int (mutable)
-    tools::writable<int> writable{5};
-    tools::readable<int> readable{writable.get_readable()};
+    async::writable<int> writable{5};
+    async::readable<int> readable{writable.get_readable()};
 
     // read the value
     {
-        tools::read_lock<int> read_lock{readable.lock()};
+        async::read_lock<int> read_lock{readable.lock()};
         EXPECT_TRUE(read_lock.value() == 5);
     }
 
     // update the value
     {
-        tools::write_lock<int> write_lock{writable.lock()};
+        async::write_lock<int> write_lock{writable.lock()};
         write_lock.value() = 10;
     }
 
     // check updated value
     {
-        tools::read_lock<int> read_lock{readable.lock()};
+        async::read_lock<int> read_lock{readable.lock()};
         EXPECT_TRUE(read_lock.value() == 10);
     }
 }
@@ -60,19 +60,19 @@ TEST(rw_lock, int_mutable)
 TEST(rw_lock, int_immutable)
 {
     // manage an int (immutable)
-    tools::readable<int> readable{5};
+    async::readable<int> readable{5};
 
     // read the value
     {
-        tools::read_lock<int> read_lock{readable.lock()};
+        async::read_lock<int> read_lock{readable.lock()};
         EXPECT_TRUE(read_lock.value() == 5);
     }
 
     // read the value with multiple readers
     {
-        tools::read_lock<int> read_lock1{readable.lock()};
-        tools::read_lock<int> read_lock2{readable.lock()};
-        tools::read_lock<int> read_lock3{readable.lock()};
+        async::read_lock<int> read_lock1{readable.lock()};
+        async::read_lock<int> read_lock2{readable.lock()};
+        async::read_lock<int> read_lock3{readable.lock()};
         EXPECT_TRUE(read_lock1.value() == 5);
         EXPECT_TRUE(read_lock2.value() == 5);
         EXPECT_TRUE(read_lock3.value() == 5);
@@ -82,43 +82,43 @@ TEST(rw_lock, int_immutable)
 TEST(rw_lock, moved_from_throws)
 {
     // manage an int (mutable)
-    tools::writable<int> writable{5};
-    tools::readable<int> readable{writable.get_readable()};
+    async::writable<int> writable{5};
+    async::readable<int> readable{writable.get_readable()};
 
     // moved-from writable throws on access
-    tools::writable<int> writable2{std::move(writable)};
+    async::writable<int> writable2{std::move(writable)};
     EXPECT_ANY_THROW(writable.lock());
     EXPECT_ANY_THROW(writable.get_readable());
 
     // can read from readable created by original writable
     {
-        tools::read_lock<int> read_lock{readable.lock()};
+        async::read_lock<int> read_lock{readable.lock()};
         EXPECT_TRUE(read_lock.value() == 5);
     }
 
     // can read from readable created by second writable
-    tools::readable<int> readable2{writable2.get_readable()};
+    async::readable<int> readable2{writable2.get_readable()};
     {
-        tools::read_lock<int> read_lock{readable2.lock()};
+        async::read_lock<int> read_lock{readable2.lock()};
         EXPECT_TRUE(read_lock.value() == 5);
     }
 
     // moved-from readable throws on access
-    tools::readable<int> readable3{std::move(readable)};
+    async::readable<int> readable3{std::move(readable)};
     EXPECT_ANY_THROW(readable.lock());
 
     // moved-from writable throws on access
     {
-        tools::write_lock<int> write_lock{writable2.lock()};
-        tools::write_lock<int> write_lock2{std::move(write_lock)};
+        async::write_lock<int> write_lock{writable2.lock()};
+        async::write_lock<int> write_lock2{std::move(write_lock)};
         EXPECT_ANY_THROW(write_lock.value());
         EXPECT_NO_THROW(write_lock2.value() = 10);
     }
 
     // moved-from readable throws on access
     {
-        tools::read_lock<int> read_lock{readable3.lock()};
-        tools::read_lock<int> read_lock2{std::move(read_lock)};
+        async::read_lock<int> read_lock{readable3.lock()};
+        async::read_lock<int> read_lock2{std::move(read_lock)};
         EXPECT_ANY_THROW(read_lock.value());
         EXPECT_NO_THROW(read_lock2.value());
         EXPECT_TRUE(read_lock2.value() == 10);
@@ -128,18 +128,18 @@ TEST(rw_lock, moved_from_throws)
 TEST(rw_lock, single_writer_multi_reader)
 {
     // multiple readables are allowed
-    tools::writable<int> writable{5};
-    tools::readable<int> readable1{writable.get_readable()};
-    tools::readable<int> readable2{writable.get_readable()};
+    async::writable<int> writable{5};
+    async::readable<int> readable1{writable.get_readable()};
+    async::readable<int> readable2{writable.get_readable()};
 
     // multiple read locks are allowed
     {
-        tools::read_lock<int> read_lock1a{readable1.lock()};
-        tools::read_lock<int> read_lock1b{readable1.lock()};
-        boost::optional<tools::read_lock<int>> read_lock1c{readable1.try_lock()};
-        tools::read_lock<int> read_lock2a{readable2.lock()};
-        tools::read_lock<int> read_lock2b{readable2.lock()};
-        boost::optional<tools::read_lock<int>> read_lock2c{readable2.try_lock()};
+        async::read_lock<int> read_lock1a{readable1.lock()};
+        async::read_lock<int> read_lock1b{readable1.lock()};
+        boost::optional<async::read_lock<int>> read_lock1c{readable1.try_lock()};
+        async::read_lock<int> read_lock2a{readable2.lock()};
+        async::read_lock<int> read_lock2b{readable2.lock()};
+        boost::optional<async::read_lock<int>> read_lock2c{readable2.try_lock()};
         EXPECT_TRUE(read_lock1c);
         EXPECT_TRUE(read_lock2c);
         EXPECT_TRUE(read_lock1a.value() == 5);
@@ -152,22 +152,22 @@ TEST(rw_lock, single_writer_multi_reader)
 
     // only one write lock is allowed
     {
-        tools::write_lock<int> write_lock{writable.lock()};
-        boost::optional<tools::write_lock<int>> write_lock_attempt{writable.try_lock()};
+        async::write_lock<int> write_lock{writable.lock()};
+        boost::optional<async::write_lock<int>> write_lock_attempt{writable.try_lock()};
         EXPECT_TRUE(write_lock_attempt == boost::none);
     }
 
     // no concurrent read lock when there is a write lock
     {
-        tools::write_lock<int> write_lock{writable.lock()};
-        boost::optional<tools::read_lock<int>> read_lock_attempt{readable1.try_lock()};
+        async::write_lock<int> write_lock{writable.lock()};
+        boost::optional<async::read_lock<int>> read_lock_attempt{readable1.try_lock()};
         EXPECT_TRUE(read_lock_attempt == boost::none);
     }
 
     // no concurrent write lock when there is a read lock
     {
-        tools::read_lock<int> read_lock{readable1.lock()};
-        boost::optional<tools::write_lock<int>> write_lock_attempt{writable.try_lock()};
+        async::read_lock<int> read_lock{readable1.lock()};
+        boost::optional<async::write_lock<int>> write_lock_attempt{writable.try_lock()};
         EXPECT_TRUE(write_lock_attempt == boost::none);
     }
 }
