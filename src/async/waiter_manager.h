@@ -28,6 +28,8 @@
 
 /// Coordinates async wait/notify for a threadpool.
 
+#pragma once
+
 //local headers
 
 //third-party headers
@@ -38,6 +40,7 @@
 #include <condition_variable>
 #include <functional>
 #include <mutex>
+#include <vector>
 
 //forward declarations
 
@@ -64,22 +67,6 @@ namespace async
 ///   B) future waiters using 'ShutdownPolicy::EXIT_EARLY' will simply exit without waiting
 class WaiterManager final
 {
-    struct ConditionalWaiterContext final
-    {
-        std::atomic<std::int32_t> num_waiting;
-        std::condition_variable cond_var;
-    };
-
-    std::uint16_t clamp_waiter_index(const std::uint16_t nominal_index) noexcept;
-
-    /// wait
-    Result wait_impl(std::mutex &mutex_inout,
-        std::condition_variable &condvar_inout,
-        std::atomic<std::uint16_t> &counter_inout,
-        const std::function<bool()> &condition_checker_func,
-        const std::function<std::cv_status(std::condition_variable&, std::unique_lock<std::mutex>&)> &wait_func,
-        const ShutdownPolicy shutdown_policy) noexcept;
-
 public:
     enum class ShutdownPolicy : unsigned char
     {
@@ -96,6 +83,25 @@ public:
         CRITICAL_EXCEPTION
     };
 
+private:
+    struct ConditionalWaiterContext final
+    {
+        std::atomic<std::int32_t> num_waiting;
+        std::condition_variable cond_var;
+    };
+
+    std::uint16_t clamp_waiter_index(const std::uint16_t nominal_index) noexcept;
+
+    /// wait
+    Result wait_impl(std::mutex &mutex_inout,
+        std::condition_variable &condvar_inout,
+        std::atomic<std::int32_t> &counter_inout,
+        const std::function<bool()> &condition_checker_func,
+        const std::function<std::cv_status(std::condition_variable&, std::unique_lock<std::mutex>&)> &wait_func,
+        const ShutdownPolicy shutdown_policy) noexcept;
+
+public:
+
 //constructors
     WaiterManager(const std::uint16_t num_managed_waiters);
 
@@ -106,21 +112,21 @@ public:
 //member functions
     Result wait(const std::uint16_t waiter_index, const ShutdownPolicy shutdown_policy) noexcept;
     Result wait_for(const std::uint16_t waiter_index,
-        const std::chrono::duration &duration,
+        const std::chrono::nanoseconds &duration,
         const ShutdownPolicy shutdown_policy) noexcept;
     Result wait_until(const std::uint16_t waiter_index,
-        const std::time_point<std::chrono::steady_clock> &timepoint,
+        const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
         const ShutdownPolicy shutdown_policy) noexcept;
     Result conditional_wait(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
         const ShutdownPolicy shutdown_policy) noexcept;
     Result conditional_wait_for(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
-        const std::chrono::duration &duration,
+        const std::chrono::nanoseconds &duration,
         const ShutdownPolicy shutdown_policy) noexcept;
     Result conditional_wait_until(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
-        const std::time_point<std::chrono::steady_clock> &timepoint,
+        const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
         const ShutdownPolicy shutdown_policy) noexcept;
 
     void notify_one() noexcept;

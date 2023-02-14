@@ -28,8 +28,10 @@
 
 /// Queue of sleepy tasks.
 
+#pragma once
+
 //local headers
-#include "tasks.h"
+#include "task_types.h"
 
 //third-party headers
 #include <boost/container/map.hpp>
@@ -37,6 +39,7 @@
 //standard headers
 #include <chrono>
 #include <list>
+#include <memory>
 #include <mutex>
 
 //forward declarations
@@ -71,17 +74,18 @@ public:
     /// - if 'task_inout == nullptr', then we set it to the unclaimed task with the lowest waketime
     /// - the cost of this function may be higher than expected if there are many tasks with higher priority than our
     ///   allowed max
-    bool try_swap(const unsigned char max_task_priority, SleepyTask* &task_inout);
+    bool try_swap(const unsigned char max_task_priority, SleepingTask* &task_inout);
 
     /// try to clean up the queue
     /// - remove dead tasks
     /// - extract awake unclaimed tasks
-    std::list<SleepyTask> try_perform_maintenance();
+    std::list<std::shared_ptr<SleepingTask>> try_perform_maintenance();
 
 private:
 //member variables
     /// queue context (sorted by waketime)
-    boost::multimap<std::chrono::time_point<std::chrono::steady_clock>::rep, SleepyTask> m_queue;
+    boost::container::multimap<std::chrono::time_point<std::chrono::steady_clock>::rep,
+        std::shared_ptr<SleepingTask>> m_queue;
     std::mutex m_mutex;
 };
 

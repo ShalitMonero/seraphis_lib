@@ -28,12 +28,15 @@
 
 /// Simple token queue.
 
+#pragma once
+
 //local headers
 
 //third-party headers
 
 //standard headers
 #include <atomic>
+#include <list>
 #include <mutex>
 
 //forward declarations
@@ -42,38 +45,42 @@
 namespace async
 {
 
+enum class TokenQueueResult : unsigned char
+{
+    SUCCESS,
+    QUEUE_FULL,
+    QUEUE_EMPTY,
+    TRY_LOCK_FAIL
+};
+
 /// async token queue
 /// - does not include a force_pop() method for simplicity
 template <typename TokenT>
 class TokenQueue final
 {
 public:
-//member types
-    enum class Result : unsigned char
-    {
-        SUCCESS,
-        QUEUE_FULL,
-        QUEUE_EMPTY,
-        TRY_LOCK_FAIL
-    };
-
 //constructors
-    TokenQueue(const std::uint32_t max_queue_size) : m_max_queue_size{max_queue_size}
-    {}
+    /// resurrect default constructor
+    TokenQueue() = default;
 
 //member functions
+    /// set the max queue size
+    /// - we need a member function for this because it's not possible to allocate a vector of queues with anything
+    ///   other than the default constructor (since queues are copy/move disabled thanks to the mutex)
+    void set_max_queue_size(const std::uint16_t max_queue_size) noexcept { m_max_queue_size = max_queue_size; }
+
     /// try to add an element to the top
     template <typename T>
-    Result try_push(T &&new_element)
+    TokenQueueResult try_push(T &&new_element)
     {
-        std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+        std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
         if (!lock.owns_lock())
-            return Result::TRY_LOCK_FAIL;
+            return TokenQueueResult::TRY_LOCK_FAIL;
         if (m_queue.size() >= m_max_queue_size)
-            return Result::QUEUE_FULL;
+            return TokenQueueResult::QUEUE_FULL;
 
         m_queue.emplace_back(std::forward<T>(new_element));
-        return Result::SUCCESS;
+        return TokenQueueResult::SUCCESS;
     }
     /// add an element to the top (always succeeds)
     template <typename T>
@@ -103,29 +110,29 @@ public:
     }
 
     /// try to remove an element from the bottom
-    Result try_pop(TokenT &token_out)
+    TokenQueueResult try_pop(TokenT &token_out)
     {
         // try to lock the queue, then check if there are any elements
-        std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+        std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
         if (!lock.owns_lock())
-            return Result::TRY_LOCK_FAIL;
+            return TokenQueueResult::TRY_LOCK_FAIL;
         if (m_queue.size() == 0)
-            return Result::QUEUE_EMPTY;
+            return TokenQueueResult::QUEUE_EMPTY;
 
         // pop the bottom element
         token_out = std::move(m_queue.front());
         m_queue.pop_front();
-        return Result::SUCCESS;
+        return TokenQueueResult::SUCCESS;
     }
 
 private:
 //member variables
     /// queue context
-    std::queue<TokenT> m_queue;
+    std::list<TokenT> m_queue;
     std::mutex m_mutex;
 
     /// config
-    const std::uint32_t m_max_queue_size;
+    std::uint32_t m_max_queue_size{0};
 };
 
 } //namespace asyc

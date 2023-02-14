@@ -28,7 +28,7 @@
 
 set(async_sources
   sleepy_task_queue.cpp
-  tasks.cpp
+  task_types.cpp
   threadpool.cpp
   waiter_manager.cpp)
 

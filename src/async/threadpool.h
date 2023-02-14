@@ -28,9 +28,11 @@
 
 /// threadpool
 
+#pragma once
+
 //local headers
 #include "sleepy_task_queue.h"
-#include "tasks.h"
+#include "task_types.h"
 #include "token_queue.h"
 #include "waiter_manager.h"
 
@@ -44,6 +46,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 //forward declarations
 
@@ -58,8 +61,8 @@ class ThreadPool final
     void perform_sleepy_queue_maintenance();
 
     /// submit task types
-    TaskVariant submit_simple_task(SimpleTask simple_task, const bool ignore_queue_size_limit);
-    TaskVariant submit_sleepy_task(SleepyTask sleepy_task);
+    TaskVariant submit_simple_task(SimpleTask &&simple_task, const bool ignore_queue_size_limit);
+    TaskVariant submit_sleepy_task(SleepyTask &&sleepy_task);
 
     /// get a task to run
     boost::optional<task_t> try_get_simple_task_to_run(const unsigned char max_task_priority,
@@ -69,8 +72,8 @@ class ThreadPool final
         const std::function<
                 WaiterManager::Result(
                         const std::uint16_t,
-                        const std::time_point<std::chrono::steady_clock>&,
-                        const ShutdownPolicy
+                        const std::chrono::time_point<std::chrono::steady_clock>&,
+                        const WaiterManager::ShutdownPolicy
                     )
             > &custom_wait_until);
     boost::optional<task_t> try_get_task_to_run(const unsigned char max_task_priority,
@@ -78,8 +81,8 @@ class ThreadPool final
         const std::function<
                 WaiterManager::Result(
                         const std::uint16_t,
-                        const std::time_point<std::chrono::steady_clock>&,
-                        const ShutdownPolicy
+                        const std::chrono::time_point<std::chrono::steady_clock>&,
+                        const WaiterManager::ShutdownPolicy
                     )
             > &custom_wait_until) noexcept;
 
@@ -96,7 +99,7 @@ public:
         const std::uint16_t num_managed_workers,
         const std::uint32_t max_queue_size,
         const unsigned char num_submit_cycle_attempts,
-        const std::chrono::duration max_wait_duration);
+        const std::chrono::nanoseconds max_wait_duration);
 
     /// disable copy/moves so references to this object can't be invalidated until this object's lifetime ends
     ThreadPool& operator=(ThreadPool&&) = delete;
@@ -132,7 +135,7 @@ public:
 
     void work_while_waiting(const std::chrono::time_point<std::chrono::steady_clock> &deadline,
         const unsigned char max_task_priority = 0);
-    void work_while_waiting(const std::chrono::duration &duration, const unsigned char max_task_priority = 0);
+    void work_while_waiting(const std::chrono::nanoseconds &duration, const unsigned char max_task_priority = 0);
     void work_while_waiting(const std::function<bool()> &wait_condition_func, const unsigned char max_task_priority = 0);
 
     /// shut down the threadpool
@@ -151,14 +154,14 @@ private:
     const std::uint16_t m_num_queues;  //num workers + 1 for the threadpool owner
     const unsigned char m_num_submit_cycle_attempts;
     const std::uint32_t m_max_queue_size;
-    const std::chrono::duration m_max_wait_duration;
+    const std::chrono::nanoseconds m_max_wait_duration;
 
     /// worker context
     std::vector<std::thread> m_workers;
 
     /// queues
-    std::vector<std::vector<TokenQueue>> m_task_queues;  //outer vector: priorities, inner vector: workers
-    std::vector<SleepyTokenQueue> m_sleepy_task_queues;   //vector: workers
+    std::vector<std::vector<TokenQueue<task_t>>> m_task_queues;  //outer vector: priorities, inner vector: workers
+    std::vector<SleepyTaskQueue> m_sleepy_task_queues;   //vector: workers
     std::atomic<std::uint16_t> m_normal_queue_submission_counter{0};
     std::atomic<std::uint16_t> m_sleepy_queue_submission_counter{0};
 

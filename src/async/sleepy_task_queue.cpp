@@ -30,6 +30,7 @@
 #include "sleepy_task_queue.h"
 
 //local headers
+#include "task_types.h"
 
 //third party headers
 
@@ -44,47 +45,61 @@
 namespace async
 {
 //-------------------------------------------------------------------------------------------------------------------
+long long time_as_tick_count(const WakeTime &waketime)
+{
+    return wake_time(waketime).time_since_epoch().count();
+}
+//-------------------------------------------------------------------------------------------------------------------
 void SleepyTaskQueue::force_push(SleepyTask &&task)
 {
     std::lock_guard<std::mutex> lock{m_mutex};
-    m_queue.insert({wake_time(task.m_wake_time).duration().count(), std::forward<SleepyTask>(task)});
-    return true;
+    m_queue.insert(
+            {
+                time_as_tick_count(task.wake_time),
+                std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
+            }
+        );
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool SleepyTaskQueue::try_push(SleepyTask &&task)
 {
-    std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+    std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
     if (!lock.owns_lock())
         return false;
-    m_queue.insert({wake_time(task.m_wake_time).duration().count(), std::forward<SleepyTask>(task)});
+    m_queue.insert(
+            {
+                time_as_tick_count(task.wake_time),
+                std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
+            }
+        );
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SleepyTaskQueue::try_swap(const unsigned char max_task_priority, SleepyTask* &task_inout)
+bool SleepyTaskQueue::try_swap(const unsigned char max_task_priority, SleepingTask* &task_inout)
 {
     // initialize the current task's waketime (set to max if there is no task)
     auto current_task_waketime_count = 
         task_inout
-        ? wake_time(task_inout->m_wake_time).duration().count()
-        : std::chrono::time_point<std::chrono::steady_clock>::max().duration().count();
+        ? wake_time(task_inout->sleepy_task.wake_time).time_since_epoch().count()
+        : std::chrono::time_point<std::chrono::steady_clock>::max().time_since_epoch().count();
 
     // lock the queue
-    std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+    std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
     if (!lock.owns_lock())
         return false;
 
     // try to find an unclaimed task that wakes up sooner than our input task
     for (auto &candidate_task : m_queue)
     {
-        const SleepyTaskStatus candidate_status{candidate_task.second.m_status.load(std::memory_order_acquire)};
+        const SleepingTaskStatus candidate_status{candidate_task.second->status.load(std::memory_order_acquire)};
 
         // skip reserved and dead tasks
-        if (candidate_status == SleepyTaskStatus::RESERVED ||
-            candidate_status == SleepyTaskStatus::DEAD)
+        if (candidate_status == SleepingTaskStatus::RESERVED ||
+            candidate_status == SleepingTaskStatus::DEAD)
             continue;
 
         // skip tasks with too-high priority
-        if (candidate_task.second.m_task.m_priority < max_task_priority)
+        if (candidate_task.second->sleepy_task.simple_task.priority < max_task_priority)
             continue;
 
         // give up: the first unclaimed task does not wake up sooner than our input task
@@ -94,43 +109,43 @@ bool SleepyTaskQueue::try_swap(const unsigned char max_task_priority, SleepyTask
         // success
         // a. release our input task if we have one
         if (task_inout)
-            unclaim_sleepy_task(*task_inout);
+            unclaim_sleeping_task(*task_inout);
 
         // b. acquire this candidate
-        task_inout = &(candidate_task.first);
-        reserve_sleepy_task(*task_inout);
+        task_inout = candidate_task.second.get();
+        reserve_sleeping_task(*task_inout);
         return true;
     }
 
     return false;
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::list<SleepyTask> SleepyTaskQueue::try_perform_maintenance()
+std::list<std::shared_ptr<SleepingTask>> SleepyTaskQueue::try_perform_maintenance()
 {
     // current time
-    auto now_count = std::chrono::steady_clock::now().duration().count();
+    auto now_count = std::chrono::steady_clock::now().time_since_epoch().count();
 
     // lock the queue
-    std::lock_guard<std::mutex> lock{m_mutex, std::try_to_lock};
+    std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
     if (!lock.owns_lock())
         return {};
 
     // delete dead tasks and extract awake tasks until the lowest sleeping unclaimed task is encountered
-    std::list<SleepyTask> awakened_tasks;
+    std::list<std::shared_ptr<SleepingTask>> awakened_tasks;
 
     for (auto queue_it = m_queue.begin(); queue_it != m_queue.end();)
     {
-        const SleepyTaskStatus task_status{queue_it->second.m_status.load(std::memory_order_acquire)};
+        const SleepingTaskStatus task_status{queue_it->second->status.load(std::memory_order_acquire)};
 
         // skip reserved tasks
-        if (task_status == SleepyTaskStatus::RESERVED)
+        if (task_status == SleepingTaskStatus::RESERVED)
         {
             ++queue_it;
             continue;
         }
 
         // delete dead tasks
-        if (task_status == SleepyTaskStatus::DEAD)
+        if (task_status == SleepingTaskStatus::DEAD)
         {
             queue_it = m_queue.erase(queue_it);
             continue;

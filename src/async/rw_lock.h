@@ -35,6 +35,8 @@
 /// - We use a shared_mutex for the context mutex since after a write_lock is released multiple waiting readers may
 ///   concurrently acquire a shared lock on the value.
 
+#pragma once
+
 //local headers
 
 //third-party headers

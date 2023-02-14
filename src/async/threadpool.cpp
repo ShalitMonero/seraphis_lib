@@ -30,7 +30,7 @@
 #include "threadpool.h"
 
 //local headers
-#include "tasks.h"
+#include "task_types.h"
 
 //third party headers
 #include <boost/optional/optional.hpp>
@@ -48,8 +48,8 @@ namespace async
 {
 // start at 1 so each thread's default context id does not match any actual context
 static std::atomic<std::uint64_t> s_context_id_counter{1};
-static std::thread_local std::uint64_t tl_context_id{0};  //context this thread is attached to
-static std::thread_local std::uint16_t tl_worker_id{0};   //this thread's id within its context
+static thread_local std::uint64_t tl_context_id{0};  //context this thread is attached to
+static thread_local std::uint16_t tl_worker_id{0};   //this thread's id within its context
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -61,7 +61,7 @@ static std::uint64_t initialize_threadpool_owner()
     // - a threadpool owner gets its own unique threadpool id to facilitate owning multiple threadpools with
     //   overlapping lifetimes
     static const std::uint64_t id{
-            [&s_context_id_counter, &tl_context_id]()
+            []()
             {
                 tl_context_id = s_context_id_counter.fetch_add(1, std::memory_order_relaxed);
                 return tl_context_id;
@@ -139,7 +139,7 @@ void ThreadPool::perform_sleepy_queue_maintenance()
     for (std::uint16_t queue_index{0}; queue_index < m_num_queues; ++queue_index)
     {
         // perform maintenance on this queue
-        std::list<SleepyTask> awakened_tasks{
+        std::list<std::shared_ptr<SleepingTask>> awakened_tasks{
                 m_sleepy_task_queues[queue_index].try_perform_maintenance()
             };
 
@@ -148,14 +148,17 @@ void ThreadPool::perform_sleepy_queue_maintenance()
         //   those first
         // - note: we ignore the queue size limit so that none of our awakened tasks get stuck waiting for overflowing
         //   queues to be dealt with
-        for (SleepyTask &task : awakened_tasks)
-            this->submit_simple_task(std::move(task).simple_task, true);
+        for (std::shared_ptr<SleepingTask> &task : awakened_tasks)
+        {
+            if (!task) continue;
+            this->submit_simple_task(std::move(task->sleepy_task).simple_task, true);
+        }
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
 // ThreadPool INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ignore_queue_size_limit)
+TaskVariant ThreadPool::submit_simple_task(SimpleTask &&simple_task, const bool ignore_queue_size_limit)
 {
     // spin through the simple task queues at our task's priority level
     // - start at the task queue one-after the previous start queue as a naive/simple way to spread tasks out evenly
@@ -166,16 +169,16 @@ TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ig
     for (std::uint32_t i{0}; i < m_num_queues * m_num_submit_cycle_attempts; ++i)
     {
         // try to push into the specified queue
-        const std::uint16_t queue_index{(i + start_counter) % m_num_queues};
-        const TaskQueue::Result result{
+        const std::uint32_t queue_index{(i + start_counter) % m_num_queues};
+        const TokenQueueResult result{
                 m_task_queues[clamped_priority][queue_index].try_push(std::move(simple_task).task)
             };
 
         // if the queue is full, save its index (we always save the last confirmed-full queue's index)
-        if (result == TaskQueue::Result::QUEUE_FULL)
+        if (result == TokenQueueResult::QUEUE_FULL)
             full_queue_index = queue_index;
         // leave if submitting the task succeeded
-        else if (result == TaskQueue::Result::SUCCESS)
+        else if (result == TokenQueueResult::SUCCESS)
         {
             m_waiter_manager.notify_one();
             return boost::none;
@@ -203,13 +206,10 @@ TaskVariant ThreadPool::submit_simple_task(SimpleTask simple_task, const bool ig
 //-------------------------------------------------------------------------------------------------------------------
 // ThreadPool INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-TaskVariant ThreadPool::submit_sleepy_task(SleepyTask sleepy_task)
+TaskVariant ThreadPool::submit_sleepy_task(SleepyTask &&sleepy_task)
 {
     // set the start time of sleepy tasks with undefined start time
     set_current_time_if_undefined(sleepy_task.wake_time.start_time);
-
-    // initialize the status of the sleepy task
-    unclaim_sleepy_task(sleepy_task);
 
     // if the sleepy task is awake, unwrap its internal simple task
     if (sleepy_task_is_awake(sleepy_task))
@@ -254,7 +254,7 @@ boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const unsigned ch
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
         {
             if (m_task_queues[priority][(i + worker_index) % m_num_queues].try_pop(new_task) ==
-                    TaskQueue::Result::SUCCESS)
+                    TokenQueueResult::SUCCESS)
                 return new_task;
         }
     }
@@ -270,23 +270,23 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
     const std::function<
             WaiterManager::Result(
                     const std::uint16_t,
-                    const std::time_point<std::chrono::steady_clock>&,
-                    const ShutdownPolicy
+                    const std::chrono::time_point<std::chrono::steady_clock>&,
+                    const WaiterManager::ShutdownPolicy
                 )
         > &custom_wait_until)
 {
     // wait until we have an awake task while listening to the task notification system
-    SleepyTask* sleepytask{nullptr};
+    SleepingTask* sleeping_task{nullptr};
     boost::optional<task_t> final_task{};
 
     while (true)
     {
         // try to grab a sleepy task with the lowest waketime possible
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
-            m_sleepy_task_queues[(i + worker_index) % m_num_queues].try_swap(max_task_priority, sleepytask);
+            m_sleepy_task_queues[(i + worker_index) % m_num_queues].try_swap(max_task_priority, sleeping_task);
 
         // failure: no sleepy task available
-        if (!sleepytask)
+        if (!sleeping_task)
             break;
 
         // wait while listening
@@ -294,15 +294,15 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
         //   do need to wait, but improves shutdown responsiveness)
         const WaiterManager::Result wait_result{
                 custom_wait_until(worker_index,
-                    wake_time(sleepytask->wake_time),
+                    wake_time(sleeping_task->sleepy_task.wake_time),
                     WaiterManager::ShutdownPolicy::EXIT_EARLY)
             };
 
-        // if we stopped waiting due to a wait condition being satisfied, return our sleepy task
+        // if we stopped waiting due to a wait condition being satisfied, release our sleepy task
         if (wait_result == WaiterManager::Result::CONDITION_TRIGGERED)
         {
             // release our sleepy task
-            unclaim_sleepy_task(*sleepytask);
+            unclaim_sleeping_task(*sleeping_task);
 
             // notify another worker now that our sleepy task is available again
             m_waiter_manager.notify_one();
@@ -310,29 +310,29 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
         }
 
         // if our sleepy task is awake then we can extract its internal task
-        if (sleepy_task_is_awake(*sleepytask) || wait_result == WaiterManager::Result::SHUTTING_DOWN)
+        if (sleepy_task_is_awake(sleeping_task->sleepy_task) || wait_result == WaiterManager::Result::SHUTTING_DOWN)
         {
             // get the task
-            final_task = std::move(*sleepytask).simple_task.task;
+            final_task = std::move(sleeping_task->sleepy_task).simple_task.task;
 
             // kill the sleepy task so it can be cleaned up
-            kill_sleepy_task(*sleepytask);
+            kill_sleeping_task(*sleeping_task);
 
             // if we finished waiting due to something other than a timeout, notify another worker
-            // - ending waiting due to a notification means there is another task in the pool that can be worked on, but
-            //   we are going to work on our awakened sleepy task
-            // - if we are shutting down then we don't want workers to be waiting (unless on a conditional wait), so
-            //   it is fine to aggressively notify in that case
+            // - if we ended waiting due to a notification, then there is another task in the pool that can be worked
+            //   on, but we are going to work on our awakened sleepy task so we need another worker to grab that new task
+            // - if we ended waiting due to a shutdown, then we don't want workers to be waiting (unless on a conditional
+            //   wait), so it is fine to aggressively notify in that case
             if (wait_result != WaiterManager::Result::TIMEOUT)
                 m_waiter_manager.notify_one();
             break;
         }
 
         // try to replace our sleepy task with a simple task
-        if (final_task = try_get_simple_task_to_run(worker_index))
+        if ((final_task = try_get_simple_task_to_run(max_task_priority, worker_index)))
         {
             // release our sleepy task
-            unclaim_sleepy_task(*sleepytask);
+            unclaim_sleeping_task(*sleeping_task);
 
             // notify another worker now that our sleepy task is available again
             m_waiter_manager.notify_one();
@@ -350,8 +350,8 @@ boost::optional<task_t> ThreadPool::try_get_task_to_run(const unsigned char max_
     const std::function<
             WaiterManager::Result(
                     const std::uint16_t,
-                    const std::time_point<std::chrono::steady_clock>&,
-                    const ShutdownPolicy
+                    const std::chrono::time_point<std::chrono::steady_clock>&,
+                    const WaiterManager::ShutdownPolicy
                 )
         > &custom_wait_until) noexcept
 {
@@ -384,15 +384,15 @@ void ThreadPool::run_as_worker_DONT_CALL_ME()
     std::function<
             WaiterManager::Result(
                     const std::uint16_t,
-                    const std::time_point<std::chrono::steady_clock>&,
-                    const ShutdownPolicy
+                    const std::chrono::time_point<std::chrono::steady_clock>&,
+                    const WaiterManager::ShutdownPolicy
                 )
         > custom_wait_until{
-            [&m_waiter_manager]
+            [this]
             (
                 const std::uint16_t worker_id,
-                const std::time_point<std::chrono::steady_clock> &timepoint,
-                const ShutdownPolicy shutdown_policy
+                const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
+                const WaiterManager::ShutdownPolicy shutdown_policy
             ) mutable -> WaiterManager::Result
             {
                 return m_waiter_manager.wait_until(worker_id, timepoint, shutdown_policy);
@@ -432,21 +432,29 @@ ThreadPool::ThreadPool(const unsigned char max_priority_level,
     const std::uint16_t num_managed_workers,
     const std::uint32_t max_queue_size,
     const unsigned char num_submit_cycle_attempts,
-    const std::chrono::duration max_wait_duration) :
+    const std::chrono::nanoseconds max_wait_duration) :
         m_threadpool_id{s_context_id_counter.fetch_add(1, std::memory_order_relaxed)},
         m_threadpool_owner_id{initialize_threadpool_owner()},
         m_max_priority_level{max_priority_level},
-        m_num_queues{num_managed_workers + 1},  //+1 to include the threadpool owner
+        m_num_queues{static_cast<uint16_t>(num_managed_workers + 1)},  //+1 to include the threadpool owner
         m_max_queue_size{max_queue_size},
         m_num_submit_cycle_attempts{num_submit_cycle_attempts},
         m_max_wait_duration{max_wait_duration},
         m_waiter_manager{m_num_queues}
 {
     // create task queues
-    m_task_queues.resize(m_max_priority_level + 1, std::vector<TokenQueue>(m_num_queues, TokenQueue{max_queue_size}));
+    m_task_queues = std::vector<std::vector<TokenQueue<task_t>>>{static_cast<std::size_t>(m_max_priority_level + 1)};
+
+    for (auto &priority_queues : m_task_queues)
+    {
+        priority_queues = std::vector<TokenQueue<task_t>>{static_cast<std::size_t>(m_num_queues)};
+
+        for (TokenQueue<task_t> &queue : priority_queues)
+            queue.set_max_queue_size(m_max_queue_size);
+    }
 
     // create sleepy task queues
-    m_sleepy_task_queues.resize(m_num_queues);
+    m_sleepy_task_queues = std::vector<SleepyTaskQueue>{m_num_queues};
 
     // launch workers
     // - note: we reserve worker index 0 for the threadpool owner
@@ -469,6 +477,7 @@ ThreadPool::ThreadPool(const unsigned char max_priority_level,
 //-------------------------------------------------------------------------------------------------------------------
 ThreadPool::~ThreadPool()
 {
+    (void)test_threadpool_member_invariants;  //suppress unused warning...
     assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
     assert(thread_context_id() == m_threadpool_owner_id);  //only the owner may destroy the object
 
@@ -527,7 +536,7 @@ std::shared_ptr<ScopedNotification> ThreadPool::get_join_token(std::shared_ptr<s
     return std::make_shared<ScopedNotification>(
             [
                 l_waiter_index = threadpool_worker_id(),
-                &m_waiter_manager,
+                this,
                 l_join_signal = std::move(join_signal)
             ]() mutable
             {
@@ -560,15 +569,15 @@ void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::s
     std::function<
             WaiterManager::Result(
                     const std::uint16_t,
-                    const std::time_point<std::chrono::steady_clock>&,
-                    const ShutdownPolicy
+                    const std::chrono::time_point<std::chrono::steady_clock>&,
+                    const WaiterManager::ShutdownPolicy
                 )
         > custom_wait_until{
-            [&m_waiter_manager, &deadline]
+            [this, &deadline]
             (
                 const std::uint16_t worker_id,
-                const std::time_point<std::chrono::steady_clock> &timepoint,
-                const ShutdownPolicy shutdown_policy
+                const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
+                const WaiterManager::ShutdownPolicy shutdown_policy
             ) mutable -> WaiterManager::Result
             {
                 const WaiterManager::Result wait_result{
@@ -605,7 +614,7 @@ void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::s
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
-void ThreadPool::work_while_waiting(const std::chrono::duration &duration, const unsigned char max_task_priority)
+void ThreadPool::work_while_waiting(const std::chrono::nanoseconds &duration, const unsigned char max_task_priority)
 {
     this->work_while_waiting(std::chrono::steady_clock::now() + duration, max_task_priority);
 }
@@ -621,15 +630,15 @@ void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition_
     std::function<
             WaiterManager::Result(
                     const std::uint16_t,
-                    const std::time_point<std::chrono::steady_clock>&,
-                    const ShutdownPolicy
+                    const std::chrono::time_point<std::chrono::steady_clock>&,
+                    const WaiterManager::ShutdownPolicy
                 )
         > custom_wait_until{
-            [&m_waiter_manager, &wait_condition_func]
+            [this, &wait_condition_func]
             (
                 const std::uint16_t worker_id,
-                const std::time_point<std::chrono::steady_clock> &timepoint,
-                const ShutdownPolicy shutdown_policy
+                const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
+                const WaiterManager::ShutdownPolicy shutdown_policy
             ) mutable -> WaiterManager::Result
             {
                 return m_waiter_manager.conditional_wait_until(worker_id,
@@ -665,7 +674,7 @@ void ThreadPool::work_while_waiting(const std::function<bool()> &wait_condition_
 void ThreadPool::shut_down() noexcept
 {
     // shut down the waiter manager, which should notify any waiting workers
-    m_waiter_manager->shut_down();
+    m_waiter_manager.shut_down();
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace async

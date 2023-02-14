@@ -47,7 +47,7 @@ namespace async
 //-------------------------------------------------------------------------------------------------------------------
 // WaiterManager INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-WaiterManager::std::uint16_t clamp_waiter_index(const std::uint16_t nominal_index) noexcept
+std::uint16_t WaiterManager::clamp_waiter_index(const std::uint16_t nominal_index) noexcept
 {
     if (nominal_index >= m_num_managed_waiters)
         return m_num_managed_waiters - 1;
@@ -57,12 +57,12 @@ WaiterManager::std::uint16_t clamp_waiter_index(const std::uint16_t nominal_inde
 // WaiterManager INTERNAL
 // - note: the order of result checks is intentional based on their assumed importance to the caller
 //-------------------------------------------------------------------------------------------------------------------
-Result WaiterManager::wait_impl(std::mutex &mutex_inout,
+WaiterManager::Result WaiterManager::wait_impl(std::mutex &mutex_inout,
     std::condition_variable &condvar_inout,
-    std::atomic<std::uint16_t> &counter_inout,
+    std::atomic<std::int32_t> &counter_inout,
     const std::function<bool()> &condition_checker_func,
     const std::function<std::cv_status(std::condition_variable&, std::unique_lock<std::mutex>&)> &wait_func,
-    const ShutdownPolicy shutdown_policy) noexcept
+    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     try
     {
@@ -74,7 +74,8 @@ Result WaiterManager::wait_impl(std::mutex &mutex_inout,
             try { if (condition_checker_func()) return Result::CONDITION_TRIGGERED; }
             catch (...)                       { return Result::CONDITION_TRIGGERED; }
         }
-        if (shutdown_policy == ShutdownPolicy::EXIT_EARLY && this->is_shutting_down()) return Result::SHUTTING_DOWN;
+        if (shutdown_policy == WaiterManager::ShutdownPolicy::EXIT_EARLY && this->is_shutting_down())
+            return Result::SHUTTING_DOWN;
 
         // wait
         // note: using a signed int for counters means underflow due to reordering of the decrement won't yield a value > 0
@@ -101,13 +102,14 @@ Result WaiterManager::wait_impl(std::mutex &mutex_inout,
 //-------------------------------------------------------------------------------------------------------------------
 WaiterManager::WaiterManager(const std::uint16_t num_managed_waiters) :
     //we always want at least one waiter slot to avoid UB
-    m_num_managed_waiters{num_managed_waiters > 0 ? num_managed_waiters : 1}
+    m_num_managed_waiters{static_cast<uint16_t>(num_managed_waiters > 0 ? num_managed_waiters : 1)}
 {
-    m_conditional_waiters.resize(m_num_managed_waiters);
-    m_waiter_mutexes.resize(m_num_managed_waiters);
+    m_conditional_waiters = std::vector<ConditionalWaiterContext>{m_num_managed_waiters};
+    m_waiter_mutexes      = std::vector<std::mutex>{m_num_managed_waiters};
 }
 //-------------------------------------------------------------------------------------------------------------------
-Result WaiterManager::wait(const std::uint16_t waiter_index, const ShutdownPolicy shutdown_policy) noexcept
+WaiterManager::Result WaiterManager::wait(const std::uint16_t waiter_index,
+    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
             m_normal_shared_cond_var,
@@ -122,9 +124,9 @@ Result WaiterManager::wait(const std::uint16_t waiter_index, const ShutdownPolic
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
-Result WaiterManager::wait_for(const std::uint16_t waiter_index,
-    const std::chrono::duration &duration,
-    const ShutdownPolicy shutdown_policy) noexcept
+WaiterManager::Result WaiterManager::wait_for(const std::uint16_t waiter_index,
+    const std::chrono::nanoseconds &duration,
+    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
             m_sleepy_shared_cond_var,
@@ -138,9 +140,9 @@ Result WaiterManager::wait_for(const std::uint16_t waiter_index,
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
-Result WaiterManager::wait_until(const std::uint16_t waiter_index,
-    const std::time_point<std::chrono::steady_clock> &timepoint,
-    const ShutdownPolicy shutdown_policy) noexcept
+WaiterManager::Result WaiterManager::wait_until(const std::uint16_t waiter_index,
+    const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
+    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
             m_sleepy_shared_cond_var,
@@ -154,9 +156,9 @@ Result WaiterManager::wait_until(const std::uint16_t waiter_index,
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
-Result WaiterManager::conditional_wait(const std::uint16_t waiter_index,
+WaiterManager::Result WaiterManager::conditional_wait(const std::uint16_t waiter_index,
     const std::function<bool()> &condition_checker_func,
-    const ShutdownPolicy shutdown_policy) noexcept
+    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     const std::uint16_t clamped_waiter_index{this->clamp_waiter_index(waiter_index)};
     return this->wait_impl(m_waiter_mutexes[clamped_waiter_index],
@@ -172,10 +174,10 @@ Result WaiterManager::conditional_wait(const std::uint16_t waiter_index,
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
-Result WaiterManager::conditional_wait_for(const std::uint16_t waiter_index,
+WaiterManager::Result WaiterManager::conditional_wait_for(const std::uint16_t waiter_index,
     const std::function<bool()> &condition_checker_func,
-    const std::chrono::duration &duration,
-    const ShutdownPolicy shutdown_policy) noexcept
+    const std::chrono::nanoseconds &duration,
+    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     const std::uint16_t clamped_waiter_index{this->clamp_waiter_index(waiter_index)};
     return this->wait_impl(m_waiter_mutexes[clamped_waiter_index],
@@ -190,10 +192,10 @@ Result WaiterManager::conditional_wait_for(const std::uint16_t waiter_index,
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
-Result WaiterManager::conditional_wait_until(const std::uint16_t waiter_index,
+WaiterManager::Result WaiterManager::conditional_wait_until(const std::uint16_t waiter_index,
     const std::function<bool()> &condition_checker_func,
-    const std::time_point<std::chrono::steady_clock> &timepoint,
-    const ShutdownPolicy shutdown_policy) noexcept
+    const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
+    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     const std::uint16_t clamped_waiter_index{this->clamp_waiter_index(waiter_index)};
     return this->wait_impl(m_waiter_mutexes[clamped_waiter_index],
@@ -227,7 +229,7 @@ void WaiterManager::notify_one() noexcept
     // find a conditional waiter to notify
     for (ConditionalWaiterContext &conditional_waiter : m_conditional_waiters)
     {
-        if (conditional_waiter.is_waiting.load(std::memory_order_relaxed) > 0)
+        if (conditional_waiter.num_waiting.load(std::memory_order_relaxed) > 0)
         {
             conditional_waiter.cond_var.notify_one();
             break;

@@ -27,7 +27,7 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //paired header
-#include "tasks.h"
+#include "task_types.h"
 
 //local headers
 
@@ -47,34 +47,34 @@ std::chrono::time_point<std::chrono::steady_clock> wake_time(const WakeTime wake
     return waketime.start_time + waketime.duration;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void unclaim_sleepy_task(SleepyTask &sleepytask_inout)
-{
-    sleepytask_inout.status.store(SleepyTaskStatus::UNCLAIMED, std::memory_order_release);
-}
-//-------------------------------------------------------------------------------------------------------------------
-void reserve_sleepy_task(SleepyTask &sleepytask_inout)
-{
-    sleepytask_inout.status.store(SleepyTaskStatus::RESERVED, std::memory_order_release);
-}
-//-------------------------------------------------------------------------------------------------------------------
-void kill_sleepy_task(SleepyTask &sleepytask_inout)
-{
-    sleepytask_inout.status.store(SleepyTaskStatus::DEAD, std::memory_order_release);
-}
-//-------------------------------------------------------------------------------------------------------------------
 bool sleepy_task_is_awake(const SleepyTask &task)
 {
     return wake_time(task.wake_time) <= std::chrono::steady_clock::now();
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool sleepy_task_is_unclaimed(const SleepyTask &task)
+bool sleeping_task_is_unclaimed(const SleepingTask &task)
 {
-    return task.status.load(std::memory_order_acquire) == SleepyTaskStatus::UNCLAIMED;
+    return task.status.load(std::memory_order_acquire) == SleepingTaskStatus::UNCLAIMED;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool sleepy_task_is_dead(const SleepyTask &task)
+bool sleeping_task_is_dead(const SleepingTask &task)
 {
-    return task.status.load(std::memory_order_acquire) == SleepyTaskStatus::DEAD;
+    return task.status.load(std::memory_order_acquire) == SleepingTaskStatus::DEAD;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void unclaim_sleeping_task(SleepingTask &sleeping_task_inout)
+{
+    sleeping_task_inout.status.store(SleepingTaskStatus::UNCLAIMED, std::memory_order_release);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void reserve_sleeping_task(SleepingTask &sleeping_task_inout)
+{
+    sleeping_task_inout.status.store(SleepingTaskStatus::RESERVED, std::memory_order_release);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void kill_sleeping_task(SleepingTask &sleeping_task_inout)
+{
+    sleeping_task_inout.status.store(SleepingTaskStatus::DEAD, std::memory_order_release);
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace async
