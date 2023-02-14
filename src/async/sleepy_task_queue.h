@@ -85,7 +85,7 @@ public:
 private:
 //member variables
     /// queue context (sorted by waketime)
-    boost::container::multimap<std::remove_cv<std::chrono::time_point<std::chrono::steady_clock>::rep>::type,
+    boost::container::multimap<std::chrono::time_point<std::chrono::steady_clock>::rep,
         std::shared_ptr<SleepingTask>> m_queue;
     std::mutex m_mutex;
 };
