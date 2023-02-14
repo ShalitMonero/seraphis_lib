@@ -32,8 +32,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
+#include <thread>
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -68,5 +71,74 @@ TEST(async, hello_world)
                 return boost::none;
             }
         ));
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(async, basic_join)
+{
+    async::ThreadPool pool{1, 0, 10, 40, std::chrono::seconds{1}};
+
+    // 1. make join signal
+    std::shared_ptr<std::atomic<bool>> join_signal = std::make_shared<std::atomic<bool>>();
+
+    // 2. get join token
+    auto join_token = pool.get_join_token(join_signal);
+
+    // 3. submit tasks to join on
+    pool.submit(async::make_simple_task(0,
+            [join_token]() -> async::TaskVariant
+            {
+                std::cout << "A\n";
+                return boost::none;
+            }
+        ));
+    pool.submit(async::make_simple_task(0,
+            [join_token]() -> async::TaskVariant
+            {
+                std::cout << "B\n";
+                return boost::none;
+            }
+        ));
+
+    // 4. get join condition
+    auto join_condition = pool.get_join_condition(std::move(join_token), std::move(join_signal));
+
+    // 5. join the tasks
+    pool.work_while_waiting(std::move(join_condition));
+
+    std::cout << "joining done!\n";
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(async, basic_multithreaded)
+{
+    async::ThreadPool pool{1, 2, 10, 40, std::chrono::seconds{1}};
+
+    // 1. submit tasks
+    pool.submit(async::make_simple_task(0,
+            []() -> async::TaskVariant
+            {
+                std::cout << "A\n";
+                return boost::none;
+            }
+        ));
+    pool.submit(async::make_simple_task(0,
+            []() -> async::TaskVariant
+            {
+                std::cout << "B\n";
+                return boost::none;
+            }
+        ));
+    pool.submit(async::make_simple_task(0,
+            []() -> async::TaskVariant
+            {
+                std::cout << "C\n";
+                return boost::none;
+            }
+        ));
+
+    // 2. sleep the main thread
+    std::this_thread::sleep_for(std::chrono::milliseconds{500});
+
+    // 3. main thread marker
+    std::cout << "tasks submitted\n";
 }
 //-------------------------------------------------------------------------------------------------------------------

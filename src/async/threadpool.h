@@ -124,14 +124,15 @@ public:
     ///   1) make a new join signal in the thread that will be joining on a set of tasks yet to be launched
     ///   2) [get_join_token()]: get a new join token using the join signal
     ///   3) save a copy of the token in the lambda capture of each task in the set of tasks that you want to join on
-    ///   4) destroy the joining thread's copy of the token (e.g. set it to nullptr)
-    ///   5) [get_join_condition()]: get the join condition by consuming our join signal
-    ///   6) call ThreadPool::work_while_waiting() from the joining thread, using that join condition
+    ///   4) [get_join_condition()]: consume the joining thread's copy of the join token and the join signal to get the
+    ///      join condition
+    ///   5) call ThreadPool::work_while_waiting() from the joining thread, using that join condition
     ///
     /// - PRECONDITION: the thread that joins on a join token must be the same thread that created that token
     /// - PRECONDITION: there must be NO living copies of a join token after the corresponding threadpool has died
-    std::shared_ptr<ScopedNotification> get_join_token(std::shared_ptr<std::atomic<bool>> join_signal);
-    static std::function<bool()> get_join_condition(std::shared_ptr<std::atomic<bool>> &&join_signal);
+    std::shared_ptr<ScopedNotification> get_join_token(std::shared_ptr<std::atomic<bool>> &join_signal_inout);
+    static std::function<bool()> get_join_condition(std::shared_ptr<ScopedNotification> &&join_token_in,
+        std::shared_ptr<std::atomic<bool>> &&join_signal_in);
 
     void work_while_waiting(const std::chrono::time_point<std::chrono::steady_clock> &deadline,
         const unsigned char max_task_priority = 0);

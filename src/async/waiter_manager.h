@@ -87,17 +87,17 @@ private:
     struct ConditionalWaiterContext final
     {
         std::atomic<std::int32_t> num_waiting;
-        std::condition_variable cond_var;
+        std::condition_variable_any cond_var;
     };
 
     std::uint16_t clamp_waiter_index(const std::uint16_t nominal_index) noexcept;
 
     /// wait
     Result wait_impl(std::mutex &mutex_inout,
-        std::condition_variable &condvar_inout,
+        std::condition_variable_any &condvar_inout,
         std::atomic<std::int32_t> &counter_inout,
         const std::function<bool()> &condition_checker_func,
-        const std::function<std::cv_status(std::condition_variable&, std::unique_lock<std::mutex>&)> &wait_func,
+        const std::function<std::cv_status(std::condition_variable_any&, std::unique_lock<std::mutex>&)> &wait_func,
         const ShutdownPolicy shutdown_policy) noexcept;
 
 public:
@@ -150,8 +150,8 @@ private:
 
     /// synchronization
     std::vector<std::mutex> m_waiter_mutexes;
-    std::condition_variable m_normal_shared_cond_var;
-    std::condition_variable m_sleepy_shared_cond_var;
+    std::condition_variable_any m_normal_shared_cond_var;
+    std::condition_variable_any m_sleepy_shared_cond_var;
 
     /// conditional waiters
     std::vector<ConditionalWaiterContext> m_conditional_waiters;

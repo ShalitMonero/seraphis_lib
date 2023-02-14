@@ -58,10 +58,10 @@ std::uint16_t WaiterManager::clamp_waiter_index(const std::uint16_t nominal_inde
 // - note: the order of result checks is intentional based on their assumed importance to the caller
 //-------------------------------------------------------------------------------------------------------------------
 WaiterManager::Result WaiterManager::wait_impl(std::mutex &mutex_inout,
-    std::condition_variable &condvar_inout,
+    std::condition_variable_any &condvar_inout,
     std::atomic<std::int32_t> &counter_inout,
     const std::function<bool()> &condition_checker_func,
-    const std::function<std::cv_status(std::condition_variable&, std::unique_lock<std::mutex>&)> &wait_func,
+    const std::function<std::cv_status(std::condition_variable_any&, std::unique_lock<std::mutex>&)> &wait_func,
     const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
 {
     try
@@ -115,7 +115,7 @@ WaiterManager::Result WaiterManager::wait(const std::uint16_t waiter_index,
             m_normal_shared_cond_var,
             m_num_normal_waiters,
             nullptr,
-            [](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock) -> std::cv_status
+            [](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock) -> std::cv_status
             {
                 cv_inout.wait(lock);
                 return std::cv_status::no_timeout;
@@ -132,7 +132,7 @@ WaiterManager::Result WaiterManager::wait_for(const std::uint16_t waiter_index,
             m_sleepy_shared_cond_var,
             m_num_sleepy_waiters,
             nullptr,
-            [&duration](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
+            [&duration](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
                 return cv_inout.wait_for(lock_inout, duration);
             },
@@ -148,7 +148,7 @@ WaiterManager::Result WaiterManager::wait_until(const std::uint16_t waiter_index
             m_sleepy_shared_cond_var,
             m_num_sleepy_waiters,
             nullptr,
-            [&timepoint](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
+            [&timepoint](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
                 return cv_inout.wait_until(lock_inout, timepoint);
             },
@@ -165,7 +165,7 @@ WaiterManager::Result WaiterManager::conditional_wait(const std::uint16_t waiter
             m_conditional_waiters[clamped_waiter_index].cond_var,
             m_conditional_waiters[clamped_waiter_index].num_waiting,
             condition_checker_func,
-            [](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
+            [](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
                 cv_inout.wait(lock_inout);
                 return std::cv_status::no_timeout;
@@ -184,7 +184,7 @@ WaiterManager::Result WaiterManager::conditional_wait_for(const std::uint16_t wa
             m_conditional_waiters[clamped_waiter_index].cond_var,
             m_conditional_waiters[clamped_waiter_index].num_waiting,
             condition_checker_func,
-            [&duration](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
+            [&duration](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
                 return cv_inout.wait_for(lock_inout, duration);
             },
@@ -202,7 +202,7 @@ WaiterManager::Result WaiterManager::conditional_wait_until(const std::uint16_t 
             m_conditional_waiters[clamped_waiter_index].cond_var,
             m_conditional_waiters[clamped_waiter_index].num_waiting,
             condition_checker_func,
-            [&timepoint](std::condition_variable &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
+            [&timepoint](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
                 return cv_inout.wait_until(lock_inout, timepoint);
             },
