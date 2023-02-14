@@ -41,6 +41,7 @@
 #include <list>
 #include <memory>
 #include <mutex>
+#include <type_traits>
 
 //forward declarations
 
@@ -84,7 +85,7 @@ public:
 private:
 //member variables
     /// queue context (sorted by waketime)
-    boost::container::multimap<std::chrono::time_point<std::chrono::steady_clock>::rep,
+    boost::container::multimap<std::remove_cv<std::chrono::time_point<std::chrono::steady_clock>::rep>::type,
         std::shared_ptr<SleepingTask>> m_queue;
     std::mutex m_mutex;
 };
