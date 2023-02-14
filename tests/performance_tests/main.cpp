@@ -38,6 +38,7 @@
 #include "performance_utils.h"
 
 // tests
+#include "async.h"
 #include "balance_check.h"
 #include "blake2b.h"
 #include "construct_tx.h"
@@ -117,6 +118,32 @@ int main(int argc, char** argv)
 
   performance_timer timer;
   timer.start();
+
+
+  // test threadpools
+  ParamsShuttleAsync p_async;
+
+  // main thread, 1 task @ 100us
+  p_async.num_extra_threads          = 1;
+  p_async.num_tasks                  = 1;
+  p_async.sleepy_task_cadence        = 0;
+  p_async.task_duration              = std::chrono::microseconds{100};
+  p_async.sleepy_task_sleep_duration = std::chrono::microseconds{0};
+  TEST_PERFORMANCE0(filter, p_async, test_common_threadpool);
+  TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
+
+  // main thread, 100 tasks @ 100us
+  p_async.num_extra_threads          = 1;
+  p_async.num_tasks                  = 100;
+  p_async.sleepy_task_cadence        = 0;
+  p_async.task_duration              = std::chrono::microseconds{100};
+  p_async.sleepy_task_sleep_duration = std::chrono::microseconds{0};
+  TEST_PERFORMANCE0(filter, p_async, test_common_threadpool);
+  TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
+
+  // test done, save results
+  if (p.core_params.td.get())
+    p.core_params.td->save(false);
 
 
   // test deciphering address tags

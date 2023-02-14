@@ -66,6 +66,7 @@ monero_add_minimal_executable(performance_tests
   ${performance_tests_headers})
 target_link_libraries(performance_tests
   PRIVATE
+    async
     wallet
     cryptonote_core
     common

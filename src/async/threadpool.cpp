@@ -360,7 +360,9 @@ void ThreadPool::run_as_worker_DONT_CALL_ME()
 {
     assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
     const std::uint16_t worker_id{threadpool_worker_id()};
-    assert(worker_id > 0);  //only call run_as_worker_DONT_CALL_ME() from subthreads of the threadpool
+    // only call run_as_worker_DONT_CALL_ME() from subthreads of the threadpool or when shutting down
+    assert(worker_id > 0 ||
+        (thread_context_id() == m_threadpool_owner_id && m_waiter_manager.is_shutting_down()));
 
     // prepare custom wait-until function
     std::function<
