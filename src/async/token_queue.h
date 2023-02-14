@@ -48,7 +48,6 @@ namespace async
 enum class TokenQueueResult : unsigned char
 {
     SUCCESS,
-    QUEUE_FULL,
     QUEUE_EMPTY,
     TRY_LOCK_FAIL
 };
@@ -64,11 +63,6 @@ public:
     TokenQueue() = default;
 
 //member functions
-    /// set the max queue size
-    /// - we need a member function for this because it's not possible to allocate a vector of queues with anything
-    ///   other than the default constructor (since queues are copy/move disabled thanks to the mutex)
-    void set_max_queue_size(const std::uint16_t max_queue_size) noexcept { m_max_queue_size = max_queue_size; }
-
     /// try to add an element to the top
     template <typename T>
     TokenQueueResult try_push(T &&new_element)
@@ -76,8 +70,6 @@ public:
         std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
         if (!lock.owns_lock())
             return TokenQueueResult::TRY_LOCK_FAIL;
-        if (m_queue.size() >= m_max_queue_size)
-            return TokenQueueResult::QUEUE_FULL;
 
         m_queue.emplace_back(std::forward<T>(new_element));
         return TokenQueueResult::SUCCESS;
@@ -88,25 +80,6 @@ public:
     {
         std::lock_guard<std::mutex> lock{m_mutex};
         m_queue.emplace_back(std::forward<T>(new_element));
-    }
-
-    /// add an element to the top (always succeeds), then pop the element at the bottom
-    template <typename T>
-    TokenT force_push_pop(T &&new_element)
-    {
-        std::lock_guard<std::mutex> lock{m_mutex};
-
-        // special case
-        if (m_queue.size() == 0)
-            return std::forward<T>(new_element);
-
-        // push back
-        m_queue.emplace_back(std::forward<T>(new_element));
-
-        // pop front
-        TokenT temp_token = std::move(m_queue.front());
-        m_queue.pop_front();
-        return temp_token;
     }
 
     /// try to remove an element from the bottom
@@ -130,9 +103,6 @@ private:
     /// queue context
     std::list<TokenT> m_queue;
     std::mutex m_mutex;
-
-    /// config
-    std::uint32_t m_max_queue_size{0};
 };
 
 } //namespace asyc

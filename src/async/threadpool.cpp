@@ -143,28 +143,25 @@ void ThreadPool::perform_sleepy_queue_maintenance()
                 m_sleepy_task_queues[queue_index].try_perform_maintenance()
             };
 
-        // force submit the awakened sleepy tasks
+        // submit the awakened sleepy tasks
         // - note: elements at the bottom of the awakened sleepy tasks are assumed to be higher priority, so we submit
         //   those first
-        // - note: we ignore the queue size limit so that none of our awakened tasks get stuck waiting for overflowing
-        //   queues to be dealt with
         for (std::unique_ptr<SleepingTask> &task : awakened_tasks)
         {
             if (!task) continue;
-            this->submit_simple_task(std::move(task->sleepy_task).simple_task, true);
+            this->submit_simple_task(std::move(task->sleepy_task).simple_task);
         }
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
 // ThreadPool INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-TaskVariant ThreadPool::submit_simple_task(SimpleTask &&simple_task, const bool ignore_queue_size_limit)
+void ThreadPool::submit_simple_task(SimpleTask &&simple_task)
 {
     // spin through the simple task queues at our task's priority level
     // - start at the task queue one-after the previous start queue as a naive/simple way to spread tasks out evenly
     const unsigned char clamped_priority{clamp_priority(m_max_priority_level, simple_task.priority)};
     const std::uint16_t start_counter{m_normal_queue_submission_counter.fetch_add(1, std::memory_order_relaxed)};
-    boost::optional<std::uint16_t> full_queue_index;
 
     for (std::uint32_t i{0}; i < m_num_queues * m_num_submit_cycle_attempts; ++i)
     {
@@ -174,46 +171,32 @@ TaskVariant ThreadPool::submit_simple_task(SimpleTask &&simple_task, const bool 
                 m_task_queues[clamped_priority][queue_index].try_push(std::move(simple_task).task)
             };
 
-        // if the queue is full, save its index (we always save the last confirmed-full queue's index)
-        if (result == TokenQueueResult::QUEUE_FULL)
-            full_queue_index = queue_index;
         // leave if submitting the task succeeded
-        else if (result == TokenQueueResult::SUCCESS)
+        if (result == TokenQueueResult::SUCCESS)
         {
             m_waiter_manager.notify_one();
-            return boost::none;
+            return;
         }
-    }
-
-    // if task queues are full, force insert to a known-maxed queue and immediately pull off the bottom task to
-    //   execute in-line
-    // - note: it's possible to push/pull from a non-maxed queue here (race condition on other workers pulling tasks),
-    //   but if we are encountering maxed out queues then it's good to reduce the queue load here so future attempts
-    //   to submit a task are less likely to run into full queues (which wastes time)
-    if (!ignore_queue_size_limit && full_queue_index)
-    {
-        task_t next_task{
-                m_task_queues[clamped_priority][*full_queue_index].force_push_pop(std::move(simple_task).task)
-            };
-        return execute_task(next_task);
     }
 
     // fallback: force insert
     m_task_queues[clamped_priority][start_counter % m_num_queues].force_push(std::move(simple_task).task);
     m_waiter_manager.notify_one();
-    return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
 // ThreadPool INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-TaskVariant ThreadPool::submit_sleepy_task(SleepyTask &&sleepy_task)
+void ThreadPool::submit_sleepy_task(SleepyTask &&sleepy_task)
 {
     // set the start time of sleepy tasks with undefined start time
     set_current_time_if_undefined(sleepy_task.wake_time.start_time);
 
     // if the sleepy task is awake, unwrap its internal simple task
     if (sleepy_task_is_awake(sleepy_task))
-        return std::move(sleepy_task).simple_task;
+    {
+        this->submit(std::move(sleepy_task).simple_task);
+        return;
+    }
 
     // cycle the sleepy queues 
     const std::uint16_t start_counter{m_sleepy_queue_submission_counter.fetch_add(1, std::memory_order_relaxed)};
@@ -226,13 +209,12 @@ TaskVariant ThreadPool::submit_sleepy_task(SleepyTask &&sleepy_task)
 
         // success
         m_waiter_manager.notify_one();
-        return boost::none;
+        return;
     }
 
     // fallback: force insert
     m_sleepy_task_queues[start_counter % m_num_queues].force_push(std::move(sleepy_task));
     m_waiter_manager.notify_one();
-    return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
 // ThreadPool INTERNAL
@@ -430,14 +412,12 @@ void ThreadPool::run_as_worker_DONT_CALL_ME()
 //-------------------------------------------------------------------------------------------------------------------
 ThreadPool::ThreadPool(const unsigned char max_priority_level,
     const std::uint16_t num_managed_workers,
-    const std::uint32_t max_queue_size,
     const unsigned char num_submit_cycle_attempts,
     const std::chrono::nanoseconds max_wait_duration) :
         m_threadpool_id{s_context_id_counter.fetch_add(1, std::memory_order_relaxed)},
         m_threadpool_owner_id{initialize_threadpool_owner()},
         m_max_priority_level{max_priority_level},
         m_num_queues{static_cast<uint16_t>(num_managed_workers + 1)},  //+1 to include the threadpool owner
-        m_max_queue_size{max_queue_size},
         m_num_submit_cycle_attempts{num_submit_cycle_attempts},
         m_max_wait_duration{max_wait_duration},
         m_waiter_manager{m_num_queues}
@@ -446,12 +426,7 @@ ThreadPool::ThreadPool(const unsigned char max_priority_level,
     m_task_queues = std::vector<std::vector<TokenQueue<task_t>>>{static_cast<std::size_t>(m_max_priority_level + 1)};
 
     for (auto &priority_queues : m_task_queues)
-    {
         priority_queues = std::vector<TokenQueue<task_t>>{static_cast<std::size_t>(m_num_queues)};
-
-        for (TokenQueue<task_t> &queue : priority_queues)
-            queue.set_max_queue_size(m_max_queue_size);
-    }
 
     // create sleepy task queues
     m_sleepy_task_queues = std::vector<SleepyTaskQueue>{m_num_queues};
@@ -499,31 +474,25 @@ bool ThreadPool::submit(TaskVariant task) noexcept
 {
     assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
 
+    // submit the task
     try
     {
-        // submit tasks until no more are returned
-        // - we use a submission loop for handling the continuations of tasks that get executed within the submission code
-        //   instead of calling submit() directly on those continuations to avoid blowing out the worker's call-stack on
-        //   long continuation chains (only a very long series of task splits should cause a blow-out)
-        do
-        {
-            // case: empty task
-            if (!task) ; //do nothing
-            // case: simple task
-            else if (SimpleTask *simpletask = task.try_unwrap<SimpleTask>())
-                task = this->submit_simple_task(std::move(*simpletask), false);
-            // case: sleepy task
-            else if (SleepyTask *sleepytask = task.try_unwrap<SleepyTask>())
-                task = this->submit_sleepy_task(std::move(*sleepytask));
-            // case: notification task
-            // - we break here since a notification is simply a marker on the end of a task chain, and we don't want to
-            //   perform sleepy queue maintenance excessively
-            else if (task.try_unwrap<ScopedNotification>())
-                break;  //the notification is sent at function exit when the task gets destroyed
+        // case: empty task
+        if (!task) ; //skip ahead to sleepy queue maintenance
+        // case: simple task
+        else if (SimpleTask *simpletask = task.try_unwrap<SimpleTask>())
+            this->submit_simple_task(std::move(*simpletask));
+        // case: sleepy task
+        else if (SleepyTask *sleepytask = task.try_unwrap<SleepyTask>())
+            this->submit_sleepy_task(std::move(*sleepytask));
+        // case: notification task
+        // - we break here since a notification is simply a marker on the end of a task chain, and we don't want to
+        //   perform sleepy queue maintenance excessively
+        else if (task.try_unwrap<ScopedNotification>())
+            return true;  //the notification is sent at function exit when the task gets destroyed
 
-            // maintain the sleepy queues
-            this->perform_sleepy_queue_maintenance();
-        } while (task);
+        // maintain the sleepy queues
+        this->perform_sleepy_queue_maintenance();
     } catch (...) { return false; }
 
     return true;
