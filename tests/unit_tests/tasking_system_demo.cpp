@@ -486,7 +486,7 @@ static TaskGraphMonitor<R> schedule_task_graph(S scheduler, I &&initial_value, T
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 template <typename S>
-static auto basic_continuation_demo_test(S scheduler)
+static auto basic_tasking_system_demo_test(S scheduler)
 {
     // set up the basic task sequence
     int initial_val{10};
@@ -600,7 +600,7 @@ static auto basic_continuation_demo_test(S scheduler)
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 template <typename S>
-static auto basic_detached_continuation_demo_test(S scheduler)
+static auto basic_detached_tasking_system_demo_test(S scheduler)
 {
     // set up the basic task sequence
     int initial_val{10};
@@ -714,10 +714,10 @@ static auto basic_detached_continuation_demo_test(S scheduler)
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-TEST(continuation_demo, basic_autorun)
+TEST(tasking_system_demo, basic_autorun)
 {
     // run the test with a scheduler that immediately invokes tasks
-    TaskGraphMonitor<int> task_graph_monitor = basic_continuation_demo_test(
+    TaskGraphMonitor<int> task_graph_monitor = basic_tasking_system_demo_test(
             [](auto&& task)
             {
                 task();
@@ -732,10 +732,10 @@ TEST(continuation_demo, basic_autorun)
     std::cerr << "final result: " << final_result.value() << '\n';
 }
 //-------------------------------------------------------------------------------------------------------------------
-TEST(continuation_demo, basic_threadpool)
+TEST(tasking_system_demo, basic_threadpool)
 {
     // run the test with a scheduler that sends tasks into the demo threadpool
-    TaskGraphMonitor<int> task_graph_monitor = basic_continuation_demo_test(
+    TaskGraphMonitor<int> task_graph_monitor = basic_tasking_system_demo_test(
             [](auto&& task)
             {
                 add_task_to_demo_threadpool(std::forward<decltype(task)>(task));
@@ -758,11 +758,11 @@ TEST(continuation_demo, basic_threadpool)
     std::cerr << "final result: " << final_result.value() << '\n';
 }
 //-------------------------------------------------------------------------------------------------------------------
-TEST(continuation_demo, basic_threadpool_detached)
+TEST(tasking_system_demo, basic_threadpool_detached)
 {
     // run the test with a scheduler that sends tasks into the demo threadpool
     // - do not save the graph monitor (i.e. detach the graph immediately)
-    basic_detached_continuation_demo_test(
+    basic_detached_tasking_system_demo_test(
             [](auto&& task)
             {
                 add_task_to_demo_threadpool(std::forward<decltype(task)>(task));

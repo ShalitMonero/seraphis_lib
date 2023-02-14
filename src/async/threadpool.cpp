@@ -139,7 +139,7 @@ void ThreadPool::perform_sleepy_queue_maintenance()
     for (std::uint16_t queue_index{0}; queue_index < m_num_queues; ++queue_index)
     {
         // perform maintenance on this queue
-        std::list<std::shared_ptr<SleepingTask>> awakened_tasks{
+        std::list<std::unique_ptr<SleepingTask>> awakened_tasks{
                 m_sleepy_task_queues[queue_index].try_perform_maintenance()
             };
 
@@ -148,7 +148,7 @@ void ThreadPool::perform_sleepy_queue_maintenance()
         //   those first
         // - note: we ignore the queue size limit so that none of our awakened tasks get stuck waiting for overflowing
         //   queues to be dealt with
-        for (std::shared_ptr<SleepingTask> &task : awakened_tasks)
+        for (std::unique_ptr<SleepingTask> &task : awakened_tasks)
         {
             if (!task) continue;
             this->submit_simple_task(std::move(task->sleepy_task).simple_task, true);

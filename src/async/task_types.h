@@ -189,7 +189,7 @@ SimpleTask make_simple_task(const unsigned char priority, F &&func)
     static_assert(std::is_same<decltype(func()), TaskVariant>::value, "tasks must return task variants");
     return SimpleTask{
             .priority = priority,
-            .task     = std::forward<F>(func)
+            .task     = std::packaged_task<TaskVariant()>{std::forward<F>(func)}
         };
 }
 

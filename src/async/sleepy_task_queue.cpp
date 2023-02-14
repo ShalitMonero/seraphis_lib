@@ -55,7 +55,7 @@ void SleepyTaskQueue::force_push(SleepyTask &&task)
     std::lock_guard<std::mutex> lock{m_mutex};;
     m_queue.emplace(
             time_as_tick_count(task.wake_time),
-            std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
+            std::make_unique<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ bool SleepyTaskQueue::try_push(SleepyTask &&task)
         return false;
     m_queue.emplace(
             time_as_tick_count(task.wake_time),
-            std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
+            std::make_unique<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
         );
     return true;
 }
@@ -116,7 +116,7 @@ bool SleepyTaskQueue::try_swap(const unsigned char max_task_priority, SleepingTa
     return false;
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::list<std::shared_ptr<SleepingTask>> SleepyTaskQueue::try_perform_maintenance()
+std::list<std::unique_ptr<SleepingTask>> SleepyTaskQueue::try_perform_maintenance()
 {
     // current time
     auto now_count = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -127,7 +127,7 @@ std::list<std::shared_ptr<SleepingTask>> SleepyTaskQueue::try_perform_maintenanc
         return {};
 
     // delete dead tasks and extract awake tasks until the lowest sleeping unclaimed task is encountered
-    std::list<std::shared_ptr<SleepingTask>> awakened_tasks;
+    std::list<std::unique_ptr<SleepingTask>> awakened_tasks;
 
     for (auto queue_it = m_queue.begin(); queue_it != m_queue.end();)
     {

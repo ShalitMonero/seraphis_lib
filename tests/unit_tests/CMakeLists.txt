@@ -30,6 +30,7 @@ set(unit_tests_sources
   account.cpp
   apply_permutation.cpp
   address_from_url.cpp
+  async.cpp
   base58.cpp
   blockchain_db.cpp
   block_queue.cpp
@@ -42,7 +43,6 @@ set(unit_tests_sources
   chacha.cpp
   checkpoints.cpp
   command_line.cpp
-  continuation_demo.cpp
   crypto.cpp
   decompose_amount_into_digits.cpp
   device.cpp
@@ -96,6 +96,7 @@ set(unit_tests_sources
   sha256.cpp
   slow_memmem.cpp
   subaddress.cpp
+  tasking_system_demo.cpp
   test_tx_utils.cpp
   test_peerlist.cpp
   test_protocol_pack.cpp
