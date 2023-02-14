@@ -53,12 +53,11 @@ long long time_as_tick_count(const WakeTime &waketime)
 void SleepyTaskQueue::force_push(SleepyTask &&task)
 {
     std::lock_guard<std::mutex> lock{m_mutex};
-    m_queue.insert(
-            std::pair<const long long, std::shared_ptr<SleepingTask>>{
-                time_as_tick_count(task.wake_time),
-                std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
-            }
-        );
+    std::pair<const long long, std::shared_ptr<SleepingTask>> temp{
+            time_as_tick_count(task.wake_time),
+            std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
+        };
+    m_queue.insert(std::move(temp));
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool SleepyTaskQueue::try_push(SleepyTask &&task)
@@ -66,12 +65,11 @@ bool SleepyTaskQueue::try_push(SleepyTask &&task)
     std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
     if (!lock.owns_lock())
         return false;
-    m_queue.insert(
-            std::pair<const long long, std::shared_ptr<SleepingTask>>{
-                time_as_tick_count(task.wake_time),
-                std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
-            }
-        );
+    std::pair<const long long, std::shared_ptr<SleepingTask>> temp{
+            time_as_tick_count(task.wake_time),
+            std::make_shared<SleepingTask>(std::move(task), SleepingTaskStatus::UNCLAIMED)
+        };
+    m_queue.insert(std::move(temp));
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
