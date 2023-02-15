@@ -80,7 +80,8 @@ public:
     /// try to clean up the queue
     /// - remove dead tasks
     /// - extract awake unclaimed tasks
-    std::list<std::unique_ptr<SleepingTask>> try_perform_maintenance();
+    std::list<std::unique_ptr<SleepingTask>> try_perform_maintenance(
+        const std::chrono::time_point<std::chrono::steady_clock> &current_time);
 
 private:
 //member variables

@@ -116,10 +116,11 @@ bool SleepyTaskQueue::try_swap(const unsigned char max_task_priority, SleepingTa
     return false;
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::list<std::unique_ptr<SleepingTask>> SleepyTaskQueue::try_perform_maintenance()
+std::list<std::unique_ptr<SleepingTask>> SleepyTaskQueue::try_perform_maintenance(
+        const std::chrono::time_point<std::chrono::steady_clock> &current_time)
 {
     // current time
-    auto now_count = std::chrono::steady_clock::now().time_since_epoch().count();
+    auto now_count = current_time.time_since_epoch().count();
 
     // lock the queue
     std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};

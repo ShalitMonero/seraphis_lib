@@ -125,6 +125,27 @@ int main(int argc, char** argv)
   ParamsShuttleAsync p_async;
   p_async.core_params = p.core_params;
 
+
+  p_async.description = "async: main thread + 6, 1000000 tasks @ 0us";
+  p_async.num_extra_threads          = 6;
+  p_async.num_tasks                  = 1000000;
+  p_async.sleepy_task_cadence        = 0;
+  p_async.task_duration              = std::chrono::microseconds{0};
+  p_async.sleepy_task_sleep_duration = std::chrono::microseconds{0};
+  //TEST_PERFORMANCE0(filter, p_async, test_common_threadpool); p_async.description = "";
+  TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
+
+  p_async.description = "async: main thread + 6, 100000 tasks @ 1us";
+  p_async.num_extra_threads          = 6;
+  p_async.num_tasks                  = 100000;
+  p_async.sleepy_task_cadence        = 0;
+  p_async.task_duration              = std::chrono::microseconds{1};
+  p_async.sleepy_task_sleep_duration = std::chrono::microseconds{0};
+  //TEST_PERFORMANCE0(filter, p_async, test_common_threadpool); p_async.description = "";
+  TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
+
+/*
+*/
   p_async.description = "async: main thread, 1 task @ 100us";
   p_async.num_extra_threads          = 0;
   p_async.num_tasks                  = 1;
@@ -188,9 +209,9 @@ int main(int argc, char** argv)
   TEST_PERFORMANCE0(filter, p_async, test_common_threadpool); p_async.description = "";
   TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
 
-  p_async.description = "async: main thread + 6, 1000 tasks @ 1us";
+  p_async.description = "async: main thread + 6, 10000 tasks @ 1us";
   p_async.num_extra_threads          = 6;
-  p_async.num_tasks                  = 1000;
+  p_async.num_tasks                  = 10000;
   p_async.sleepy_task_cadence        = 0;
   p_async.task_duration              = std::chrono::microseconds{1};
   p_async.sleepy_task_sleep_duration = std::chrono::microseconds{0};

@@ -135,12 +135,14 @@ static TaskVariant execute_task(task_t &task)
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::perform_sleepy_queue_maintenance()
 {
+    const std::chrono::time_point<std::chrono::steady_clock> current_time{std::chrono::steady_clock::now()};
+
     // cycle through the sleepy queues once, cleaning up each queue as we go
     for (std::uint16_t queue_index{0}; queue_index < m_num_queues; ++queue_index)
     {
         // perform maintenance on this queue
         std::list<std::unique_ptr<SleepingTask>> awakened_tasks{
-                m_sleepy_task_queues[queue_index].try_perform_maintenance()
+                m_sleepy_task_queues[queue_index].try_perform_maintenance(current_time)
             };
 
         // submit the awakened sleepy tasks
