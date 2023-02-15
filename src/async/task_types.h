@@ -82,11 +82,10 @@ enum class SleepingTaskStatus : unsigned char
 
 struct SimpleTask;
 struct SleepyTask;
-class ScopedNotification;
 
 /// task
 //todo: std::packaged_task is inefficient, all we need is std::move_only_function (C++23)
-using TaskVariant = tools::variant<SimpleTask, SleepyTask, ScopedNotification>;
+using TaskVariant = tools::variant<SimpleTask, SleepyTask>;
 using task_t      = std::packaged_task<TaskVariant()>;  //tasks auto-return their continuation (or an empty variant)
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -124,58 +123,6 @@ struct SleepingTask final
     SleepingTask(SleepyTask &&sleepy_task, const SleepingTaskStatus status) :
         sleepy_task{std::move(sleepy_task)}, status{status}
     {}
-};
-
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-
-/// scoped notification (notifies on destruction)
-/// - only use this if you can GUARANTEE the lifetimes of any references in the notification function are longer
-///   than the notification's lifetime
-class ScopedNotification final
-{
-public:
-//constructors
-    /// normal constructor
-    ScopedNotification(std::function<void()> notification_func) :
-        m_notification_func{std::move(notification_func)}
-    {}
-
-    /// disable copies (this is a scoped manager)
-    ScopedNotification(const ScopedNotification&)            = delete;
-    ScopedNotification& operator=(const ScopedNotification&) = delete;
-
-    /// moved-from notifications should have empty notification functions so they are not called in the destructor
-    ScopedNotification(ScopedNotification &&other)
-    {
-        *this = std::move(other);
-    }
-    ScopedNotification& operator=(ScopedNotification &&other)
-    {
-        this->notify();
-        this->m_notification_func = std::move(other).m_notification_func;
-        other.m_notification_func = nullptr;  //nullify the moved-from function
-        return *this;
-    }
-
-//destructor
-    ~ScopedNotification()
-    {
-        this->notify();
-    }
-
-private:
-//member functions
-    void notify()
-    {
-        if (m_notification_func)
-        {
-            try { m_notification_func(); } catch (...) {}
-        }
-    }
-
-//member variables
-    std::function<void()> m_notification_func;
 };
 
 //-------------------------------------------------------------------------------------------------------------------

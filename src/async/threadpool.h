@@ -31,6 +31,7 @@
 #pragma once
 
 //local headers
+#include "scoped_notification.h"
 #include "sleepy_task_queue.h"
 #include "task_types.h"
 #include "token_queue.h"
@@ -55,8 +56,8 @@ namespace async
 {
 
 /// join signal/token/condition helper types
-using join_signal_t = std::shared_ptr<std::atomic<bool>>;
-using join_token_t = std::shared_ptr<ScopedNotification>;
+using join_signal_t    = std::shared_ptr<std::atomic<bool>>;
+using join_token_t     = std::shared_ptr<ScopedNotification>;
 using join_condition_t = std::function<bool()>;
 
 /// thread pool

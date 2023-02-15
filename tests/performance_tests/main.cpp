@@ -125,6 +125,18 @@ int main(int argc, char** argv)
   ParamsShuttleAsync p_async;
   p_async.core_params = p.core_params;
 
+
+  p_async.description = "async: main thread + 6, 100 tasks @ 1000us";
+  p_async.num_extra_threads          = 6;
+  p_async.num_tasks                  = 10000;
+  p_async.sleepy_task_cadence        = 0;
+  p_async.task_duration              = std::chrono::microseconds{1000};
+  p_async.sleepy_task_sleep_duration = std::chrono::microseconds{0};
+//  TEST_PERFORMANCE0(filter, p_async, test_common_threadpool); p_async.description = "";
+  TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
+
+std::this_thread::sleep_for(std::chrono::seconds{4});
+
   p_async.description = "async: main thread, 1 task @ 100us";
   p_async.num_extra_threads          = 0;
   p_async.num_tasks                  = 1;

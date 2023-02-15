@@ -120,11 +120,14 @@ static void set_current_time_if_undefined(std::chrono::time_point<std::chrono::s
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static TaskVariant execute_task(task_t &task)
+static TaskVariant execute_task(task_t &task) noexcept
 {
-    std::future<TaskVariant> result{task.get_future()};
-    task();
-    try { return result.get(); } catch (...) {}
+    try
+    {
+        std::future<TaskVariant> result{task.get_future()};
+        task();
+        return result.get();
+    } catch (...) {}
     return boost::none;
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -505,11 +508,6 @@ bool ThreadPool::submit(TaskVariant task) noexcept
         // case: sleepy task
         else if (SleepyTask *sleepytask = task.try_unwrap<SleepyTask>())
             this->submit_sleepy_task(std::move(*sleepytask));
-        // case: notification task
-        // - we break here since a notification is simply a marker on the end of a task chain, and we don't want to
-        //   perform sleepy queue maintenance excessively
-        else if (task.try_unwrap<ScopedNotification>())
-            return true;  //the notification is sent at function exit when the task gets destroyed
 
         // maintain the sleepy queues
         this->perform_sleepy_queue_maintenance();
