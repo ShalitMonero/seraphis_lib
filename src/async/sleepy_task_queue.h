@@ -74,7 +74,7 @@ public:
     ///   swaps pointers
     /// - if 'task_inout == nullptr', then we set it to the unclaimed task with the lowest waketime
     /// - the cost of this function may be higher than expected if there are many tasks with higher priority than our
-    ///   allowed max
+    ///   allowed max priority
     bool try_swap(const unsigned char max_task_priority, SleepingTask* &task_inout);
 
     /// try to clean up the queue

@@ -135,7 +135,7 @@ private:
 //---------------------------------------------------------------------------------------------------------------------
 
 static void submit_task_async_threadpool(const std::chrono::nanoseconds task_duration,
-    std::shared_ptr<async::ScopedNotification> &join_token,
+    async::join_token_t &join_token,
     async::ThreadPool &threadpool)
 {
     // prepare task
@@ -199,10 +199,10 @@ public:
     bool test()
     {
         // 1. make join signal
-        std::shared_ptr<std::atomic<bool>> join_signal{std::make_shared<std::atomic<bool>>()};
+        async::join_signal_t join_signal{m_threadpool->make_join_signal()};
 
         // 2. get join token
-        auto join_token = m_threadpool->get_join_token(join_signal);
+        async::join_token_t join_token{m_threadpool->get_join_token(join_signal)};
 
         // 3. submit tasks to join on
         for (std::size_t task_id{0}; task_id < m_params.num_tasks; ++task_id)
@@ -219,7 +219,9 @@ public:
         }
 
         // 4. get join condition
-        auto join_condition = m_threadpool->get_join_condition(std::move(join_token), std::move(join_signal));
+        async::join_condition_t join_condition{
+                m_threadpool->get_join_condition(std::move(join_signal), std::move(join_token))
+            };
 
         // 5. join the tasks
         m_threadpool->work_while_waiting(std::move(join_condition));

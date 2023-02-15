@@ -54,6 +54,11 @@
 namespace async
 {
 
+/// join signal/token/condition helper types
+using join_signal_t = std::shared_ptr<std::atomic<bool>>;
+using join_token_t = std::shared_ptr<ScopedNotification>;
+using join_condition_t = std::function<bool()>;
+
 /// thread pool
 class ThreadPool final
 {
@@ -129,9 +134,9 @@ public:
     ///
     /// - PRECONDITION: the thread that joins on a join token must be the same thread that created that token
     /// - PRECONDITION: there must be NO living copies of a join token after the corresponding threadpool has died
-    std::shared_ptr<ScopedNotification> get_join_token(std::shared_ptr<std::atomic<bool>> &join_signal_inout);
-    static std::function<bool()> get_join_condition(std::shared_ptr<ScopedNotification> &&join_token_in,
-        std::shared_ptr<std::atomic<bool>> &&join_signal_in);
+    static join_signal_t make_join_signal();
+    join_token_t get_join_token(join_signal_t &join_signal_inout);
+    static join_condition_t get_join_condition(join_signal_t &&join_signal_in, join_token_t &&join_token_in);
 
     void work_while_waiting(const std::chrono::time_point<std::chrono::steady_clock> &deadline,
         const unsigned char max_task_priority = 0);

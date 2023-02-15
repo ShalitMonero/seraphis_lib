@@ -518,7 +518,12 @@ bool ThreadPool::submit(TaskVariant task) noexcept
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::shared_ptr<ScopedNotification> ThreadPool::get_join_token(std::shared_ptr<std::atomic<bool>> &join_signal_inout)
+join_signal_t ThreadPool::make_join_signal()
+{
+    return std::make_shared<std::atomic<bool>>();
+}
+//-------------------------------------------------------------------------------------------------------------------
+join_token_t ThreadPool::get_join_token(join_signal_t &join_signal_inout)
 {
     assert(test_threadpool_member_invariants(m_threadpool_id, m_threadpool_owner_id));
 
@@ -539,8 +544,7 @@ std::shared_ptr<ScopedNotification> ThreadPool::get_join_token(std::shared_ptr<s
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::function<bool()> ThreadPool::get_join_condition(std::shared_ptr<ScopedNotification> &&join_token_in,
-    std::shared_ptr<std::atomic<bool>> &&join_signal_in)
+join_condition_t ThreadPool::get_join_condition(join_signal_t &&join_signal_in, join_token_t &&join_token_in)
 {
     // clear the joiner's copy of the join token
     join_token_in = nullptr;

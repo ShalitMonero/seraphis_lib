@@ -78,7 +78,7 @@ TEST(async, basic_join)
     async::ThreadPool pool{1, 0, 40, std::chrono::seconds{1}};
 
     // 1. make join signal
-    std::shared_ptr<std::atomic<bool>> join_signal = std::make_shared<std::atomic<bool>>();
+    auto join_signal = pool.make_join_signal();
 
     // 2. get join token
     auto join_token = pool.get_join_token(join_signal);
@@ -100,7 +100,7 @@ TEST(async, basic_join)
         ));
 
     // 4. get join condition
-    auto join_condition = pool.get_join_condition(std::move(join_token), std::move(join_signal));
+    auto join_condition = pool.get_join_condition(std::move(join_signal), std::move(join_token));
 
     // 5. join the tasks
     pool.work_while_waiting(std::move(join_condition));
