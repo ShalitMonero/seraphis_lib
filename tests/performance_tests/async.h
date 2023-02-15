@@ -157,7 +157,7 @@ static void submit_task_async_threadpool(const std::chrono::nanoseconds task_dur
             return boost::none;
         };
 
-    // otherwise submit to the threadpool
+    // submit to the threadpool
     threadpool.submit(async::make_simple_task(0, std::move(task)));
 }
 
@@ -177,7 +177,7 @@ static void submit_sleepy_task_async_threadpool(const std::chrono::nanoseconds t
             return boost::none;
         };
 
-    // otherwise submit to the threadpool
+    // submit to the threadpool
     threadpool.submit(async::make_sleepy_task(0, sleep_duration, std::move(task)));
 }
 
