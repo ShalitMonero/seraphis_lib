@@ -163,6 +163,7 @@ private:
     std::vector<SleepyTaskQueue> m_sleepy_task_queues;   //vector: workers
     std::atomic<std::uint16_t> m_normal_queue_submission_counter{0};
     std::atomic<std::uint16_t> m_sleepy_queue_submission_counter{0};
+    std::atomic<std::uint64_t> m_num_unclaimed_sleepy_tasks{0};
 
     // waiter manager
     WaiterManager m_waiter_manager;

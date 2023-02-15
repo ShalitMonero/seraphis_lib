@@ -135,9 +135,14 @@ static TaskVariant execute_task(task_t &task)
 //-------------------------------------------------------------------------------------------------------------------
 void ThreadPool::perform_sleepy_queue_maintenance()
 {
-    const std::chrono::time_point<std::chrono::steady_clock> current_time{std::chrono::steady_clock::now()};
+    // don't do maintenance if there are no unclaimed sleepy tasks (this can allow dead sleepy tasks to linger longer,
+    //   but at the benefit of not performing maintenance when it's not needed)
+    if (m_num_unclaimed_sleepy_tasks.load(std::memory_order_relaxed) == 0)
+        return;
 
     // cycle through the sleepy queues once, cleaning up each queue as we go
+    const std::chrono::time_point<std::chrono::steady_clock> current_time{std::chrono::steady_clock::now()};
+
     for (std::uint16_t queue_index{0}; queue_index < m_num_queues; ++queue_index)
     {
         // perform maintenance on this queue
@@ -210,12 +215,14 @@ void ThreadPool::submit_sleepy_task(SleepyTask &&sleepy_task)
             continue;
 
         // success
+        m_num_unclaimed_sleepy_tasks.fetch_add(1, std::memory_order_relaxed);
         m_waiter_manager.notify_one();
         return;
     }
 
     // fallback: force insert
     m_sleepy_task_queues[start_counter % m_num_queues].force_push(std::move(sleepy_task));
+    m_num_unclaimed_sleepy_tasks.fetch_add(1, std::memory_order_relaxed);
     m_waiter_manager.notify_one();
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -262,6 +269,7 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
     // wait until we have an awake task while listening to the task notification system
     SleepingTask* sleeping_task{nullptr};
     boost::optional<task_t> final_task{};
+    bool found_sleepy_task{false};
 
     while (true)
     {
@@ -272,6 +280,12 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
         // failure: no sleepy task available
         if (!sleeping_task)
             break;
+        else if (!found_sleepy_task)
+        {
+            // record that there is one fewer unclaimed task in the sleepy queues
+            m_num_unclaimed_sleepy_tasks.fetch_sub(1, std::memory_order_relaxed);
+            found_sleepy_task = true;
+        }
 
         // wait while listening
         // - when shutting down, aggressively awaken sleepy tasks (this tends to burn CPU for tasks that really
@@ -287,6 +301,7 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
         {
             // release our sleepy task
             unclaim_sleeping_task(*sleeping_task);
+            m_num_unclaimed_sleepy_tasks.fetch_add(1, std::memory_order_relaxed);
 
             // notify another worker now that our sleepy task is available again
             m_waiter_manager.notify_one();
@@ -317,6 +332,7 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
         {
             // release our sleepy task
             unclaim_sleeping_task(*sleeping_task);
+            m_num_unclaimed_sleepy_tasks.fetch_add(1, std::memory_order_relaxed);
 
             // notify another worker now that our sleepy task is available again
             m_waiter_manager.notify_one();
