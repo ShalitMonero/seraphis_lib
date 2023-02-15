@@ -84,9 +84,11 @@ struct SimpleTask;
 struct SleepyTask;
 
 /// task
-//todo: std::packaged_task is inefficient, all we need is std::move_only_function (C++23)
+//todo: std::function doesn't allow move-only functions and std::packaged_task is inefficient all we need is
+//      std::move_only_function (C++23)
 using TaskVariant = tools::variant<SimpleTask, SleepyTask>;
-using task_t      = std::packaged_task<TaskVariant()>;  //tasks auto-return their continuation (or an empty variant)
+using task_t      = std::function<TaskVariant()>;  //tasks auto-return their continuation (or an empty variant)
+//using task_t      = std::packaged_task<TaskVariant()>;
 
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -136,7 +138,8 @@ SimpleTask make_simple_task(const unsigned char priority, F &&func)
     static_assert(std::is_same<decltype(func()), TaskVariant>::value, "tasks must return task variants");
     return SimpleTask{
             .priority = priority,
-            .task     = std::packaged_task<TaskVariant()>{std::forward<F>(func)}
+            .task     = std::function<TaskVariant()>{std::forward<F>(func)}
+            //.task     = std::packaged_task<TaskVariant()>{std::forward<F>(func)}
         };
 }
 

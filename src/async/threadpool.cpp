@@ -124,9 +124,10 @@ static TaskVariant execute_task(task_t &task) noexcept
 {
     try
     {
-        std::future<TaskVariant> result{task.get_future()};
-        task();
-        return result.get();
+        //std::future<TaskVariant> result{task.get_future()};
+        //task();
+        //return result.get();
+        return task();
     } catch (...) {}
     return boost::none;
 }
