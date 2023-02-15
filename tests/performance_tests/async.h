@@ -42,6 +42,7 @@
 
 struct ParamsShuttleAsync final : public ParamsShuttle
 {
+    std::string description{};
     std::size_t num_extra_threads{0};
     std::size_t num_tasks{0};
     std::size_t sleepy_task_cadence{0}; //e.g. 3 means 'every third' => normal, normal, sleepy, normal, normal, sleepy, ...
@@ -91,6 +92,9 @@ public:
 
     bool init(const ParamsShuttleAsync &params)
     {
+        if (params.description.size())
+            std::cout << params.description << '\n';
+
         // save the test parameters
         m_params = params;
 
@@ -189,13 +193,16 @@ public:
 
     bool init(const ParamsShuttleAsync &params)
     {
+        if (params.description.size())
+            std::cout << params.description << '\n';
+
         // save the test parameters
         m_params = params;
 
         // create the threadpool
         // - note: use 3 priority levels {0, 1, 2} for realism
         m_threadpool = std::make_unique<async::ThreadPool>(
-                2, params.num_extra_threads, 40, std::chrono::seconds{1}
+                2, params.num_extra_threads, 20, std::chrono::seconds{1}
             );
 
         return true;
