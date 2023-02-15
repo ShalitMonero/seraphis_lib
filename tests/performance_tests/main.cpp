@@ -197,7 +197,7 @@ int main(int argc, char** argv)
   TEST_PERFORMANCE0(filter, p_async, test_common_threadpool); p_async.description = "";
   TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
 
-  p_async.description = "async: main thread + 6, 1000 tasks @ 100us, sleepy every 5th @ 100us";
+  p_async.description = "async: main thread + 6, 1000 tasks @ 100us, sleep every 5th for 100us";
   p_async.num_extra_threads          = 6;
   p_async.num_tasks                  = 1000;
   p_async.sleepy_task_cadence        = 5;
@@ -206,7 +206,7 @@ int main(int argc, char** argv)
   TEST_PERFORMANCE0(filter, p_async, test_common_threadpool); p_async.description = "";
   TEST_PERFORMANCE0(filter, p_async, test_async_threadpool);
 
-  p_async.description = "async: main thread + 6, 1000 tasks @ 10us, sleepy every 5th @ 1000us";
+  p_async.description = "async: main thread + 6, 1000 tasks @ 10us, sleep every 5th for 1000us";
   p_async.num_extra_threads          = 6;
   p_async.num_tasks                  = 1000;
   p_async.sleepy_task_cadence        = 5;

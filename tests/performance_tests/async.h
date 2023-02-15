@@ -61,8 +61,7 @@ static bool is_sleepy_task(const std::size_t sleepy_task_cadence, const std::siz
 //---------------------------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------------------------
 
-static void submit_task_common_threadpool(const bool run_inline,
-    const std::chrono::nanoseconds task_duration,
+static void submit_task_common_threadpool(const std::chrono::nanoseconds task_duration,
     tools::threadpool &threadpool,
     tools::threadpool::waiter &waiter)
 {
@@ -72,13 +71,6 @@ static void submit_task_common_threadpool(const bool run_inline,
         {
             std::this_thread::sleep_for(l_sleep_duration);
         };
-
-    // run it immediately if appropriate
-    if (run_inline)
-    {
-        task();
-        return;
-    }
 
     // otherwise submit to the threadpool
     threadpool.submit(&waiter, std::move(task), true);
@@ -98,12 +90,9 @@ public:
         // save the test parameters
         m_params = params;
 
-        // if there are no extra worker threads, then we will just run tasks inline instead of submitting them
-        m_run_inline = params.num_extra_threads == 0;
-
         // create the threadpool
         m_threadpool = std::unique_ptr<tools::threadpool>{
-                tools::threadpool::getNewForUnitTests(params.num_extra_threads)
+                tools::threadpool::getNewForUnitTests(params.num_extra_threads + 1)
             };
 
         return true;
@@ -127,7 +116,7 @@ public:
                 task_duration += m_params.sleepy_task_sleep_duration;
 
             // submit the task
-            submit_task_common_threadpool(m_run_inline, task_duration, *m_threadpool, waiter);
+            submit_task_common_threadpool(task_duration, *m_threadpool, waiter);
         }
 
         // join
@@ -138,7 +127,6 @@ public:
 
 private:
     ParamsShuttleAsync m_params;
-    bool m_run_inline;
     std::unique_ptr<tools::threadpool> m_threadpool;
 };
 
