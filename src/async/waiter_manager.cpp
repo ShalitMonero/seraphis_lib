@@ -202,7 +202,8 @@ WaiterManager::Result WaiterManager::conditional_wait_until(const std::uint16_t 
             m_conditional_waiters[clamped_waiter_index].cond_var,
             m_conditional_waiters[clamped_waiter_index].num_waiting,
             condition_checker_func,
-            [&timepoint](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
+            [&timepoint](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout)
+            -> std::cv_status
             {
                 return cv_inout.wait_until(lock_inout, timepoint);
             },

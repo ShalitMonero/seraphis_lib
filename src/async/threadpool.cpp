@@ -58,7 +58,7 @@ static std::uint64_t initialize_threadpool_owner()
     assert(tl_worker_id == 0);  //only threads with id = 0 may own threadpools
 
     // the first time this function is called, initialize with a unique threadpool id
-    // - a threadpool owner gets its own unique threadpool id to facilitate owning multiple threadpools with
+    // - a threadpool owner gets its own unique context id to facilitate owning multiple threadpools with
     //   overlapping lifetimes
     static const std::uint64_t id{
             []()
@@ -74,8 +74,8 @@ static std::uint64_t initialize_threadpool_owner()
 //-------------------------------------------------------------------------------------------------------------------
 static void initialize_threadpool_worker_thread(const std::uint64_t threadpool_id, const std::uint16_t worker_id)
 {
-    assert(tl_context_id == 0);  //only threads without a context may be subthreads of a threadpool
-    assert(worker_id > 0);  //id 0 is reserved for pool owners
+    assert(tl_context_id == 0);  //only threads without a context may become subthreads of a threadpool
+    assert(worker_id > 0);  //id 0 is reserved for pool owners, who have their own unique context id
     tl_context_id = threadpool_id;
     tl_worker_id  = worker_id;
 }
