@@ -70,11 +70,12 @@ static void submit_task_common_threadpool(const std::chrono::nanoseconds task_du
     // prepare task
     auto task =
         [
-            l_dummy          = dummy,  //include a dummy shared ptr so perf results are comparable with other tests
-            l_sleep_duration = task_duration
+            l_dummy         = dummy,  //include a dummy shared ptr so perf results are comparable with other tests
+            l_task_duration = task_duration
         ]()
         {
-            std::this_thread::sleep_for(l_sleep_duration);
+            if (l_task_duration > std::chrono::nanoseconds{0})
+                std::this_thread::sleep_for(l_task_duration);
         };
 
     // otherwise submit to the threadpool
@@ -151,7 +152,8 @@ static void submit_task_async_threadpool(const std::chrono::nanoseconds task_dur
             l_task_duration = task_duration
         ]() -> async::TaskVariant
         {
-            std::this_thread::sleep_for(l_task_duration);
+            if (l_task_duration > std::chrono::nanoseconds{0})
+                std::this_thread::sleep_for(l_task_duration);
             return boost::none;
         };
 
@@ -172,7 +174,8 @@ static void submit_sleepy_task_async_threadpool(const std::chrono::nanoseconds t
             l_sleep_duration = sleep_duration
         ]() mutable -> async::TaskVariant
         {
-            std::this_thread::sleep_for(l_task_duration);
+            if (l_task_duration > std::chrono::nanoseconds{0})
+                std::this_thread::sleep_for(l_task_duration);
             return async::make_sleepy_task(0,
                 std::chrono::steady_clock::now() + l_sleep_duration,
                 [
@@ -265,7 +268,8 @@ static void submit_task_parent_threadpool(const std::chrono::nanoseconds task_du
             l_task_duration = task_duration
         ]()
         {
-            std::this_thread::sleep_for(l_task_duration);
+            if (l_task_duration > std::chrono::nanoseconds{0})
+                std::this_thread::sleep_for(l_task_duration);
         };
 
     // submit to the threadpool
@@ -291,6 +295,16 @@ public:
                 params.num_extra_threads + 1
             );
 
+        // sleep one of the threads to emulate our main thread
+        m_main_pause_signal = std::make_unique<std::promise<void>>();
+        m_threadpool->submit(
+            [
+                pause_flag = std::make_shared<std::future<void>>(m_main_pause_signal->get_future())
+            ]() mutable
+            {
+                try { pause_flag->get(); } catch (...) {}
+            });
+
         return true;
     }
 
@@ -314,10 +328,22 @@ public:
             submit_task_parent_threadpool(task_duration, *m_threadpool, done_signal);
         }
 
+        // release the paused pseudo-main thread to emulate 'work while joining'
+        m_main_pause_signal = std::make_unique<std::promise<void>>();
+
         // synchronize the join
         std::future<void> flag{done_signal->get_future()};
         done_signal = nullptr;
         try { flag.get(); } catch (...) {}
+
+        // pause the pseudo-main thread again
+        m_threadpool->submit(
+            [
+                pause_flag = std::make_shared<std::future<void>>(m_main_pause_signal->get_future())
+            ]() mutable
+            {
+                try { pause_flag->get(); } catch (...) {}
+            });
 
         return true;
     }
@@ -325,6 +351,9 @@ public:
 private:
     ParamsShuttleAsync m_params;
     std::unique_ptr<parent::ThreadPool> m_threadpool;
+
+    // pause signal (must be defined last so the threadpool won't hang)
+    std::unique_ptr<std::promise<void>> m_main_pause_signal;
 };
 
 //---------------------------------------------------------------------------------------------------------------------
