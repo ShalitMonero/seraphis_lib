@@ -164,19 +164,29 @@ static void submit_sleepy_task_async_threadpool(const std::chrono::nanoseconds t
     async::join_token_t &join_token,
     async::ThreadPool &threadpool)
 {
-    // prepare task
+    // prepare task whose continuation will sleep until 'sleep_duration' after the task is done
     auto task =
         [
-            l_join_token    = join_token,
-            l_task_duration = task_duration
-        ]() -> async::TaskVariant
+            l_join_token     = join_token,
+            l_task_duration  = task_duration,
+            l_sleep_duration = sleep_duration
+        ]() mutable -> async::TaskVariant
         {
             std::this_thread::sleep_for(l_task_duration);
-            return boost::none;
+            return async::make_sleepy_task(0,
+                std::chrono::steady_clock::now() + l_sleep_duration,
+                [
+                    ll_join_token = std::move(l_join_token),
+                    x             = 5  //force the task to allocate instead of using small-object optimization
+                ]() -> async::TaskVariant
+                {
+                    (void) x;
+                    return boost::none;  //do nothing
+                });
         };
 
     // submit to the threadpool
-    threadpool.submit(async::make_sleepy_task(0, sleep_duration, std::move(task)));
+    threadpool.submit(async::make_simple_task(0, std::move(task)));
 }
 
 /// threadpool from src/async/threadpool.h
