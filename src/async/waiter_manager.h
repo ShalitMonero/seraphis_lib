@@ -110,13 +110,17 @@ public:
     WaiterManager& operator=(WaiterManager&&) = delete;
 
 //member functions
-    Result wait(const std::uint16_t waiter_index, const ShutdownPolicy shutdown_policy) noexcept;
+    Result wait(const std::uint16_t waiter_index,
+        const ShutdownPolicy shutdown_policy,
+        const bool high_priority_wait) noexcept;
     Result wait_for(const std::uint16_t waiter_index,
         const std::chrono::nanoseconds &duration,
-        const ShutdownPolicy shutdown_policy) noexcept;
+        const ShutdownPolicy shutdown_policy,
+    const bool high_priority_wait) noexcept;
     Result wait_until(const std::uint16_t waiter_index,
         const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
-        const ShutdownPolicy shutdown_policy) noexcept;
+        const ShutdownPolicy shutdown_policy,
+        const bool high_priority_wait) noexcept;
     Result conditional_wait(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
         const ShutdownPolicy shutdown_policy) noexcept;
@@ -144,14 +148,14 @@ private:
     const std::uint16_t m_num_managed_waiters;
 
     /// manager status
-    std::atomic<std::int32_t> m_num_normal_waiters{0};
-    std::atomic<std::int32_t> m_num_sleepy_waiters{0};
+    std::atomic<std::int32_t> m_num_primary_waiters{0};
+    std::atomic<std::int32_t> m_num_secondary_waiters{0};
     std::atomic<bool> m_shutting_down{false};
 
     /// synchronization
     std::vector<std::mutex> m_waiter_mutexes;
-    std::condition_variable_any m_normal_shared_cond_var;
-    std::condition_variable_any m_sleepy_shared_cond_var;
+    std::condition_variable_any m_primary_shared_cond_var;
+    std::condition_variable_any m_secondary_shared_cond_var;
 
     /// conditional waiters
     std::vector<ConditionalWaiterContext> m_conditional_waiters;

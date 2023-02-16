@@ -109,11 +109,12 @@ WaiterManager::WaiterManager(const std::uint16_t num_managed_waiters) :
 }
 //-------------------------------------------------------------------------------------------------------------------
 WaiterManager::Result WaiterManager::wait(const std::uint16_t waiter_index,
-    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
+    const WaiterManager::ShutdownPolicy shutdown_policy,
+    const bool high_priority_wait) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
-            m_normal_shared_cond_var,
-            m_num_normal_waiters,
+            high_priority_wait ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
+            high_priority_wait ? m_num_primary_waiters     : m_num_secondary_waiters,
             nullptr,
             [](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock) -> std::cv_status
             {
@@ -126,11 +127,12 @@ WaiterManager::Result WaiterManager::wait(const std::uint16_t waiter_index,
 //-------------------------------------------------------------------------------------------------------------------
 WaiterManager::Result WaiterManager::wait_for(const std::uint16_t waiter_index,
     const std::chrono::nanoseconds &duration,
-    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
+    const WaiterManager::ShutdownPolicy shutdown_policy,
+    const bool high_priority_wait) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
-            m_sleepy_shared_cond_var,
-            m_num_sleepy_waiters,
+            high_priority_wait ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
+            high_priority_wait ? m_num_primary_waiters     : m_num_secondary_waiters,
             nullptr,
             [&duration](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
@@ -142,11 +144,12 @@ WaiterManager::Result WaiterManager::wait_for(const std::uint16_t waiter_index,
 //-------------------------------------------------------------------------------------------------------------------
 WaiterManager::Result WaiterManager::wait_until(const std::uint16_t waiter_index,
     const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
-    const WaiterManager::ShutdownPolicy shutdown_policy) noexcept
+    const WaiterManager::ShutdownPolicy shutdown_policy,
+    const bool high_priority_wait) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
-            m_sleepy_shared_cond_var,
-            m_num_sleepy_waiters,
+            high_priority_wait ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
+            high_priority_wait ? m_num_primary_waiters     : m_num_secondary_waiters,
             nullptr,
             [&timepoint](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
@@ -214,16 +217,16 @@ WaiterManager::Result WaiterManager::conditional_wait_until(const std::uint16_t 
 void WaiterManager::notify_one() noexcept
 {
     // try to notify a normal waiter
-    if (m_num_normal_waiters.load(std::memory_order_relaxed) > 0)
+    if (m_num_primary_waiters.load(std::memory_order_relaxed) > 0)
     {
-        m_normal_shared_cond_var.notify_one();
+        m_primary_shared_cond_var.notify_one();
         return;
     }
 
     // try to notify a sleepy waiter
-    if (m_num_sleepy_waiters.load(std::memory_order_relaxed) > 0)
+    if (m_num_secondary_waiters.load(std::memory_order_relaxed) > 0)
     {
-        m_sleepy_shared_cond_var.notify_one();
+        m_secondary_shared_cond_var.notify_one();
         return;
     }
 
@@ -240,8 +243,8 @@ void WaiterManager::notify_one() noexcept
 //-------------------------------------------------------------------------------------------------------------------
 void WaiterManager::notify_all() noexcept
 {
-    m_normal_shared_cond_var.notify_all();
-    m_sleepy_shared_cond_var.notify_all();
+    m_primary_shared_cond_var.notify_all();
+    m_secondary_shared_cond_var.notify_all();
     for (ConditionalWaiterContext &conditional_waiter : m_conditional_waiters)
         conditional_waiter.cond_var.notify_all();
 }

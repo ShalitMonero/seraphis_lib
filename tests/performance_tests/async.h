@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "async/parent_reference_tasking_system.h"
 #include "async/task_types.h"
 #include "async/threadpool.h"
 #include "common/threadpool.h"
@@ -63,11 +64,15 @@ static bool is_sleepy_task(const std::size_t sleepy_task_cadence, const std::siz
 
 static void submit_task_common_threadpool(const std::chrono::nanoseconds task_duration,
     tools::threadpool &threadpool,
-    tools::threadpool::waiter &waiter)
+    tools::threadpool::waiter &waiter,
+    std::shared_ptr<int> &dummy)
 {
     // prepare task
     auto task =
-        [l_sleep_duration = task_duration]()
+        [
+            l_dummy          = dummy,  //include a dummy shared ptr so perf results are comparable with other tests
+            l_sleep_duration = task_duration
+        ]()
         {
             std::this_thread::sleep_for(l_sleep_duration);
         };
@@ -105,6 +110,7 @@ public:
 
         // submit tasks
         std::chrono::nanoseconds task_duration;
+        std::shared_ptr<int> dummy{std::make_shared<int>()};
 
         for (std::size_t task_id{0}; task_id < m_params.num_tasks; ++task_id)
         {
@@ -116,7 +122,7 @@ public:
                 task_duration += m_params.sleepy_task_sleep_duration;
 
             // submit the task
-            submit_task_common_threadpool(task_duration, *m_threadpool, waiter);
+            submit_task_common_threadpool(task_duration, *m_threadpool, waiter, dummy);
         }
 
         // join
@@ -155,7 +161,7 @@ static void submit_task_async_threadpool(const std::chrono::nanoseconds task_dur
 
 static void submit_sleepy_task_async_threadpool(const std::chrono::nanoseconds task_duration,
     const std::chrono::nanoseconds sleep_duration,
-    std::shared_ptr<async::ScopedNotification> &join_token,
+    async::join_token_t &join_token,
     async::ThreadPool &threadpool)
 {
     // prepare task
@@ -232,6 +238,83 @@ public:
 private:
     ParamsShuttleAsync m_params;
     std::unique_ptr<async::ThreadPool> m_threadpool;
+};
+
+//---------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------------
+
+static void submit_task_parent_threadpool(const std::chrono::nanoseconds task_duration,
+    parent::ThreadPool &threadpool,
+    std::shared_ptr<std::promise<void>> &done_signal)
+{
+    // prepare task
+    auto task =
+        [
+            l_signal        = done_signal,
+            l_task_duration = task_duration
+        ]()
+        {
+            std::this_thread::sleep_for(l_task_duration);
+        };
+
+    // submit to the threadpool
+    threadpool.submit(std::move(task));
+}
+
+/// reference threadpool from src/async/parent.h
+class test_parent_threadpool
+{
+public:
+    static const size_t loop_count = 10;
+
+    bool init(const ParamsShuttleAsync &params)
+    {
+        if (params.description.size())
+            std::cout << params.description << '\n';
+
+        // save the test parameters
+        m_params = params;
+
+        // create the threadpool
+        m_threadpool = std::make_unique<parent::ThreadPool>(
+                params.num_extra_threads + 1
+            );
+
+        return true;
+    }
+
+    bool test()
+    {
+        // make done signal to synchronize with the join
+        std::shared_ptr<std::promise<void>> done_signal{std::make_shared<std::promise<void>>()};
+
+        // submit tasks
+        std::chrono::nanoseconds task_duration;
+
+        for (std::size_t task_id{0}; task_id < m_params.num_tasks; ++task_id)
+        {
+            // base-level task length
+            task_duration = m_params.task_duration;
+
+            // periodically include the sleep duration
+            if (is_sleepy_task(m_params.sleepy_task_cadence, task_id + 1))
+                task_duration += m_params.sleepy_task_sleep_duration;
+
+            submit_task_parent_threadpool(task_duration, *m_threadpool, done_signal);
+        }
+
+        // synchronize the join
+        std::future<void> flag{done_signal->get_future()};
+        done_signal = nullptr;
+        try { flag.get(); } catch (...) {}
+
+        return true;
+    }
+
+private:
+    ParamsShuttleAsync m_params;
+    std::unique_ptr<parent::ThreadPool> m_threadpool;
 };
 
 //---------------------------------------------------------------------------------------------------------------------

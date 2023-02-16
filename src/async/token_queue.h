@@ -65,21 +65,21 @@ public:
 //member functions
     /// try to add an element to the top
     template <typename T>
-    TokenQueueResult try_push(T &&new_element)
+    TokenQueueResult try_push(T &&new_element_in)
     {
         std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
         if (!lock.owns_lock())
             return TokenQueueResult::TRY_LOCK_FAIL;
 
-        m_queue.emplace_back(std::forward<T>(new_element));
+        m_queue.emplace_back(std::forward<T>(new_element_in));
         return TokenQueueResult::SUCCESS;
     }
     /// add an element to the top (always succeeds)
     template <typename T>
-    void force_push(T &&new_element)
+    void force_push(T &&new_element_in)
     {
         std::lock_guard<std::mutex> lock{m_mutex};
-        m_queue.emplace_back(std::forward<T>(new_element));
+        m_queue.emplace_back(std::forward<T>(new_element_in));
     }
 
     /// try to remove an element from the bottom

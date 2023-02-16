@@ -173,17 +173,16 @@ void ThreadPool::submit_simple_task(SimpleTask &&simple_task)
     // - start at the task queue one-after the previous start queue as a naive/simple way to spread tasks out evenly
     const unsigned char clamped_priority{clamp_priority(m_max_priority_level, simple_task.priority)};
     const std::uint16_t start_counter{m_normal_queue_submission_counter.fetch_add(1, std::memory_order_relaxed)};
+    std::uint32_t queue_index{0};
 
     for (std::uint32_t i{0}; i < m_num_queues * m_num_submit_cycle_attempts; ++i)
     {
         // try to push into the specified queue
-        const std::uint32_t queue_index{(i + start_counter) % m_num_queues};
-        const TokenQueueResult result{
-                m_task_queues[clamped_priority][queue_index].try_push(std::move(simple_task).task)
-            };
+        queue_index = (i + start_counter) % m_num_queues;
 
         // leave if submitting the task succeeded
-        if (result == TokenQueueResult::SUCCESS)
+        if (m_task_queues[clamped_priority][queue_index].try_push(std::move(simple_task).task) ==
+            TokenQueueResult::SUCCESS)
         {
             m_waiter_manager.notify_one();
             return;
@@ -191,7 +190,8 @@ void ThreadPool::submit_simple_task(SimpleTask &&simple_task)
     }
 
     // fallback: force insert
-    m_task_queues[clamped_priority][start_counter % m_num_queues].force_push(std::move(simple_task).task);
+    queue_index = start_counter % m_num_queues;
+    m_task_queues[clamped_priority][queue_index].force_push(std::move(simple_task).task);
     m_waiter_manager.notify_one();
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -211,11 +211,13 @@ void ThreadPool::submit_sleepy_task(SleepyTask &&sleepy_task)
 
     // cycle the sleepy queues 
     const std::uint16_t start_counter{m_sleepy_queue_submission_counter.fetch_add(1, std::memory_order_relaxed)};
+    std::uint32_t queue_index{0};
 
     for (std::uint32_t i{0}; i < m_num_queues * m_num_submit_cycle_attempts; ++i)
     {
         // try to push into a queue
-        if (!m_sleepy_task_queues[(i + start_counter) % m_num_queues].try_push(std::move(sleepy_task)))
+        queue_index = (i + start_counter) % m_num_queues;
+        if (!m_sleepy_task_queues[queue_index].try_push(std::move(sleepy_task)))
             continue;
 
         // success
@@ -225,7 +227,8 @@ void ThreadPool::submit_sleepy_task(SleepyTask &&sleepy_task)
     }
 
     // fallback: force insert
-    m_sleepy_task_queues[start_counter % m_num_queues].force_push(std::move(sleepy_task));
+    queue_index = start_counter % m_num_queues;
+    m_sleepy_task_queues[queue_index].force_push(std::move(sleepy_task));
     m_num_unclaimed_sleepy_tasks.fetch_add(1, std::memory_order_relaxed);
     m_waiter_manager.notify_one();
 }
@@ -241,6 +244,7 @@ boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const unsigned ch
     // - note: we include a 'max task priority' so a worker can choose to only work on low-priority tasks (useful for
     //   purging the queue when you have multiple contending high-priority self-extending task loops)
     task_t new_task;
+    std::uint16_t queue_index {0};
 
     for (unsigned char priority{clamp_priority(m_max_priority_level, max_task_priority)};
         priority <= m_max_priority_level;
@@ -248,8 +252,9 @@ boost::optional<task_t> ThreadPool::try_get_simple_task_to_run(const unsigned ch
     {
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
         {
-            if (m_task_queues[priority][(i + worker_index) % m_num_queues].try_pop(new_task) ==
-                    TokenQueueResult::SUCCESS)
+            queue_index = (i + worker_index) % m_num_queues;
+
+            if (m_task_queues[priority][queue_index].try_pop(new_task) == TokenQueueResult::SUCCESS)
                 return new_task;
         }
     }
@@ -274,12 +279,16 @@ boost::optional<task_t> ThreadPool::try_wait_for_sleepy_task_to_run(const unsign
     SleepingTask* sleeping_task{nullptr};
     boost::optional<task_t> final_task{};
     bool found_sleepy_task{false};
+    std::uint16_t queue_index{0};
 
     while (true)
     {
         // try to grab a sleepy task with the lowest waketime possible
         for (std::uint16_t i{0}; i < m_num_queues; ++i)
-            m_sleepy_task_queues[(i + worker_index) % m_num_queues].try_swap(max_task_priority, sleeping_task);
+        {
+            queue_index = (i + worker_index) % m_num_queues;
+            m_sleepy_task_queues[queue_index].try_swap(max_task_priority, sleeping_task);
+        }
 
         // failure: no sleepy task available
         if (!sleeping_task)
@@ -401,7 +410,8 @@ void ThreadPool::run_as_worker_DONT_CALL_ME()
                 const WaiterManager::ShutdownPolicy shutdown_policy
             ) mutable -> WaiterManager::Result
             {
-                return m_waiter_manager.wait_until(worker_id, timepoint, shutdown_policy);
+                // low priority wait since this will be used for sitting on sleepy tasks
+                return m_waiter_manager.wait_until(worker_id, timepoint, shutdown_policy, false);
             }
         };
 
@@ -425,9 +435,10 @@ void ThreadPool::run_as_worker_DONT_CALL_ME()
         //     as a fall-back the thread that destroys the threadpool will purge the pool of all tasks
         // - we periodically wake up to check the queues in case of race conditions around task submission (submitted
         //   tasks will always be executed eventually, but may be excessively delayed if we don't wake up here)
+        // - this is a high priority wait since we are not sitting on any tasks here
         if (m_waiter_manager.is_shutting_down())
             break;
-        m_waiter_manager.wait_for(worker_id, m_max_wait_duration, WaiterManager::ShutdownPolicy::EXIT_EARLY);
+        m_waiter_manager.wait_for(worker_id, m_max_wait_duration, WaiterManager::ShutdownPolicy::EXIT_EARLY, true);
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -580,7 +591,8 @@ void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::s
                 const WaiterManager::Result wait_result{
                         m_waiter_manager.wait_until(worker_id,
                             timepoint < deadline ? timepoint : deadline,  //don't wait longer than the deadline
-                            shutdown_policy)
+                            shutdown_policy,
+                            false)  //low priority wait since we are sitting on a timer
                     };
 
                 // treat the deadline as a condition
