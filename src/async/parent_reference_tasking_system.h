@@ -39,9 +39,7 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
-#include <deque>
 #include <functional>
-#include <list>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -257,6 +255,5 @@ private:
     std::vector<std::thread> m_workers;
     std::atomic<std::uint16_t> m_submit_rotation_counter{0};
 };
-
 
 } //namespace asyc

@@ -50,7 +50,7 @@ namespace async
 
 /// WaiterManager
 /// - performance will decrease significantly if multiple threads try to claim the same waiter index
-/// - notify_one() prioritizes: normal waiters > sleepy waiters > conditional waiters
+/// - notify_one() prioritizes: primary waiters > secondary waiters > conditional waiters
 ///   - this function has several race conditions that can mean no worker gets notified even if there are several actually
 ///     waiting (these are non-critical race conditions that marginally reduce throughput under low to moderate load)
 ///   - there is also a race condition where a conditional waiter gets notified but ends up detecting its condition was
@@ -72,6 +72,12 @@ public:
     {
         WAIT,
         EXIT_EARLY
+    };
+
+    enum class WaitPriority : unsigned char
+    {
+        HIGH,
+        LOW
     };
 
     enum class Result : unsigned char
@@ -112,15 +118,15 @@ public:
 //member functions
     Result wait(const std::uint16_t waiter_index,
         const ShutdownPolicy shutdown_policy,
-        const bool high_priority_wait) noexcept;
+        const WaitPriority wait_priority) noexcept;
     Result wait_for(const std::uint16_t waiter_index,
         const std::chrono::nanoseconds &duration,
         const ShutdownPolicy shutdown_policy,
-    const bool high_priority_wait) noexcept;
+        const WaitPriority wait_priority) noexcept;
     Result wait_until(const std::uint16_t waiter_index,
         const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
         const ShutdownPolicy shutdown_policy,
-        const bool high_priority_wait) noexcept;
+        const WaitPriority wait_priority) noexcept;
     Result conditional_wait(const std::uint16_t waiter_index,
         const std::function<bool()> &condition_checker_func,
         const ShutdownPolicy shutdown_policy) noexcept;

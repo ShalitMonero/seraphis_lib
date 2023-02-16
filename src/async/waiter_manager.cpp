@@ -35,6 +35,7 @@
 
 //standard headers
 #include <atomic>
+#include <cassert>
 #include <condition_variable>
 #include <functional>
 #include <mutex>
@@ -49,6 +50,7 @@ namespace async
 //-------------------------------------------------------------------------------------------------------------------
 std::uint16_t WaiterManager::clamp_waiter_index(const std::uint16_t nominal_index) noexcept
 {
+    assert(m_num_managed_waiters > 0);
     if (nominal_index >= m_num_managed_waiters)
         return m_num_managed_waiters - 1;
     return nominal_index;
@@ -104,17 +106,17 @@ WaiterManager::WaiterManager(const std::uint16_t num_managed_waiters) :
     //we always want at least one waiter slot to avoid UB
     m_num_managed_waiters{static_cast<uint16_t>(num_managed_waiters > 0 ? num_managed_waiters : 1)}
 {
-    m_conditional_waiters = std::vector<ConditionalWaiterContext>{m_num_managed_waiters};
     m_waiter_mutexes      = std::vector<std::mutex>{m_num_managed_waiters};
+    m_conditional_waiters = std::vector<ConditionalWaiterContext>{m_num_managed_waiters};
 }
 //-------------------------------------------------------------------------------------------------------------------
 WaiterManager::Result WaiterManager::wait(const std::uint16_t waiter_index,
     const WaiterManager::ShutdownPolicy shutdown_policy,
-    const bool high_priority_wait) noexcept
+    const WaitPriority wait_priority) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
-            high_priority_wait ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
-            high_priority_wait ? m_num_primary_waiters     : m_num_secondary_waiters,
+            (wait_priority == WaitPriority::HIGH) ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
+            (wait_priority == WaitPriority::HIGH) ? m_num_primary_waiters     : m_num_secondary_waiters,
             nullptr,
             [](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock) -> std::cv_status
             {
@@ -128,11 +130,11 @@ WaiterManager::Result WaiterManager::wait(const std::uint16_t waiter_index,
 WaiterManager::Result WaiterManager::wait_for(const std::uint16_t waiter_index,
     const std::chrono::nanoseconds &duration,
     const WaiterManager::ShutdownPolicy shutdown_policy,
-    const bool high_priority_wait) noexcept
+    const WaitPriority wait_priority) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
-            high_priority_wait ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
-            high_priority_wait ? m_num_primary_waiters     : m_num_secondary_waiters,
+            (wait_priority == WaitPriority::HIGH) ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
+            (wait_priority == WaitPriority::HIGH) ? m_num_primary_waiters     : m_num_secondary_waiters,
             nullptr,
             [&duration](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {
@@ -145,11 +147,11 @@ WaiterManager::Result WaiterManager::wait_for(const std::uint16_t waiter_index,
 WaiterManager::Result WaiterManager::wait_until(const std::uint16_t waiter_index,
     const std::chrono::time_point<std::chrono::steady_clock> &timepoint,
     const WaiterManager::ShutdownPolicy shutdown_policy,
-    const bool high_priority_wait) noexcept
+    const WaitPriority wait_priority) noexcept
 {
     return this->wait_impl(m_waiter_mutexes[this->clamp_waiter_index(waiter_index)],
-            high_priority_wait ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
-            high_priority_wait ? m_num_primary_waiters     : m_num_secondary_waiters,
+            (wait_priority == WaitPriority::HIGH) ? m_primary_shared_cond_var : m_secondary_shared_cond_var,
+            (wait_priority == WaitPriority::HIGH) ? m_num_primary_waiters     : m_num_secondary_waiters,
             nullptr,
             [&timepoint](std::condition_variable_any &cv_inout, std::unique_lock<std::mutex> &lock_inout) -> std::cv_status
             {

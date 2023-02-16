@@ -411,7 +411,9 @@ void ThreadPool::run_as_worker_DONT_CALL_ME()
             ) mutable -> WaiterManager::Result
             {
                 // low priority wait since this will be used for sitting on sleepy tasks
-                return m_waiter_manager.wait_until(worker_id, timepoint, shutdown_policy, false);
+                return m_waiter_manager.wait_until(worker_id, timepoint,
+                    shutdown_policy,
+                    WaiterManager::WaitPriority::LOW);
             }
         };
 
@@ -438,7 +440,10 @@ void ThreadPool::run_as_worker_DONT_CALL_ME()
         // - this is a high priority wait since we are not sitting on any tasks here
         if (m_waiter_manager.is_shutting_down())
             break;
-        m_waiter_manager.wait_for(worker_id, m_max_wait_duration, WaiterManager::ShutdownPolicy::EXIT_EARLY, true);
+        m_waiter_manager.wait_for(worker_id,
+            m_max_wait_duration,
+            WaiterManager::ShutdownPolicy::EXIT_EARLY,
+            WaiterManager::WaitPriority::HIGH);
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -590,9 +595,9 @@ void ThreadPool::work_while_waiting(const std::chrono::time_point<std::chrono::s
             {
                 const WaiterManager::Result wait_result{
                         m_waiter_manager.wait_until(worker_id,
-                            timepoint < deadline ? timepoint : deadline,  //don't wait longer than the deadline
+                            (timepoint < deadline) ? timepoint : deadline,  //don't wait longer than the deadline
                             shutdown_policy,
-                            false)  //low priority wait since we are sitting on a timer
+                            WaiterManager::WaitPriority::LOW)  //low priority wait since we are sitting on a timer
                     };
 
                 // treat the deadline as a condition
