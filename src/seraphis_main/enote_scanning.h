@@ -64,6 +64,7 @@ namespace sp
 ////
 // EnoteScanningChunkLedgerV1
 // - chunk range (in block indices): [start index, end index)
+//   - end index = start index + num blocks
 // - prefix block id: id of block that comes before the chunk range, used for contiguity checks between chunks and with
 //   the enote store updater
 // - contextual basic enote records for owned enote candidates in the chunk of blocks
@@ -75,9 +76,8 @@ namespace sp
 ///
 struct EnoteScanningChunkLedgerV1 final
 {
-    /// block range: [start index, end index)  (range is size 0 if start == end)
+    /// start index
     std::uint64_t m_start_index;
-    std::uint64_t m_end_index;
     /// block id at 'start index - 1'  (implicitly ignored if start_index == 0)
     rct::key m_prefix_block_id;
     /// block ids in range [start index, end index)

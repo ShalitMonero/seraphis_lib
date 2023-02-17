@@ -227,7 +227,7 @@ static void check_enote_scan_chunk_map_semantics_v1(
 //-------------------------------------------------------------------------------------------------------------------
 static bool chunk_is_empty(const EnoteScanningChunkLedgerV1 &chunk)
 {
-    return chunk.m_start_index >= chunk.m_end_index;
+    return chunk.m_block_ids.size() == 0;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -385,7 +385,7 @@ static ScanStatus process_ledger_onchain_pass(const std::uint64_t first_contigui
         }
 
         // f. set contiguity marker to last block of this chunk
-        contiguity_marker_inout.m_block_index = new_onchain_chunk.m_end_index - 1;
+        contiguity_marker_inout.m_block_index = new_onchain_chunk.m_start_index + new_onchain_chunk.m_block_ids.size() - 1;
         contiguity_marker_inout.m_block_id    = new_onchain_chunk.m_block_ids.back();
 
         // g. get next chunk
@@ -405,8 +405,8 @@ static ScanStatus process_ledger_onchain_pass(const std::uint64_t first_contigui
         return ScanStatus::ABORTED;
 
     // 4. verify that our termination chunk is contiguous with the chunks received so far
-    // - this can fail if a reorg dropped below our contiguity marker without replacing the dropped blocks, so the first
-    //   chunk obtained after the reorg is this empty termination chunk
+    // - this can fail if a reorg dropped below our contiguity marker without replacing the dropped blocks, causing the
+    //   first chunk obtained after the reorg to be this empty termination chunk
     // note: this test won't fail if the chain's top index is below our contiguity marker when our contiguity marker has
     //       an unspecified block id; we don't care if the top index is lower than our scanning 'backstop' (i.e.
     //       lowest point in our enote store) when we haven't actually scanned any blocks
@@ -414,7 +414,7 @@ static ScanStatus process_ledger_onchain_pass(const std::uint64_t first_contigui
             get_scan_status(contiguity_marker_inout,
                 new_onchain_chunk,
                 first_contiguity_index,
-                new_onchain_chunk.m_end_index - 1)
+                new_onchain_chunk.m_start_index - 1)
         };
 
     if (scan_status != ScanStatus::SUCCESS)
@@ -507,11 +507,9 @@ void check_v1_enote_scan_chunk_ledger_semantics_v1(const EnoteScanningChunkLedge
     CHECK_AND_ASSERT_THROW_MES(onchain_chunk.m_start_index - 1 == expected_prefix_index,
         "enote scan chunk semantics check (ledger): chunk range doesn't start at expected prefix index.");
 
-    const std::uint64_t num_blocks_in_chunk{onchain_chunk.m_end_index - onchain_chunk.m_start_index};
+    const std::uint64_t num_blocks_in_chunk{onchain_chunk.m_block_ids.size()};
     CHECK_AND_ASSERT_THROW_MES(num_blocks_in_chunk >= 1,
         "enote scan chunk semantics check (ledger): chunk has no blocks.");    
-    CHECK_AND_ASSERT_THROW_MES(onchain_chunk.m_block_ids.size() == num_blocks_in_chunk,
-        "enote scan chunk semantics check (ledger): unexpected number of block ids.");
 
     check_enote_scan_chunk_map_semantics_v1(onchain_chunk.m_basic_records_per_tx,
         onchain_chunk.m_contextual_key_images,
@@ -522,7 +520,7 @@ void check_v1_enote_scan_chunk_ledger_semantics_v1(const EnoteScanningChunkLedge
     // - start block = prefix block + 1
     const std::uint64_t allowed_lowest_index{onchain_chunk.m_start_index};
     // - end block
-    const std::uint64_t allowed_heighest_index{onchain_chunk.m_end_index - 1};
+    const std::uint64_t allowed_heighest_index{onchain_chunk.m_start_index + num_blocks_in_chunk - 1};
 
     // 3. contextual basic records: index checks
     for (const auto &tx_basic_records : onchain_chunk.m_basic_records_per_tx)
