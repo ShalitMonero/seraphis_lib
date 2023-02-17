@@ -711,7 +711,7 @@ void make_tx_proofs_prefix_v1(const SpBalanceProofV1 &balance_proof,
 {
     // H_32(balance proof, legacy ring signatures, seraphis image proofs, seraphis membership proofs)
     SpFSTranscript transcript{
-            config::HASH_KEY_SERAPHIS_TRANSACTION_PROOFS_PREFIX_V1,
+            config::HASH_KEY_SERAPHIS_TX_PROOFS_PREFIX_V1,
             sp_balance_proof_v1_size_bytes(balance_proof) +
                 (legacy_ring_signatures.size()
                     ? legacy_ring_signatures.size() * legacy_ring_signature_v4_size_bytes(legacy_ring_signatures[0])
@@ -727,6 +727,21 @@ void make_tx_proofs_prefix_v1(const SpBalanceProofV1 &balance_proof,
     transcript.append("sp_membership_proofs", sp_membership_proofs);
 
     sp_hash_to_32(transcript.data(), transcript.size(), tx_proofs_prefix_out.bytes);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_tx_artifacts_merkle_root_v1(const rct::key &input_images_prefix,
+    const rct::key &tx_proofs_prefix,
+    rct::key &tx_artifacts_merkle_root_out)
+{
+    // H_32(input images prefix, tx proofs prefix)
+    SpFSTranscript transcript{
+            config::HASH_KEY_SERAPHIS_TX_ARTIFACTS_MERKLE_ROOT_V1,
+            2*sizeof(rct::key)
+        };
+    transcript.append("input_images_prefix", input_images_prefix);
+    transcript.append("tx_proofs_prefix", tx_proofs_prefix);
+
+    sp_hash_to_32(transcript.data(), transcript.size(), tx_artifacts_merkle_root_out.bytes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool try_prepare_inputs_and_outputs_for_transfer_v1(const jamtis::JamtisDestinationV1 &change_address,

@@ -340,8 +340,8 @@ public:
             SpTranscriptBuilder::Mode::FULL}
     {
         // transcript = prefix || domain_separator
-        m_transcript_builder.append("FS_prefix", prefix);
-        m_transcript_builder.append("domain_separator", domain_separator);
+        m_transcript_builder.append("FSp", prefix);
+        m_transcript_builder.append("ds", domain_separator);
     }
 
 //overloaded operators

@@ -278,9 +278,10 @@ namespace config
   const constexpr char HASH_KEY_SERAPHIS_TX_PROPOSAL_MESSAGE_V1[] = "sp_tx_proposal_message_v1";
   const constexpr char HASH_KEY_SERAPHIS_MEMBERSHIP_PROOF_MESSAGE_V1[] = "sp_membership_proof_message_v1";
   const constexpr char HASH_KEY_SERAPHIS_INPUT_IMAGES_PREFIX_V1[] = "sp_input_images_prefix_v1";
-  const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_PROOFS_PREFIX_V1[] = "sp_transaction_proofs_prefix_v1";
-  const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_COINBASE_V1[] = "sp_transaction_type_coinbase_v1";
-  const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1[] = "sp_transaction_type_squashed_v1";
+  const constexpr char HASH_KEY_SERAPHIS_TX_PROOFS_PREFIX_V1[] = "sp_tx_proofs_prefix_v1";
+  const constexpr char HASH_KEY_SERAPHIS_TX_ARTIFACTS_MERKLE_ROOT_V1[] = "sp_tx_artifacts_merkle_root_v1";
+  const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_COINBASE_V1[] = "sp_txtype_coinbase_v1";
+  const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1[] = "sp_txtype_squashed_v1";
 
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT[] = "bpp2_transcript";
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT_UPDATE[] = "bpp2_tupdate";
