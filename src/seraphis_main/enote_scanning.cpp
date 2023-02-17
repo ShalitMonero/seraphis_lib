@@ -84,12 +84,22 @@ public:
     /// note: when no more chunks to get, obtain an empty chunk representing the top of the current chain
     void get_onchain_chunk(EnoteScanningChunkLedgerV1 &chunk_out)
     {
-        m_enote_scan_context.get_onchain_chunk(chunk_out);
+        try { m_enote_scan_context.get_onchain_chunk(chunk_out); }
+        catch (...)
+        {
+            LOG_ERROR("seraphis enote scan process ledger (get onchain chunk): get chunk failed.");
+            throw;
+        }
     }
     /// try to get a scanning chunk for the unconfirmed txs that are pending inclusion in a ledger
     void get_unconfirmed_chunk(EnoteScanningChunkNonLedgerV1 &chunk_out)
     {
-        m_enote_scan_context.get_unconfirmed_chunk(chunk_out);
+        try { m_enote_scan_context.get_unconfirmed_chunk(chunk_out); }
+        catch (...)
+        {
+            LOG_ERROR("seraphis enote scan process ledger (get unconfirmed chunk): get chunk failed.");
+            throw;
+        }
     }
     /// test if the scan process has been aborted
     bool is_aborted() const
@@ -637,22 +647,37 @@ bool refresh_enote_store_ledger(const RefreshLedgerEnoteStoreConfig &config,
     return scan_status == ScanStatus::SUCCESS;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void refresh_enote_store_offchain(const EnoteFindingContextOffchain &enote_finding_context,
+bool refresh_enote_store_offchain(const EnoteFindingContextOffchain &enote_finding_context,
     EnoteStoreUpdater &enote_store_updater_inout)
 {
     // 1. get an offchain scan chunk
     EnoteScanningChunkNonLedgerV1 offchain_chunk;
-    enote_finding_context.get_offchain_chunk(offchain_chunk);
+    try
+    {
+        enote_finding_context.get_offchain_chunk(offchain_chunk);
+        check_v1_enote_scan_chunk_nonledger_semantics_v1(offchain_chunk,
+            SpEnoteOriginStatus::OFFCHAIN,
+            SpEnoteSpentStatus::SPENT_OFFCHAIN);
+    }
+    catch (...)
+    {
+        LOG_ERROR("refresh offchain for enote store: get chunk failed.");
+        return false;
+    }
 
-    // 2. validate chunk semantics (ensure consistent vector sizes, block indices in contexts are within range)
-    check_v1_enote_scan_chunk_nonledger_semantics_v1(offchain_chunk,
-        SpEnoteOriginStatus::OFFCHAIN,
-        SpEnoteSpentStatus::SPENT_OFFCHAIN);
+    // 2. consume the chunk
+    try
+    {
+        enote_store_updater_inout.consume_nonledger_chunk(SpEnoteOriginStatus::OFFCHAIN,
+            offchain_chunk.m_basic_records_per_tx,
+            offchain_chunk.m_contextual_key_images);
+    } catch (...)
+    {
+        LOG_ERROR("refresh offchain for enote store: consume chunk failed.");
+        return false;
+    }
 
-    // 3. consume the chunk
-    enote_store_updater_inout.consume_nonledger_chunk(SpEnoteOriginStatus::OFFCHAIN,
-        offchain_chunk.m_basic_records_per_tx,
-        offchain_chunk.m_contextual_key_images);
+    return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace sp
