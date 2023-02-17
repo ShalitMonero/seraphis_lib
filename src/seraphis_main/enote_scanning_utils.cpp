@@ -70,7 +70,7 @@ namespace sp
 //-------------------------------------------------------------------------------------------------------------------
 static bool try_view_scan_legacy_enote_v1(const rct::key &legacy_base_spend_pubkey,
     const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
-    const std::uint64_t block_height,
+    const std::uint64_t block_index,
     const std::uint64_t block_timestamp,
     const rct::key &transaction_id,
     const std::uint64_t total_enotes_before_tx,
@@ -102,7 +102,7 @@ static bool try_view_scan_legacy_enote_v1(const rct::key &legacy_base_spend_pubk
     // 2. set the origin context
     contextual_record_out.m_origin_context =
         SpEnoteOriginContextV1{
-                .m_block_height       = block_height,
+                .m_block_index        = block_index,
                 .m_block_timestamp    = block_timestamp,
                 .m_transaction_id     = transaction_id,
                 .m_enote_tx_index     = enote_index,
@@ -356,7 +356,7 @@ static std::unordered_set<rct::key> process_chunk_sp_selfsend_pass(
 bool try_find_legacy_enotes_in_tx(const rct::key &legacy_base_spend_pubkey,
     const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
     const crypto::secret_key &legacy_view_privkey,
-    const std::uint64_t block_height,
+    const std::uint64_t block_index,
     const std::uint64_t block_timestamp,
     const rct::key &transaction_id,
     const std::uint64_t total_enotes_before_tx,
@@ -398,7 +398,7 @@ bool try_find_legacy_enotes_in_tx(const rct::key &legacy_base_spend_pubkey,
         // b. try to recover a contextual basic record from the enote
         if (!try_view_scan_legacy_enote_v1(legacy_base_spend_pubkey,
                 legacy_subaddress_map,
-                block_height,
+                block_index,
                 block_timestamp,
                 transaction_id,
                 total_enotes_before_tx,
@@ -435,7 +435,7 @@ bool try_find_legacy_enotes_in_tx(const rct::key &legacy_base_spend_pubkey,
         // a. try to recover a contextual basic record from the enote
         if (!try_view_scan_legacy_enote_v1(legacy_base_spend_pubkey,
                 legacy_subaddress_map,
-                block_height,
+                block_index,
                 block_timestamp,
                 transaction_id,
                 total_enotes_before_tx,
@@ -463,7 +463,7 @@ bool try_find_legacy_enotes_in_tx(const rct::key &legacy_base_spend_pubkey,
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool try_find_sp_enotes_in_tx(const crypto::x25519_secret_key &xk_find_received,
-    const std::uint64_t block_height,
+    const std::uint64_t block_index,
     const std::uint64_t block_timestamp,
     const rct::key &transaction_id,
     const std::uint64_t total_enotes_before_tx,
@@ -512,7 +512,7 @@ bool try_find_sp_enotes_in_tx(const crypto::x25519_secret_key &xk_find_received,
         // c. set the origin context
         temp_contextual_record.m_origin_context =
             SpEnoteOriginContextV1{
-                    .m_block_height       = block_height,
+                    .m_block_index        = block_index,
                     .m_block_timestamp    = block_timestamp,
                     .m_transaction_id     = transaction_id,
                     .m_enote_tx_index     = enote_index,
@@ -533,7 +533,7 @@ bool try_find_sp_enotes_in_tx(const crypto::x25519_secret_key &xk_find_received,
     return found_an_enote;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool try_collect_key_images_from_tx(const std::uint64_t block_height,
+bool try_collect_key_images_from_tx(const std::uint64_t block_index,
     const std::uint64_t block_timestamp,
     const rct::key &transaction_id,
     std::vector<crypto::key_image> legacy_key_images_in_tx,
@@ -552,7 +552,7 @@ bool try_collect_key_images_from_tx(const std::uint64_t block_height,
             .m_sp_key_images     = std::move(sp_key_images_in_tx),
             .m_spent_context     =
                 SpEnoteSpentContextV1{
-                    .m_block_height    = block_height,
+                    .m_block_index     = block_index,
                     .m_block_timestamp = block_timestamp,
                     .m_transaction_id  = transaction_id,
                     .m_spent_status    = spent_status

@@ -124,8 +124,8 @@ static void refresh_user_enote_store_legacy_multisig(const std::vector<multisig:
         enote_store_inout);
 
     // 2. prepare key image import cycle
-    const std::uint64_t intermediate_height_pre_import_cycle{
-            enote_store_inout.top_legacy_partialscanned_block_height()
+    const std::uint64_t intermediate_index_pre_import_cycle{
+            enote_store_inout.top_legacy_partialscanned_block_index()
         };
 
     // 3. export intermediate onetime addresses that need key images
@@ -164,14 +164,14 @@ static void refresh_user_enote_store_legacy_multisig(const std::vector<multisig:
     // 7. check results of key image refresh scan
     ASSERT_TRUE(enote_store_inout.legacy_intermediate_records().size() == 0);
 
-    // 8. update the legacy fullscan height to account for a complete view-only scan cycle with key image recovery
-    ASSERT_NO_THROW(enote_store_inout.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle));
+    // 8. update the legacy fullscan index to account for a complete view-only scan cycle with key image recovery
+    ASSERT_NO_THROW(enote_store_inout.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle));
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 static bool legacy_multisig_input_is_ready_to_spend(const LegacyMultisigInputProposalV1 &input_proposal,
     const SpEnoteStoreMockV1 &enote_store,
-    const std::uint64_t current_chain_height)
+    const std::uint64_t top_block_index)
 {
     // 1. get the legacy enote from the enote store
     LegacyContextualEnoteRecordV1 contextual_record;
@@ -186,10 +186,10 @@ static bool legacy_multisig_input_is_ready_to_spend(const LegacyMultisigInputPro
     if (contextual_record.m_spent_context.m_spent_status != SpEnoteSpentStatus::UNSPENT)
         return false;
 
-    // 4. expect the enote is spendable within the height specified
-    if (onchain_legacy_enote_is_locked(contextual_record.m_origin_context.m_block_height,
+    // 4. expect the enote is spendable within the index specified
+    if (onchain_legacy_enote_is_locked(contextual_record.m_origin_context.m_block_index,
             contextual_record.m_record.m_unlock_time,
-            current_chain_height,
+            top_block_index,
             0,  //default spendable age: configurable
             0)) //current time: use system call
         return false;
@@ -201,7 +201,7 @@ static bool legacy_multisig_input_is_ready_to_spend(const LegacyMultisigInputPro
 static bool sp_multisig_input_is_ready_to_spend(const SpMultisigInputProposalV1 &multisig_input_proposal,
     const SpEnoteStoreMockV1 &enote_store,
     const std::unordered_set<SpEnoteOriginStatus> &origin_statuses,
-    const std::uint64_t current_chain_height,
+    const std::uint64_t top_block_index,
     const rct::key &jamtis_spend_pubkey,
     const crypto::secret_key &k_view_balance)
 {
@@ -226,11 +226,11 @@ static bool sp_multisig_input_is_ready_to_spend(const SpMultisigInputProposalV1 
     if (contextual_record.m_spent_context.m_spent_status != SpEnoteSpentStatus::UNSPENT)
         return false;
 
-    // 6. expect the enote is spendable within the height specified (only check when only onchain enotes are permitted)
+    // 6. expect the enote is spendable within the index specified (only check when only onchain enotes are permitted)
     if (origin_statuses.size() == 1 &&
         origin_statuses.find(SpEnoteOriginStatus::ONCHAIN) != origin_statuses.end() &&
-        onchain_sp_enote_is_locked(contextual_record.m_origin_context.m_block_height,
-            current_chain_height,
+        onchain_sp_enote_is_locked(contextual_record.m_origin_context.m_block_index,
+            top_block_index,
             0))  //default spendable age: configurable
         return false;
 
@@ -298,7 +298,7 @@ static void validate_multisig_tx_proposal(const SpMultisigTxProposalV1 &multisig
         hw::get_device("default")));
 
     // 2. check that the proposal inputs are known by our enote store, are unspent, and will be unlocked by a specified
-    //    block height
+    //    block index
     // note: could also check if the proposed inputs have been confirmed up to N blocks
     // note2: these checks are only 'temporary' because the specified enotes may be spent at any time (or be reorged)
     for (const LegacyMultisigInputProposalV1 &legacy_multisig_input_proposal :
@@ -306,7 +306,7 @@ static void validate_multisig_tx_proposal(const SpMultisigTxProposalV1 &multisig
     {
         ASSERT_TRUE(legacy_multisig_input_is_ready_to_spend(legacy_multisig_input_proposal,
             enote_store,
-            enote_store.top_block_height()));
+            enote_store.top_block_index()));
     }
 
     for (const SpMultisigInputProposalV1 &sp_multisig_input_proposal :
@@ -315,7 +315,7 @@ static void validate_multisig_tx_proposal(const SpMultisigTxProposalV1 &multisig
         ASSERT_TRUE(sp_multisig_input_is_ready_to_spend(sp_multisig_input_proposal,
             enote_store,
             {SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED, SpEnoteOriginStatus::OFFCHAIN},
-            enote_store.top_block_height(),
+            enote_store.top_block_index(),
             jamtis_spend_pubkey,
             k_view_balance));
     }

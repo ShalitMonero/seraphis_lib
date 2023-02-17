@@ -63,18 +63,18 @@ public:
     EnoteScanningContextLedgerSimple& operator=(EnoteScanningContextLedgerSimple&&) = delete;
 
 //member functions
-    /// start scanning from a specified block height
-    void begin_scanning_from_height(const std::uint64_t initial_start_height, const std::uint64_t max_chunk_size) override
+    /// start scanning from a specified block index
+    void begin_scanning_from_index(const std::uint64_t initial_start_index, const std::uint64_t max_chunk_size) override
     {
-        m_next_start_height = initial_start_height;
-        m_max_chunk_size    = max_chunk_size;
+        m_next_start_index = initial_start_index;
+        m_max_chunk_size   = max_chunk_size;
     }
     /// get the next available onchain chunk (or empty chunk representing top of current chain)
     /// - start past the end of the last chunk acquired since starting to scan
     void get_onchain_chunk(EnoteScanningChunkLedgerV1 &chunk_out) override
     {
-        m_enote_finding_context.get_onchain_chunk(m_next_start_height, m_max_chunk_size, chunk_out);
-        m_next_start_height = chunk_out.m_end_height;
+        m_enote_finding_context.get_onchain_chunk(m_next_start_index, m_max_chunk_size, chunk_out);
+        m_next_start_index = chunk_out.m_end_index;
     }
     /// get a scanning chunk for the unconfirmed txs in a ledger
     void get_unconfirmed_chunk(EnoteScanningChunkNonLedgerV1 &chunk_out) override
@@ -91,7 +91,7 @@ private:
     /// finds chunks of enotes that are potentially owned
     const EnoteFindingContextLedger &m_enote_finding_context;
 
-    std::uint64_t m_next_start_height{static_cast<std::uint64_t>(-1)};
+    std::uint64_t m_next_start_index{static_cast<std::uint64_t>(-1)};
     std::uint64_t m_max_chunk_size{0};
 };
 

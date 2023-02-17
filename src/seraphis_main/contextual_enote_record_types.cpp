@@ -148,10 +148,10 @@ bool is_older_than(const SpEnoteOriginContextV1 &context, const SpEnoteOriginCon
     if (context.m_origin_status < other_context.m_origin_status)
         return false;
 
-    // 2. block height
-    if (context.m_block_height < other_context.m_block_height)
+    // 2. block index
+    if (context.m_block_index < other_context.m_block_index)
         return true;
-    if (context.m_block_height > other_context.m_block_height)
+    if (context.m_block_index > other_context.m_block_index)
         return false;
 
     // note: don't assess the tx output index
@@ -179,10 +179,10 @@ bool is_older_than(const SpEnoteSpentContextV1 &context, const SpEnoteSpentConte
     if (context.m_spent_status < other_context.m_spent_status)
         return false;
 
-    // 2. block height
-    if (context.m_block_height < other_context.m_block_height)
+    // 2. block index
+    if (context.m_block_index < other_context.m_block_index)
         return true;
-    if (context.m_block_height > other_context.m_block_height)
+    if (context.m_block_index > other_context.m_block_index)
         return false;
 
     // 3. block timestamp

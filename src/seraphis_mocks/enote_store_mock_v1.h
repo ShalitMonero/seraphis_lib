@@ -73,7 +73,7 @@ class SpEnoteStoreMockV1 final
 public:
 //constructors
     /// normal constructor
-    SpEnoteStoreMockV1(const std::uint64_t refresh_height,
+    SpEnoteStoreMockV1(const std::uint64_t refresh_index,
         const std::uint64_t first_sp_enabled_block_in_chain,
         const std::uint64_t default_spendable_age);
 
@@ -83,26 +83,26 @@ public:
         const std::unordered_set<SpEnoteOriginStatus> &origin_statuses,
         const std::unordered_set<SpEnoteSpentStatus> &spent_statuses = {},
         const std::unordered_set<EnoteStoreBalanceUpdateExclusions> &exclusions = {}) const;
-    /// get height of first block the enote store cares about
-    std::uint64_t legacy_refresh_height() const { return m_refresh_height; }
-    std::uint64_t sp_refresh_height() const { return std::max(m_refresh_height, m_first_sp_enabled_block_in_chain); }
-    /// get height of heighest recorded block (refresh height - 1 if no recorded blocks)
-    std::uint64_t top_block_height() const;
-    /// get height of heighest block that was legacy fullscanned (view-scan + comprehensive key image checks)
-    std::uint64_t top_legacy_fullscanned_block_height() const { return m_legacy_fullscan_height; }
-    /// get height of heighest block that was legacy partialscanned (view-scan only)
-    std::uint64_t top_legacy_partialscanned_block_height() const { return m_legacy_partialscan_height; }
-    /// get height of heighest block that was seraphis view-balance scanned
-    std::uint64_t top_sp_scanned_block_height() const { return m_sp_scanned_height; }
+    /// get index of first block the enote store cares about
+    std::uint64_t legacy_refresh_index() const { return m_refresh_index; }
+    std::uint64_t sp_refresh_index() const { return std::max(m_refresh_index, m_first_sp_enabled_block_in_chain); }
+    /// get index of heighest recorded block (refresh index - 1 if no recorded blocks)
+    std::uint64_t top_block_index() const;
+    /// get index of heighest block that was legacy fullscanned (view-scan + comprehensive key image checks)
+    std::uint64_t top_legacy_fullscanned_block_index() const { return m_legacy_fullscan_index; }
+    /// get index of heighest block that was legacy partialscanned (view-scan only)
+    std::uint64_t top_legacy_partialscanned_block_index() const { return m_legacy_partialscan_index; }
+    /// get index of heighest block that was seraphis view-balance scanned
+    std::uint64_t top_sp_scanned_block_index() const { return m_sp_scanned_index; }
 
-    /// try to get the recorded block id for a given height and specified scan mode
+    /// try to get the recorded block id for a given index and specified scan mode
     /// note: during scanning, different scan modes are assumed to 'not see' block ids obtained by a different scan mode;
     ///       this is necessary to reliably recover from reorgs involving multiple scan modes
-    bool try_get_block_id_for_legacy_partialscan(const std::uint64_t block_height, rct::key &block_id_out) const;
-    bool try_get_block_id_for_legacy_fullscan(const std::uint64_t block_height, rct::key &block_id_out) const;
-    bool try_get_block_id_for_sp(const std::uint64_t block_height, rct::key &block_id_out) const;
-    /// try to get the recorded block id for a given height (checks legacy block ids then seraphis block ids)
-    bool try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const;
+    bool try_get_block_id_for_legacy_partialscan(const std::uint64_t block_index, rct::key &block_id_out) const;
+    bool try_get_block_id_for_legacy_fullscan(const std::uint64_t block_index, rct::key &block_id_out) const;
+    bool try_get_block_id_for_sp(const std::uint64_t block_index, rct::key &block_id_out) const;
+    /// try to get the recorded block id for a given index (checks legacy block ids then seraphis block ids)
+    bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const;
     /// check if any stored enote has a given key image
     bool has_enote_with_key_image(const crypto::key_image &key_image) const;
     /// get the legacy intermediate records
@@ -123,15 +123,15 @@ public:
     /// PRECONDITION2: the onetime address is already known by the enote store (e.g. from intermediate legacy scanning)
     void import_legacy_key_image(const crypto::key_image &legacy_key_image, const rct::key &onetime_address);
 
-    /// setters for scan heights
-    /// WARNING: misuse of these will mess up the enote store's state (to recover: set height(s) below problem then
+    /// setters for scan indices
+    /// WARNING: misuse of these will mess up the enote store's state (to recover: set index(s) below problem then
     //           rescan)
     /// note: to repair the enote store in case of an exception or other error during an update, save all of the last
-    ///       scanned heights from before the update, then reset the enote store with them on failure, and then re-scan
+    ///       scanned indices from before the update, then reset the enote store with them on failure, and then re-scan
     ///       to repair
-    void set_last_legacy_fullscan_height(const std::uint64_t new_height);
-    void set_last_legacy_partialscan_height(const std::uint64_t new_height);
-    void set_last_sp_scanned_height(const std::uint64_t new_height);
+    void set_last_legacy_fullscan_index(const std::uint64_t new_index);
+    void set_last_legacy_partialscan_index(const std::uint64_t new_index);
+    void set_last_sp_scanned_index(const std::uint64_t new_index);
 
     /// update the store with legacy enote records and associated context
     void update_with_intermediate_legacy_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status,
@@ -251,25 +251,25 @@ protected:
     //        unknown
     std::unordered_map<crypto::key_image, rct::key> m_legacy_key_images;
 
-    /// refresh height
-    std::uint64_t m_refresh_height{0};
-    /// stored block ids in range: [refresh height, end of known legacy-supporting chain]
+    /// refresh index
+    std::uint64_t m_refresh_index{0};
+    /// stored block ids in range: [refresh index, end of known legacy-supporting chain]
     std::vector<rct::key> m_legacy_block_ids;
     /// stored block ids in range:
-    ///   [max(refresh height, first seraphis-enabled block), end of known seraphis-supporting chain]
+    ///   [max(refresh index, first seraphis-enabled block), end of known seraphis-supporting chain]
     std::vector<rct::key> m_sp_block_ids;
 
     /// heighest block that was legacy fullscanned (view-scan + comprehensive key image checks)
-    std::uint64_t m_legacy_fullscan_height{static_cast<std::uint64_t>(-1)};
+    std::uint64_t m_legacy_fullscan_index{static_cast<std::uint64_t>(-1)};
     /// heighest block that was legacy partialscanned (view-scan only)
-    std::uint64_t m_legacy_partialscan_height{static_cast<std::uint64_t>(-1)};
+    std::uint64_t m_legacy_partialscan_index{static_cast<std::uint64_t>(-1)};
     /// heighest block that was seraphis view-balance scanned
-    std::uint64_t m_sp_scanned_height{static_cast<std::uint64_t>(-1)};
+    std::uint64_t m_sp_scanned_index{static_cast<std::uint64_t>(-1)};
 
     /// configuration value: the first ledger block that can contain seraphis txs
     std::uint64_t m_first_sp_enabled_block_in_chain{static_cast<std::uint64_t>(-1)};
     /// configuration value: default spendable age; an enote is considered 'spendable' in the next block if it's
-    //      on-chain and the hext height is >= 'origin height + max(1, default_spendable_age)'; legacy enotes also have
+    //      on-chain and the hext index is >= 'origin index + max(1, default_spendable_age)'; legacy enotes also have
     //      an unlock_time attribute on top of the default spendable age
     std::uint64_t m_default_spendable_age{0};
 };

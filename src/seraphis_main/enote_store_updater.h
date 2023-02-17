@@ -62,12 +62,12 @@ public:
     EnoteStoreUpdater& operator=(EnoteStoreUpdater&&) = delete;
 
 //member functions
-    /// get height of first block the internal enote store cares about
-    virtual std::uint64_t refresh_height() const = 0;
-    /// get height of first block the updater wants to have scanned
+    /// get index of first block the internal enote store cares about
+    virtual std::uint64_t refresh_index() const = 0;
+    /// get index of first block the updater wants to have scanned
     virtual std::uint64_t desired_first_block() const = 0;
-    /// try to get the recorded block id for a given height
-    virtual bool try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const = 0;
+    /// try to get the recorded block id for a given index
+    virtual bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const = 0;
 
     /// consume a chunk of basic enote records and save the results
     virtual void consume_nonledger_chunk(const SpEnoteOriginStatus nonledger_origin_status,

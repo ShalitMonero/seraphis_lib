@@ -119,12 +119,12 @@ public:
     EnoteScanningContextLedgerTEST& operator=(EnoteScanningContextLedgerTEST&&) = delete;
 
 //member functions
-    /// tell the enote finder it can start scanning from a specified block height
-    void begin_scanning_from_height(const std::uint64_t initial_start_height,
+    /// tell the enote finder it can start scanning from a specified block index
+    void begin_scanning_from_index(const std::uint64_t initial_start_index,
         const std::uint64_t max_chunk_size) override
     {
         m_invocable_begin_scanning.invoke();
-        m_core_scanning_context.begin_scanning_from_height(initial_start_height, max_chunk_size);
+        m_core_scanning_context.begin_scanning_from_index(initial_start_index, max_chunk_size);
     }
     /// get the next available onchain chunk (must be contiguous with the last chunk acquired since starting to scan)
     /// note: if chunk is empty, chunk represents top of current chain
@@ -533,7 +533,7 @@ TEST(seraphis_enote_scanning, simple_ledger_6)
     /// test
 
     // 6. search, three coinbase to user, search, pop 2, search, 1 coinbase to user, search, pop 3, search
-    // - refresh height 1
+    // - refresh index 1
     MockLedgerContext ledger_context{0, 0};
     SpEnoteStoreMockV1 enote_store_A{1, 0, 0};
     refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
@@ -1159,7 +1159,7 @@ TEST(seraphis_enote_scanning, basic_ledger_tx_passing_5)
 
     /// test
 
-    // 5. pass funds around with non-zero refresh height and reorging
+    // 5. pass funds around with non-zero refresh index and reorging
     MockLedgerContext ledger_context{0, 0};
     SpEnoteStoreMockV1 enote_store_A{0, 0, 0};
     SpEnoteStoreMockV1 enote_store_B{2, 0, 0};
@@ -1621,8 +1621,8 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_1)
     // current chain state: {block0[{1, 1, 1, 1} -> A], block1[A -> {2} -> B]}
     // current enote context A: [enotes: block0{1, 1, 1, 1}], [blocks: 0{...}]
     // expected refresh sequence:
-    // 1. desired start height = block 1
-    // 2. actual start height = block 0 = ([desired start] 1 - [reorg depth] 1)
+    // 1. desired start index = block 1
+    // 2. actual start index = block 0 = ([desired start] 1 - [reorg depth] 1)
     // 3. scan process
     //   a. onchain loop
     //     i.   get onchain chunk: block 0  (success: chunk range [0, 1))
@@ -1747,8 +1747,8 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_2)
     // current chain state: {block0[{1, 1, 1, 1} -> A], block1[A -> {1} -> B], block2[A -> {2} -> B]}
     // current enote context A: [enotes: block0{1, 1, 1, 1}, block1{0}, block2{0}], [blocks: 0{...}, 1{...}, 2{...}]
     // expected refresh sequence:
-    // 1. desired start height = block 3
-    // 2. actual start height = block 2 = ([desired start] 3 - [reorg depth] 1)
+    // 1. desired start index = block 3
+    // 2. actual start index = block 2 = ([desired start] 3 - [reorg depth] 1)
     // 3. scan process
     //   a. onchain loop
     //     i.   get onchain chunk: block 2  (injected: pop 2, +2 blocks)  (fail: chunk range [2, 3) -> NEED_FULLSCAN)
@@ -1870,8 +1870,8 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_3)
     // current chain state: {block0[{1, 1, 1, 1} -> A], block1[A -> {1} -> B], block2[A -> {2} -> B]}
     // current enote context B: [enotes: none, [blocks: none]
     // expected refresh sequence:
-    // 1. desired start height = block 0
-    // 2. actual start height = block 0 = round_to_0([desired start] 0 - [reorg depth] 1)
+    // 1. desired start index = block 0
+    // 2. actual start index = block 0 = round_to_0([desired start] 0 - [reorg depth] 1)
     // 3. scan process
     //   a. onchain loop
     //     i.   get onchain chunk: block 0  (success: chunk range [0, 1))
@@ -1985,8 +1985,8 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_4)
     // current chain state: {block0[{1, 1, 1, 1} -> A], block1[A -> {1} -> B]}
     // current enote context B: [enotes: none], [blocks: none]
     // expected refresh sequence:
-    // 1. desired start height = block 0
-    // 2. actual start height = block 0 = ([desired start] 0 - [reorg depth] 0)
+    // 1. desired start index = block 0
+    // 2. actual start index = block 0 = ([desired start] 0 - [reorg depth] 0)
     // 3. scan process
     //   a. onchain loop
     //     i.   get onchain chunk: block 0  (success: chunk range [0, 1))
@@ -2095,8 +2095,8 @@ TEST(seraphis_enote_scanning, reorgs_while_scanning_5)
     // current chain state: {block0[{1, 1, 1, 1} -> A], block1[A -> {1} -> B]}
     // current enote context B: [enotes: none], [blocks: none]
     // expected refresh sequence:
-    // 1. desired start height = block 0
-    // 2. actual start height = block 0 = ([desired start] 0 - [reorg depth] 0)
+    // 1. desired start index = block 0
+    // 2. actual start index = block 0 = ([desired start] 0 - [reorg depth] 0)
     // 3. scan process
     //   a. onchain loop
     //     i.   get onchain chunk: block 0  (success: chunk range [0, 1))
@@ -2425,8 +2425,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 1);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -2458,7 +2458,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 1);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -2470,15 +2470,15 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
     //export intermediate onetime addresses that need key images
     //(not done for this mock-up)
 
-    //save current height that was legacy partial-scanned
-    const std::uint64_t intermediate_height_pre_import_cycle{
-            enote_store.top_legacy_partialscanned_block_height()
+    //save current index that was legacy partial-scanned
+    const std::uint64_t intermediate_index_pre_import_cycle{
+            enote_store.top_legacy_partialscanned_block_index()
         };
 
     //import key images for onetime addresses of intermediate records in the enote store
     ASSERT_NO_THROW(enote_store.import_legacy_key_image(key_image, enote_1.m_onetime_address));
 
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -2490,7 +2490,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);  //intermediate record promoted to full
 
-    //add empty block 2 (inject to test ledger height trackers)
+    //add empty block 2 (inject to test ledger index trackers)
     ASSERT_NO_THROW(ledger_context.add_legacy_coinbase(
             rct::pkGen(),
             0,
@@ -2515,17 +2515,17 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN, SpEnoteOriginStatus::UNCONFIRMED},
         {SpEnoteSpentStatus::SPENT_ONCHAIN, SpEnoteSpentStatus::SPENT_UNCONFIRMED}) == 0);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == -1);
-    ASSERT_TRUE(enote_store.top_sp_scanned_block_height() == -1);
-    ASSERT_TRUE(enote_store.top_block_height() == 1);  //key image recovery scan should not update block height
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
+    ASSERT_TRUE(enote_store.top_sp_scanned_block_index() == -1);
+    ASSERT_TRUE(enote_store.top_block_index() == 1);  //key image recovery scan should not update block index
 
-    //update legacy fullscan height in enote store to partialscan height the store had when exporting onetime addresses
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle));
+    //update legacy fullscan index in enote store to partialscan index the store had when exporting onetime addresses
+    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_block_height() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_block_index() == 1);
 
     //intermediate scan
     refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
@@ -2536,10 +2536,10 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_sp_scanned_block_height() == -1);
-    ASSERT_TRUE(enote_store.top_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_sp_scanned_block_index() == -1);
+    ASSERT_TRUE(enote_store.top_block_index() == 2);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
     //remove block 2
@@ -2549,27 +2549,27 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
     refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
         legacy_subaddress_map,
         legacy_keys.k_v,
-        //key image recovery mode to demonstrate it doesn't affect seraphis block height tracker or block ids
+        //key image recovery mode to demonstrate it doesn't affect seraphis block index tracker or block ids
         LegacyScanMode::KEY_IMAGES_ONLY,
         refresh_config,
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);  //key images only mode does't detect reorgs
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_sp_scanned_block_height() == -1);
-    ASSERT_TRUE(enote_store.top_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);  //key images only mode does't detect reorgs
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_sp_scanned_block_index() == -1);
+    ASSERT_TRUE(enote_store.top_block_index() == 2);
 
-    //mock seraphis refresh to fix enote store block height trackers after reorg
+    //mock seraphis refresh to fix enote store block index trackers after reorg
     refresh_user_enote_store(jamtis_mock_keys{},
         refresh_config,
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);  //sp refresh doesn't affect legacy heights
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_sp_scanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_block_height() == 2);  //sp refresh doesn't affect legacy heights
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);  //sp refresh doesn't affect legacy indices
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_sp_scanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_block_index() == 2);  //sp refresh doesn't affect legacy indices
 }
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis_enote_scanning, legacy_pre_transition_3)
@@ -2668,8 +2668,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 1);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -2714,16 +2714,16 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
             }
         ));
 
-    //get intermediate scan height
-    const std::uint64_t intermediate_height_pre_import_cycle_1{
-            enote_store.top_legacy_partialscanned_block_height()
+    //get intermediate scan index
+    const std::uint64_t intermediate_index_pre_import_cycle_1{
+            enote_store.top_legacy_partialscanned_block_index()
         };
 
     //import key images: enote 1 in block 0
     ASSERT_NO_THROW(enote_store.import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -2740,8 +2740,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -2749,11 +2749,11 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_1));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 0);
 
     //intermediate scan (to read block 1)
     refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
@@ -2764,8 +2764,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 0);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 1);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 3);
@@ -2773,16 +2773,16 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_2{
-            enote_store.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_2{
+            enote_store.top_legacy_partialscanned_block_index()
         };
 
     //import key image: enote 2 in block 1
     ASSERT_NO_THROW(enote_store.import_legacy_key_image(key_image_2, enote_2.m_onetime_address));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 0);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 3);
@@ -2799,8 +2799,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 0);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 3);
@@ -2808,11 +2808,11 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 3);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_2));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
 
     //block 2: spend enote 2
     ASSERT_NO_THROW(ledger_context.add_legacy_coinbase(
@@ -2834,27 +2834,27 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_3{
-            enote_store.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_3{
+            enote_store.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_3));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_3));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
 
     //pop block 2
     ledger_context.pop_blocks(1);
@@ -2868,8 +2868,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 3);  //enote 2 is now unspent
@@ -2877,19 +2877,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 3);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_4{
-            enote_store.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_4{
+            enote_store.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height (this is redundant since the reorg only popped blocks)
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_4));
+    //set fullscan index to saved intermediate block index (this is redundant since the reorg only popped blocks)
+    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_4));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
 
     //make enote: 4 -> user
     LegacyEnoteV5 enote_3;
@@ -2939,8 +2939,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 6);
@@ -2957,8 +2957,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 6);
@@ -2966,19 +2966,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 6);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_5{
-            enote_store.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_5{
+            enote_store.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height (should do nothing)
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_5));
+    //set fullscan index to saved intermediate block index (should do nothing)
+    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_5));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
 
     //block 3: spend enote 3
     ASSERT_NO_THROW(ledger_context.add_legacy_coinbase(
@@ -3000,8 +3000,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 3);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 3);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 3);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 3);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 2);
@@ -3021,8 +3021,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 3);  //incorrect, must intermediate scan
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 3);  //incorrect, must intermediate scan
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 6);
@@ -3030,7 +3030,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 6);
 
-    //intermediate scan to fix height trackers (these can get messed up if doing both intermediate and full scans,
+    //intermediate scan to fix index trackers (these can get messed up if doing both intermediate and full scans,
     //which will never be done in practice)
     refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
         legacy_subaddress_map,
@@ -3040,27 +3040,27 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 6);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 6);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_6{
-            enote_store.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_6{
+            enote_store.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height (should do nothing)
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_6));
+    //set fullscan index to saved intermediate block index (should do nothing)
+    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_6));
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
 }
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis_enote_scanning, legacy_pre_transition_4)
@@ -3177,7 +3177,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
             }
         ));
 
-    //intermediate scan (don't import key image yet); should still be only 1 intermediate record, with origin height 0
+    //intermediate scan (don't import key image yet); should still be only 1 intermediate record, with origin index 0
     refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
         legacy_subaddress_map,
         legacy_keys.k_v,
@@ -3188,7 +3188,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
 
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 1);
     ASSERT_TRUE(
-            enote_store_int.legacy_intermediate_records().begin()->second.m_origin_context.m_block_height == 0
+            enote_store_int.legacy_intermediate_records().begin()->second.m_origin_context.m_block_index == 0
         );
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -3223,7 +3223,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
 
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 1);
     ASSERT_TRUE(
-            enote_store_int.legacy_intermediate_records().begin()->second.m_origin_context.m_block_height == 0
+            enote_store_int.legacy_intermediate_records().begin()->second.m_origin_context.m_block_index == 0
         );
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -3231,16 +3231,16 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 0);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_1{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_1{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //import key image: enote 1
     ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -3257,8 +3257,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         ledger_context,
         enote_store_int);
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -3266,11 +3266,11 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_1));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 0);
 
     //full scan
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3305,8 +3305,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         ledger_context,
         enote_store_int);
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 0);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
@@ -3314,19 +3314,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_2{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_2{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_2));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 1);
 
     //full scan
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3360,19 +3360,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_3{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_3{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_3));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_3));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 0);
 
     //full scan
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3414,19 +3414,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_4{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_4{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_4));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_4));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 1);
 
     //full scan
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3468,19 +3468,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 0);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_5{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_5{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_5));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_5));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 2);
 
     //full scan
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3677,16 +3677,16 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 0);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_1{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_1{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //import key image: enote 1
     ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image, enote_1a.m_onetime_address));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 5);
@@ -3703,8 +3703,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         ledger_context,
         enote_store_int);
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 5);
@@ -3712,11 +3712,11 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 5);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_1));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 1);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 1);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3750,19 +3750,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 3);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_2{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_2{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_2));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 0);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 0);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3815,19 +3815,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 4);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_3{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_3{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_3));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_3));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 2);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3870,19 +3870,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 0);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_4{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_4{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_4));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_4));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 3);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 3);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 3);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 3);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -3918,19 +3918,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 4);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_5{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_5{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_5));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_5));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 2);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 2);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 2);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 2);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -4056,7 +4056,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
             tx_extra_3
         ));
 
-    //block 0: enote 1 (unlock 0)
+    //block 0: enote 1 (unlock at block 0)
     ASSERT_NO_THROW(ledger_context.add_legacy_coinbase(
             rct::pkGen(),
             0,
@@ -4271,9 +4271,9 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE,
         EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 0);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_1{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_1{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //import key images: enotes 1, 2, 3
@@ -4281,8 +4281,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
     ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image_2, enote_2.m_onetime_address));
     ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image_3, enote_3.m_onetime_address));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 4);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 4);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 3);
@@ -4303,8 +4303,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
         ledger_context,
         enote_store_int);
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 4);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 4);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 3);
@@ -4316,11 +4316,11 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE,
         EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 3);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_1));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 4);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 4);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 4);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 4);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -4605,16 +4605,16 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_7)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE,
         EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 0);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_1{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_1{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //import key image: enote 1
     ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image, enote_1a.m_onetime_address));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 3);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 3);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 2);
@@ -4635,8 +4635,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_7)
         ledger_context,
         enote_store_int);
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 3);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == -1);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 3);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store_int.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 2);
@@ -4648,11 +4648,11 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_7)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE,
         EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 2);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_1));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 3);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 3);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 3);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 3);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -4707,19 +4707,19 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_7)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE,
         EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 0);
 
-    //get intermediate height
-    const std::uint64_t intermediate_height_pre_import_cycle_2{
-            enote_store_int.top_legacy_partialscanned_block_height()
+    //get intermediate block index
+    const std::uint64_t intermediate_index_pre_import_cycle_2{
+            enote_store_int.top_legacy_partialscanned_block_index()
         };
 
     //skip key image import + legacy key image scan (no intermediate records)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
-    //set fullscan height to saved intermediate height
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_height(intermediate_height_pre_import_cycle_2));
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
 
-    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_height() == 4);
-    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_height() == 4);
+    ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 4);
+    ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 4);
 
     //full scan (separate enote store)
     refresh_user_enote_store_legacy_full(legacy_keys.Ks,
@@ -4755,7 +4755,7 @@ static void legacy_view_scan_recovery_cycle(const legacy_mock_keys &legacy_keys,
     const std::uint64_t expected_balance_after_intermediate_scan,
     const std::uint64_t expected_balance_after_importing,
     const std::uint64_t expected_balance_after_key_image_refresh,
-    const std::uint64_t expected_final_legacy_fullscan_height,
+    const std::uint64_t expected_final_legacy_fullscan_index,
     SpEnoteStoreMockV1 &enote_store_inout)
 {
     ASSERT_TRUE(legacy_onetime_addresses_expected.size() == legacy_key_images_expected.size());
@@ -4777,20 +4777,20 @@ static void legacy_view_scan_recovery_cycle(const legacy_mock_keys &legacy_keys,
     /// ATOMIC READ-LOCK
     // 3. get enote store current state
     // a. last block partialscanned
-    const std::uint64_t intermediate_height_pre_import_cycle{
-            enote_store_inout.top_legacy_partialscanned_block_height()
+    const std::uint64_t intermediate_index_pre_import_cycle{
+            enote_store_inout.top_legacy_partialscanned_block_index()
         };
 
     // b. last block fullscanned
-    const std::uint64_t full_height_pre_import_cycle{
-            enote_store_inout.top_legacy_fullscanned_block_height()
+    const std::uint64_t full_index_pre_import_cycle{
+            enote_store_inout.top_legacy_fullscanned_block_index()
         };
-    ASSERT_TRUE(full_height_pre_import_cycle + 1 <= intermediate_height_pre_import_cycle + 1);
+    ASSERT_TRUE(full_index_pre_import_cycle + 1 <= intermediate_index_pre_import_cycle + 1);
 
     // c. first block that might have a fullscanned block ID
-    const std::uint64_t legacy_refresh_height{enote_store_inout.legacy_refresh_height()};
-    const std::uint64_t first_potential_fullscaned_height{
-            std::max(full_height_pre_import_cycle + 1, legacy_refresh_height + 1) - 1
+    const std::uint64_t legacy_refresh_index{enote_store_inout.legacy_refresh_index()};
+    const std::uint64_t first_potential_fullscaned_index{
+            std::max(full_index_pre_import_cycle + 1, legacy_refresh_index + 1) - 1
         };
 
     // d. block id checkpoints within range of partialscanned blocks we are trying to update
@@ -4798,25 +4798,25 @@ static void legacy_view_scan_recovery_cycle(const legacy_mock_keys &legacy_keys,
     //   where reorgs are most likely
     std::map<std::uint64_t, rct::key> block_id_checkpoints;
 
-    for (std::uint64_t block_height{first_potential_fullscaned_height};
-        block_height + 21 < intermediate_height_pre_import_cycle + 1;
-        block_height += (block_height - intermediate_height_pre_import_cycle)/2)
+    for (std::uint64_t block_index{first_potential_fullscaned_index};
+        block_index + 21 < intermediate_index_pre_import_cycle + 1;
+        block_index += (block_index - intermediate_index_pre_import_cycle)/2)
     {
-        ASSERT_TRUE(enote_store_inout.try_get_block_id_for_legacy_partialscan(block_height,
-            block_id_checkpoints[block_height]));
+        ASSERT_TRUE(enote_store_inout.try_get_block_id_for_legacy_partialscan(block_index,
+            block_id_checkpoints[block_index]));
     }
 
-    for (std::uint64_t block_height{
+    for (std::uint64_t block_index{
                 std::max(
-                        first_potential_fullscaned_height + 21,
-                        intermediate_height_pre_import_cycle + 1
+                        first_potential_fullscaned_index + 21,
+                        intermediate_index_pre_import_cycle + 1
                     ) - 21
             };
-        block_height + 21 <= intermediate_height_pre_import_cycle + 21;
-        ++block_height)
+        block_index + 21 <= intermediate_index_pre_import_cycle + 21;
+        ++block_index)
     {
-        ASSERT_TRUE(enote_store_inout.try_get_block_id_for_legacy_partialscan(block_height,
-            block_id_checkpoints[block_height]));
+        ASSERT_TRUE(enote_store_inout.try_get_block_id_for_legacy_partialscan(block_index,
+            block_id_checkpoints[block_index]));
     }
 
     // e. export intermediate onetime addresses that need key images
@@ -4860,11 +4860,11 @@ static void legacy_view_scan_recovery_cycle(const legacy_mock_keys &legacy_keys,
 
 
     /// ATOMIC READ-LOCK
-    // 8. update the legacy fullscan height to account for a complete view-only scan cycle with key image recovery
+    // 8. update the legacy fullscan index to account for a complete view-only scan cycle with key image recovery
     // - only update up to the highest aligned checkpoint from when intermediate records were exported, so that
-    //   any reorg that replaced blocks below the partial scan height recorded at the beginning of the cycle won't
+    //   any reorg that replaced blocks below the partial scan index recorded at the beginning of the cycle won't
     //   be ignored by the next partial scan
-    std::uint64_t highest_aligned_height_post_import_cycle{enote_store_inout.top_legacy_fullscanned_block_height()};
+    std::uint64_t highest_aligned_index_post_import_cycle{enote_store_inout.top_legacy_fullscanned_block_index()};
     rct::key temp_block_id;
 
     for (auto checkpoints_it = block_id_checkpoints.begin();
@@ -4874,15 +4874,15 @@ static void legacy_view_scan_recovery_cycle(const legacy_mock_keys &legacy_keys,
         if (enote_store_inout.try_get_block_id_for_legacy_partialscan(checkpoints_it->first, temp_block_id) &&
             temp_block_id == checkpoints_it->second)
         {
-            highest_aligned_height_post_import_cycle = checkpoints_it->first;
+            highest_aligned_index_post_import_cycle = checkpoints_it->first;
         }
         else break;
     }
 
-    ASSERT_NO_THROW(enote_store_inout.set_last_legacy_fullscan_height(highest_aligned_height_post_import_cycle));
+    ASSERT_NO_THROW(enote_store_inout.set_last_legacy_fullscan_index(highest_aligned_index_post_import_cycle));
 
-    // 9. check the legacy fullscan height is at the expected value
-    ASSERT_TRUE(enote_store_inout.top_legacy_fullscanned_block_height() == expected_final_legacy_fullscan_height);
+    // 9. check the legacy fullscan index is at the expected value
+    ASSERT_TRUE(enote_store_inout.top_legacy_fullscanned_block_index() == expected_final_legacy_fullscan_index);
     /// end ATOMIC READ-LOCK
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -4902,7 +4902,7 @@ static void legacy_sp_transition_test_recovery_assertions(const legacy_mock_keys
     const std::uint64_t first_sp_allowed_block,
 
     const std::uint64_t final_balance,
-    const std::uint64_t final_legacy_fullscan_height,
+    const std::uint64_t final_legacy_fullscan_index,
 
     const std::uint64_t view_scan_expected_balance_after_intermediate_scan,
     const std::uint64_t view_scan_expected_balance_after_importing_key_images,
@@ -4927,7 +4927,7 @@ static void legacy_sp_transition_test_recovery_assertions(const legacy_mock_keys
 
     ASSERT_TRUE(enote_store_full_inout.get_balance({SpEnoteOriginStatus::ONCHAIN},
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == final_balance);
-    ASSERT_TRUE(enote_store_full_inout.top_legacy_fullscanned_block_height() == final_legacy_fullscan_height);
+    ASSERT_TRUE(enote_store_full_inout.top_legacy_fullscanned_block_index() == final_legacy_fullscan_index);
 
     // 2. test view-scan recovery
     legacy_view_scan_recovery_cycle(legacy_keys,
@@ -4939,7 +4939,7 @@ static void legacy_sp_transition_test_recovery_assertions(const legacy_mock_keys
         view_scan_expected_balance_after_intermediate_scan,  //expected balance after intermediate scan
         view_scan_expected_balance_after_importing_key_images,  //expected balance after importing key images
         view_scan_expected_balance_after_keyimage_refresh,  //expected balance after key-image refresh
-        final_legacy_fullscan_height,  //expected final legacy fullscan height
+        final_legacy_fullscan_index,  //expected final legacy fullscan index
         enote_store_view_inout);
     refresh_user_enote_store(sp_keys, refresh_config, ledger_context, enote_store_view_inout);
 
@@ -4963,7 +4963,7 @@ static void legacy_sp_transition_test_recovery_assertions(const legacy_mock_keys
 
         ASSERT_TRUE(enote_store_full_temp.get_balance({SpEnoteOriginStatus::ONCHAIN},
             {SpEnoteSpentStatus::SPENT_ONCHAIN}) == final_balance);
-        ASSERT_TRUE(enote_store_full_temp.top_legacy_fullscanned_block_height() == final_legacy_fullscan_height);
+        ASSERT_TRUE(enote_store_full_temp.top_legacy_fullscanned_block_index() == final_legacy_fullscan_index);
 
         //test view-scan recovery
         legacy_view_scan_recovery_cycle(legacy_keys,
@@ -4975,7 +4975,7 @@ static void legacy_sp_transition_test_recovery_assertions(const legacy_mock_keys
             re_view_scan_expected_balance_after_intermediate_scan,  //expected balance after intermediate scan
             re_view_scan_expected_balance_after_importing_key_images,  //expected balance after importing key images
             re_view_scan_expected_balance_after_keyimage_refresh,  //expected balance after key-image refresh
-            final_legacy_fullscan_height,  //expected final legacy fullscan height
+            final_legacy_fullscan_index,  //expected final legacy fullscan index
             enote_store_view_temp);
         refresh_user_enote_store(sp_keys, refresh_config, ledger_context, enote_store_view_temp);
 
@@ -5160,7 +5160,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -5240,7 +5240,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         3, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         3, //view_scan_expected_balance_after_intermediate_scan
         3, //view_scan_expected_balance_after_importing_key_images
@@ -5280,7 +5280,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         13, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         3, //view_scan_expected_balance_after_intermediate_scan
         3, //view_scan_expected_balance_after_importing_key_images
@@ -5320,7 +5320,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         23, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         13, //view_scan_expected_balance_after_intermediate_scan
         13, //view_scan_expected_balance_after_importing_key_images
@@ -5372,7 +5372,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         23, //view_scan_expected_balance_after_intermediate_scan
         23, //view_scan_expected_balance_after_importing_key_images
@@ -5405,7 +5405,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        -1, //final_legacy_fullscan_height
+        -1, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -5437,7 +5437,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         10, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -5532,7 +5532,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         12, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         12, //view_scan_expected_balance_after_intermediate_scan
         12, //view_scan_expected_balance_after_importing_key_images
@@ -5570,7 +5570,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         22, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         12, //view_scan_expected_balance_after_intermediate_scan
         12, //view_scan_expected_balance_after_importing_key_images
@@ -5608,7 +5608,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         32, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         22, //view_scan_expected_balance_after_intermediate_scan
         22, //view_scan_expected_balance_after_importing_key_images
@@ -5658,7 +5658,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         32, //view_scan_expected_balance_after_intermediate_scan
         32, //view_scan_expected_balance_after_importing_key_images
@@ -5696,7 +5696,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         10, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -5749,7 +5749,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         10, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         10, //view_scan_expected_balance_after_intermediate_scan
         10, //view_scan_expected_balance_after_importing_key_images
@@ -5802,7 +5802,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         12, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         12, //view_scan_expected_balance_after_intermediate_scan
         12, //view_scan_expected_balance_after_importing_key_images
@@ -5840,7 +5840,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         22, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         12, //view_scan_expected_balance_after_intermediate_scan
         12, //view_scan_expected_balance_after_importing_key_images
@@ -5878,7 +5878,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         32, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         22, //view_scan_expected_balance_after_intermediate_scan
         22, //view_scan_expected_balance_after_importing_key_images
@@ -5928,7 +5928,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         32, //view_scan_expected_balance_after_intermediate_scan
         32, //view_scan_expected_balance_after_importing_key_images
@@ -5972,7 +5972,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         22, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -6010,7 +6010,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         32, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         22, //view_scan_expected_balance_after_intermediate_scan
         22, //view_scan_expected_balance_after_importing_key_images
@@ -6060,7 +6060,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_1)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         32, //view_scan_expected_balance_after_intermediate_scan
         32, //view_scan_expected_balance_after_importing_key_images
@@ -6248,7 +6248,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -6328,7 +6328,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         3, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         3, //view_scan_expected_balance_after_intermediate_scan
         3, //view_scan_expected_balance_after_importing_key_images
@@ -6370,7 +6370,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         13, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         3, //view_scan_expected_balance_after_intermediate_scan
         3, //view_scan_expected_balance_after_importing_key_images
@@ -6410,7 +6410,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         23, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         13, //view_scan_expected_balance_after_intermediate_scan
         13, //view_scan_expected_balance_after_importing_key_images
@@ -6450,7 +6450,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         33, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         23, //view_scan_expected_balance_after_intermediate_scan
         23, //view_scan_expected_balance_after_importing_key_images
@@ -6502,7 +6502,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         33, //view_scan_expected_balance_after_intermediate_scan
         33, //view_scan_expected_balance_after_importing_key_images
@@ -6546,7 +6546,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         12, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         //note: legacy key images in seraphis txs removed by reorgs are only cleaned in seraphis scans, so if legacy
         //      scanning after a reorg then it will look like legacy enotes older than the reorg are still spent
@@ -6602,7 +6602,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         13, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         13, //view_scan_expected_balance_after_intermediate_scan
         13, //view_scan_expected_balance_after_importing_key_images
@@ -6642,7 +6642,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         23, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         13, //view_scan_expected_balance_after_intermediate_scan
         13, //view_scan_expected_balance_after_importing_key_images
@@ -6682,7 +6682,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         33, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         23, //view_scan_expected_balance_after_intermediate_scan
         23, //view_scan_expected_balance_after_importing_key_images
@@ -6734,7 +6734,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         33, //view_scan_expected_balance_after_intermediate_scan
         33, //view_scan_expected_balance_after_importing_key_images
@@ -6773,7 +6773,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -6811,7 +6811,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         12, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -6849,7 +6849,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         22, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         12, //view_scan_expected_balance_after_intermediate_scan
         12, //view_scan_expected_balance_after_importing_key_images
@@ -6887,7 +6887,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         32, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         22, //view_scan_expected_balance_after_intermediate_scan
         22, //view_scan_expected_balance_after_importing_key_images
@@ -6925,7 +6925,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         42, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         32, //view_scan_expected_balance_after_intermediate_scan
         32, //view_scan_expected_balance_after_importing_key_images
@@ -6975,7 +6975,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         42, //view_scan_expected_balance_after_intermediate_scan
         42, //view_scan_expected_balance_after_importing_key_images
@@ -7014,7 +7014,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         22, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -7052,7 +7052,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         32, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         22, //view_scan_expected_balance_after_intermediate_scan
         22, //view_scan_expected_balance_after_importing_key_images
@@ -7090,7 +7090,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_2)
         first_sp_allowed_block, //first_sp_allowed_block
 
         42, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         32, //view_scan_expected_balance_after_intermediate_scan
         32, //view_scan_expected_balance_after_importing_key_images
@@ -7240,7 +7240,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -7276,7 +7276,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         11, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -7312,7 +7312,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         21, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         11, //view_scan_expected_balance_after_intermediate_scan
         11, //view_scan_expected_balance_after_importing_key_images
@@ -7366,7 +7366,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         21, //view_scan_expected_balance_after_intermediate_scan
         21, //view_scan_expected_balance_after_importing_key_images
@@ -7402,7 +7402,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         11, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -7438,7 +7438,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         21, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         11, //view_scan_expected_balance_after_intermediate_scan
         11, //view_scan_expected_balance_after_importing_key_images
@@ -7480,7 +7480,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         11, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         21, //view_scan_expected_balance_after_intermediate_scan
         21, //view_scan_expected_balance_after_importing_key_images
@@ -7516,7 +7516,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         21, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         11, //view_scan_expected_balance_after_intermediate_scan
         11, //view_scan_expected_balance_after_importing_key_images
@@ -7553,7 +7553,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         21, //view_scan_expected_balance_after_intermediate_scan
         21, //view_scan_expected_balance_after_importing_key_images
@@ -7589,7 +7589,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         11, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -7625,7 +7625,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_3)
         first_sp_allowed_block, //first_sp_allowed_block
 
         21, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         11, //view_scan_expected_balance_after_intermediate_scan
         11, //view_scan_expected_balance_after_importing_key_images
@@ -7808,7 +7808,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -7888,7 +7888,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         3, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         3, //view_scan_expected_balance_after_intermediate_scan
         3, //view_scan_expected_balance_after_importing_key_images
@@ -7952,7 +7952,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -7987,7 +7987,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -8026,7 +8026,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -8061,7 +8061,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -8111,7 +8111,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -8146,7 +8146,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -8198,7 +8198,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -8233,7 +8233,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_4)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -8427,7 +8427,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         first_sp_allowed_block, //first_sp_allowed_block
 
         2, //final_balance
-        0, //final_legacy_fullscan_height
+        0, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -8473,7 +8473,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -8542,7 +8542,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         2, //view_scan_expected_balance_after_intermediate_scan
         2, //view_scan_expected_balance_after_importing_key_images
@@ -8577,7 +8577,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -8642,7 +8642,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         first_sp_allowed_block, //first_sp_allowed_block
 
         0, //final_balance
-        1, //final_legacy_fullscan_height
+        1, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -8705,7 +8705,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         0, //view_scan_expected_balance_after_intermediate_scan
         0, //view_scan_expected_balance_after_importing_key_images
@@ -8740,7 +8740,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         first_sp_allowed_block, //first_sp_allowed_block
 
         1, //final_balance
-        2, //final_legacy_fullscan_height
+        2, //final_legacy_fullscan_index
 
         1, //view_scan_expected_balance_after_intermediate_scan
         1, //view_scan_expected_balance_after_importing_key_images
@@ -8776,7 +8776,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         2, //expected_balance_after_intermediate_scan
         0, //expected_balance_after_importing
         0, //expected_balance_after_key_image_refresh
-        2, //expected_final_legacy_fullscan_height
+        2, //expected_final_legacy_fullscan_index
         enote_store_fresh);
 
     //remove block 2
@@ -8796,7 +8796,7 @@ TEST(seraphis_enote_scanning, legacy_sp_transition_5)
         1, //expected_balance_after_intermediate_scan
         1, //expected_balance_after_importing
         1, //expected_balance_after_key_image_refresh
-        1, //expected_final_legacy_fullscan_height
+        1, //expected_final_legacy_fullscan_index
         enote_store_fresh);
 
     //seraphis scan (fresh enote store)

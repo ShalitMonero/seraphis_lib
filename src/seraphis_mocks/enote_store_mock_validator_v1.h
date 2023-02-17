@@ -64,8 +64,8 @@ public:
     SpEnoteStoreMockPaymentValidatorV1() = default;
 
     /// normal constructor
-    SpEnoteStoreMockPaymentValidatorV1(const std::uint64_t refresh_height, const std::uint64_t default_spendable_age) :
-        m_refresh_height{refresh_height},
+    SpEnoteStoreMockPaymentValidatorV1(const std::uint64_t refresh_index, const std::uint64_t default_spendable_age) :
+        m_refresh_index{refresh_index},
         m_default_spendable_age{default_spendable_age}
     {}
 
@@ -73,12 +73,12 @@ public:
     /// get current total amount received using specified origin statuses
     boost::multiprecision::uint128_t get_received_sum(const std::unordered_set<SpEnoteOriginStatus> &origin_statuses,
         const std::unordered_set<EnoteStoreBalanceUpdateExclusions> &exclusions = {}) const;
-    /// get height of first block the enote store cares about
-    std::uint64_t refresh_height() const { return m_refresh_height; }
-    /// get height of heighest recorded block (refresh height - 1 if no recorded blocks) (heighest block PayVal-scanned)
-    std::uint64_t top_block_height() const { return m_refresh_height + m_block_ids.size() - 1; }
-    /// try to get the recorded block id for a given height
-    bool try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const;
+    /// get index of first block the enote store cares about
+    std::uint64_t refresh_index() const { return m_refresh_index; }
+    /// get index of heighest recorded block (refresh index - 1 if no recorded blocks) (heighest block PayVal-scanned)
+    std::uint64_t top_block_index() const { return m_refresh_index + m_block_ids.size() - 1; }
+    /// try to get the recorded block id for a given index
+    bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const;
 
     /// update the store with enote records, with associated context
     void update_with_sp_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status,
@@ -97,13 +97,13 @@ protected:
     /// seraphis enotes
     std::unordered_map<rct::key, SpContextualIntermediateEnoteRecordV1> m_sp_contextual_enote_records;
 
-    /// refresh height
-    std::uint64_t m_refresh_height{0};
-    /// stored block ids in range [refresh height, end of known chain]
+    /// refresh index
+    std::uint64_t m_refresh_index{0};
+    /// stored block ids in range [refresh index, end of known chain]
     std::vector<rct::key> m_block_ids;
 
     /// configuration value: default spendable age; an enote is considered 'spendable' in the next block if it's on-chain
-    //      and the hext height is >= 'origin height + max(1, default_spendable_age)'
+    //      and the hext index is >= 'origin index + max(1, default_spendable_age)'
     std::uint64_t m_default_spendable_age{0};
 };
 

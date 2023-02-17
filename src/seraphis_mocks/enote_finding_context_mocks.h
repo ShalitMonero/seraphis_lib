@@ -90,7 +90,7 @@ public:
     /// get an unconfirmed chunk (no-op for legacy scanning)
     void get_unconfirmed_chunk(EnoteScanningChunkNonLedgerV1 &chunk_out) const override {} //noop
     /// get an onchain chunk (or empty chunk representing top of current chain)
-    void get_onchain_chunk(const std::uint64_t chunk_start_height,
+    void get_onchain_chunk(const std::uint64_t chunk_start_index,
         const std::uint64_t chunk_max_size,
         EnoteScanningChunkLedgerV1 &chunk_out) const override;
 
@@ -125,7 +125,7 @@ public:
     /// get an unconfirmed chunk
     void get_unconfirmed_chunk(EnoteScanningChunkNonLedgerV1 &chunk_out) const override;
     /// get an onchain chunk (or empty chunk representing top of current chain)
-    void get_onchain_chunk(const std::uint64_t chunk_start_height,
+    void get_onchain_chunk(const std::uint64_t chunk_start_index,
         const std::uint64_t chunk_max_size,
         EnoteScanningChunkLedgerV1 &chunk_out) const override;
 

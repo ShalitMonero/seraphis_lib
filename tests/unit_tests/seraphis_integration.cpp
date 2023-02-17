@@ -162,7 +162,7 @@ TEST(seraphis_integration, txtype_squashed_v1)
     make_random_address_for_user(user_keys_A, destination_A);
     make_random_address_for_user(user_keys_B, destination_B);
 
-    // d. user enote stores (refresh height = 0; seraphis initial block = 0; default spendable age = 0)
+    // d. user enote stores (refresh index = 0; seraphis initial block = 0; default spendable age = 0)
     SpEnoteStoreMockV1 enote_store_A{0, 0, 0};
     SpEnoteStoreMockV1 enote_store_B{0, 0, 0};
 

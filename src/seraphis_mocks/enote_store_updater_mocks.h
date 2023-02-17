@@ -79,12 +79,12 @@ public:
     EnoteStoreUpdaterMockLegacyIntermediate& operator=(EnoteStoreUpdaterMockLegacyIntermediate&&) = delete;
 
 //member functions
-    /// get height of first block the enote store cares about
-    std::uint64_t refresh_height() const override;
-    /// get height of first block the updater wants to have scanned
+    /// get index of first block the enote store cares about
+    std::uint64_t refresh_index() const override;
+    /// get index of first block the updater wants to have scanned
     std::uint64_t desired_first_block() const override;
-    /// try to get the recorded block id for a given height
-    bool try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const override;
+    /// try to get the recorded block id for a given index
+    bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const override;
 
     /// consume a chunk of basic enote records and save the results
     void consume_nonledger_chunk(const SpEnoteOriginStatus nonledger_origin_status,
@@ -100,7 +100,7 @@ public:
 //member variables
 private:
     /// If this is set to KEY_IMAGES_ONLY, then desired_first_block() will be defined from the last block that was legacy
-    /// view-scanned AND where legacy key images were fully handled (i.e. the last fullscanned height). Otherwise, it will
+    /// view-scanned AND where legacy key images were fully handled (i.e. the last fullscanned index). Otherwise, it will
     /// be defined from the last block that was only legacy view-scanned.
     /// - Goal: when scanning for legacy key images, expect the enote scanner to return key images for all blocks that
     ///   were legacy view-scanned but that didn't have key images handled (i.e. because key images weren't available
@@ -127,12 +127,12 @@ public:
     EnoteStoreUpdaterMockLegacy& operator=(EnoteStoreUpdaterMockLegacy&&) = delete;
 
 //member functions
-    /// get height of first block the enote store cares about
-    std::uint64_t refresh_height() const override;
-    /// get height of first block the updater wants to have scanned
+    /// get index of first block the enote store cares about
+    std::uint64_t refresh_index() const override;
+    /// get index of first block the updater wants to have scanned
     std::uint64_t desired_first_block() const override;
-    /// try to get the recorded block id for a given height
-    bool try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const override;
+    /// try to get the recorded block id for a given index
+    bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const override;
 
     /// consume a chunk of basic enote records and save the results
     void consume_nonledger_chunk(const SpEnoteOriginStatus nonledger_origin_status,
@@ -170,12 +170,12 @@ public:
     EnoteStoreUpdaterMockSpIntermediate& operator=(EnoteStoreUpdaterMockSpIntermediate&&) = delete;
 
 //member functions
-    /// get height of first block the enote store cares about
-    std::uint64_t refresh_height() const override;
-    /// get height of first block the updater wants to have scanned
+    /// get index of first block the enote store cares about
+    std::uint64_t refresh_index() const override;
+    /// get index of first block the updater wants to have scanned
     std::uint64_t desired_first_block() const override;
-    /// try to get the recorded block id for a given height
-    bool try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const override;
+    /// try to get the recorded block id for a given index
+    bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const override;
 
     /// consume a chunk of basic enote records and save the results
     void consume_nonledger_chunk(const SpEnoteOriginStatus nonledger_origin_status,
@@ -214,12 +214,12 @@ public:
     EnoteStoreUpdaterMockSp& operator=(EnoteStoreUpdaterMockSp&&) = delete;
 
 //member functions
-    /// get height of first block the enote store cares about
-    std::uint64_t refresh_height() const override;
-    /// get height of first block the updater wants to have scanned
+    /// get index of first block the enote store cares about
+    std::uint64_t refresh_index() const override;
+    /// get index of first block the updater wants to have scanned
     std::uint64_t desired_first_block() const override;
-    /// try to get the recorded block id for a given height
-    bool try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const override;
+    /// try to get the recorded block id for a given index
+    bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const override;
 
     /// consume a chunk of basic enote records and save the results
     void consume_nonledger_chunk(const SpEnoteOriginStatus nonledger_origin_status,

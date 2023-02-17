@@ -63,7 +63,7 @@ namespace sp
 
 ////
 // EnoteScanningChunkLedgerV1
-// - chunk range (in block heights): [start height, end height)
+// - chunk range (in block indices): [start index, end index)
 // - prefix block id: id of block that comes before the chunk range, used for contiguity checks between chunks and with
 //   the enote store updater
 // - contextual basic enote records for owned enote candidates in the chunk of blocks
@@ -75,16 +75,16 @@ namespace sp
 ///
 struct EnoteScanningChunkLedgerV1 final
 {
-    /// block range: [start height, end height)  (range is size 0 if start == end)
-    std::uint64_t m_start_height;
-    std::uint64_t m_end_height;
-    /// block id at 'start height - 1'  (implicitly ignored if start_height == 0)
+    /// block range: [start index, end index)  (range is size 0 if start == end)
+    std::uint64_t m_start_index;
+    std::uint64_t m_end_index;
+    /// block id at 'start index - 1'  (implicitly ignored if start_index == 0)
     rct::key m_prefix_block_id;
-    /// block ids in range [start height, end height)
+    /// block ids in range [start index, end index)
     std::vector<rct::key> m_block_ids;
-    /// owned enote candidates in range [start height, end height)  (mapped to tx id)
+    /// owned enote candidates in range [start index, end index)  (mapped to tx id)
     std::unordered_map<rct::key, std::list<ContextualBasicRecordVariant>> m_basic_records_per_tx;
-    /// key images from txs with owned enote candidates in range [start height, end height)
+    /// key images from txs with owned enote candidates in range [start index, end index)
     std::list<SpContextualKeyImageSetV1> m_contextual_key_images;
 };
 
@@ -119,10 +119,10 @@ struct RefreshLedgerEnoteStoreConfig final
 * brief: check_v1_enote_scan_chunk_ledger_semantics_v1 - check semantics of an on-chain chunk
 *   - throws on failure
 * param: onchain_chunk -
-* param: expected_prefix_height -
+* param: expected_prefix_index -
 */
 void check_v1_enote_scan_chunk_ledger_semantics_v1(const EnoteScanningChunkLedgerV1 &onchain_chunk,
-    const std::uint64_t expected_prefix_height);
+    const std::uint64_t expected_prefix_index);
 /**
 * brief: check_v1_enote_scan_chunk_nonledger_semantics_v1 - check semantics of an off-chain chunk
 *   - throws on failure

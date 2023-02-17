@@ -50,22 +50,24 @@
 namespace sp
 {
 //-------------------------------------------------------------------------------------------------------------------
-bool onchain_legacy_enote_is_locked(const std::uint64_t enote_origin_height,
+bool onchain_legacy_enote_is_locked(const std::uint64_t enote_origin_block_index,
     const std::uint64_t enote_unlock_time,
-    const std::uint64_t chain_height,
+    const std::uint64_t top_block_index,
     const std::uint64_t default_spendable_age,
     const std::uint64_t current_time)
 {
     // 1. check default spendable age
     // - test: is the next minable block lower than the first block where the enote is spendable?
     // - an enote is not spendable in the block where it originates, so the default spendable age is always at least 1
-    if (chain_height + 1 < enote_origin_height + std::max(std::uint64_t{1}, default_spendable_age))
+    if (top_block_index + 1 < enote_origin_block_index + std::max(std::uint64_t{1}, default_spendable_age))
         return true;
 
     // 2. check unlock time: height encoding
-    // - test: is the next minable block lower than the block where the enote is unlocked?
+    // - test: is the next minable block's height lower than the block height where the enote is unlocked?
+    // note: block height == block index  (there is a lot of confusion around this since it 'seems' like height == chain
+    //       size, but that doesn't take into account that the genesis block is at height 0)
     if (enote_unlock_time < CRYPTONOTE_MAX_BLOCK_NUMBER &&
-        chain_height + 1 < enote_unlock_time)
+        top_block_index + 1 < enote_unlock_time)
         return true;
 
     // 3. check unlock time: UNIX encoding
@@ -77,14 +79,14 @@ bool onchain_legacy_enote_is_locked(const std::uint64_t enote_origin_height,
     return false;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool onchain_sp_enote_is_locked(const std::uint64_t enote_origin_height,
-    const std::uint64_t chain_height,
+bool onchain_sp_enote_is_locked(const std::uint64_t enote_origin_block_index,
+    const std::uint64_t top_block_index,
     const std::uint64_t default_spendable_age)
 {
     // check default spendable age
     // - test: is the next minable block lower than the first block where the enote is spendable?
     // - an enote is not spendable in the block where it originates, so the default spendable age is always at least 1
-    return chain_height + 1 < enote_origin_height + std::max(std::uint64_t{1}, default_spendable_age);
+    return top_block_index + 1 < enote_origin_block_index + std::max(std::uint64_t{1}, default_spendable_age);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool legacy_enote_has_highest_amount_in_set(const rct::key &specified_enote_identifier,

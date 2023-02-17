@@ -62,7 +62,7 @@ namespace sp
 * param: legacy_base_spend_pubkey -
 * param: legacy_subaddress_map -
 * param: legacy_view_privkey -
-* param: block_height -
+* param: block_index -
 * param: block_timestamp -
 * param: transaction_id -
 * param: total_enotes_before_tx - number of legacy enotes ordered before this tx (set to '0' if tx is non-ledger)
@@ -76,7 +76,7 @@ namespace sp
 bool try_find_legacy_enotes_in_tx(const rct::key &legacy_base_spend_pubkey,
     const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
     const crypto::secret_key &legacy_view_privkey,
-    const std::uint64_t block_height,
+    const std::uint64_t block_index,
     const std::uint64_t block_timestamp,
     const rct::key &transaction_id,
     const std::uint64_t total_enotes_before_tx,
@@ -89,7 +89,7 @@ bool try_find_legacy_enotes_in_tx(const rct::key &legacy_base_spend_pubkey,
 /**
 * brief: try_find_sp_enotes_in_tx - obtain contextual basic records from a seraphis tx's contents
 * param: xk_find_received -
-* param: block_height -
+* param: block_index -
 * param: block_timestamp -
 * param: transaction_id -
 * param: total_enotes_before_tx - number of seraphis enotes ordered before this tx (set to '0' if tx is non-ledger)
@@ -100,7 +100,7 @@ bool try_find_legacy_enotes_in_tx(const rct::key &legacy_base_spend_pubkey,
 * outparam: basic_records_in_tx_out -
 */
 bool try_find_sp_enotes_in_tx(const crypto::x25519_secret_key &xk_find_received,
-    const std::uint64_t block_height,
+    const std::uint64_t block_index,
     const std::uint64_t block_timestamp,
     const rct::key &transaction_id,
     const std::uint64_t total_enotes_before_tx,
@@ -111,7 +111,7 @@ bool try_find_sp_enotes_in_tx(const crypto::x25519_secret_key &xk_find_received,
     std::list<ContextualBasicRecordVariant> &basic_records_in_tx_out);
 /**
 * brief: try_collect_key_images_from_tx - if a tx has key images, collect them into a contextual key image set
-* param: block_height -
+* param: block_index -
 * param: block_timestamp -
 * param: transaction_id -
 * param: legacy_key_images_in_tx -
@@ -120,7 +120,7 @@ bool try_find_sp_enotes_in_tx(const crypto::x25519_secret_key &xk_find_received,
 * outparam: contextual_key_images_out -
 * return: true if a set was made (there was at least one key image available)
 */
-bool try_collect_key_images_from_tx(const std::uint64_t block_height,
+bool try_collect_key_images_from_tx(const std::uint64_t block_index,
     const std::uint64_t block_timestamp,
     const rct::key &transaction_id,
     std::vector<crypto::key_image> legacy_key_images_in_tx,

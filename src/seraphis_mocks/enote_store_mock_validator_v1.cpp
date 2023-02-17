@@ -76,8 +76,8 @@ boost::multiprecision::uint128_t SpEnoteStoreMockPaymentValidatorV1::get_receive
         if (exclusions.find(EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED) != exclusions.end() &&
             contextual_record.m_origin_context.m_origin_status == SpEnoteOriginStatus::ONCHAIN &&
             onchain_sp_enote_is_locked(
-                    contextual_record.m_origin_context.m_block_height,
-                    this->top_block_height(),
+                    contextual_record.m_origin_context.m_block_index,
+                    this->top_block_index(),
                     m_default_spendable_age
                 ))
             continue;
@@ -89,14 +89,14 @@ boost::multiprecision::uint128_t SpEnoteStoreMockPaymentValidatorV1::get_receive
     return received_sum;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpEnoteStoreMockPaymentValidatorV1::try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const
+bool SpEnoteStoreMockPaymentValidatorV1::try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const
 {
-    if (block_height < m_refresh_height ||
-        block_height > m_refresh_height + m_block_ids.size() - 1 ||
+    if (block_index < m_refresh_index ||
+        block_index > m_refresh_index + m_block_ids.size() - 1 ||
         m_block_ids.size() == 0)
         return false;
 
-    block_id_out = m_block_ids[block_height - m_refresh_height];
+    block_id_out = m_block_ids[block_index - m_refresh_index];
 
     return true;
 }
@@ -132,17 +132,17 @@ void SpEnoteStoreMockPaymentValidatorV1::update_with_sp_records_from_ledger(cons
     const std::vector<rct::key> &new_block_ids)
 {
     // 1. set new block ids in range [first_new_block, end of chain]
-    CHECK_AND_ASSERT_THROW_MES(first_new_block >= m_refresh_height,
-        "enote store ledger records update (mock): first new block is below the refresh height.");
-    CHECK_AND_ASSERT_THROW_MES(first_new_block - m_refresh_height <= m_block_ids.size(),
+    CHECK_AND_ASSERT_THROW_MES(first_new_block >= m_refresh_index,
+        "enote store ledger records update (mock): first new block is below the refresh index.");
+    CHECK_AND_ASSERT_THROW_MES(first_new_block - m_refresh_index <= m_block_ids.size(),
         "enote store ledger records update (mock): new blocks don't line up with existing blocks.");
-    if (first_new_block > m_refresh_height)
+    if (first_new_block > m_refresh_index)
     {
-        CHECK_AND_ASSERT_THROW_MES(alignment_block_id == m_block_ids[first_new_block - m_refresh_height - 1],
+        CHECK_AND_ASSERT_THROW_MES(alignment_block_id == m_block_ids[first_new_block - m_refresh_index - 1],
             "enote store ledger records update (mock): alignment block id doesn't align with recorded block ids.");
     }
 
-    m_block_ids.resize(first_new_block - m_refresh_height);  //crop old blocks
+    m_block_ids.resize(first_new_block - m_refresh_index);  //crop old blocks
     m_block_ids.insert(m_block_ids.end(), new_block_ids.begin(), new_block_ids.end());
 
     // 2. remove records that will be replaced
@@ -152,7 +152,7 @@ void SpEnoteStoreMockPaymentValidatorV1::update_with_sp_records_from_ledger(cons
                 // a. remove onchain enotes in range [first_new_block, end of chain]
                 if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status ==
                         SpEnoteOriginStatus::ONCHAIN &&
-                    mapped_contextual_enote_record.second.m_origin_context.m_block_height >= first_new_block)
+                    mapped_contextual_enote_record.second.m_origin_context.m_block_index >= first_new_block)
                 {
                     return true;
                 }

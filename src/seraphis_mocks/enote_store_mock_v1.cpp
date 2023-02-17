@@ -61,37 +61,37 @@ namespace mocks
 {
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void update_block_ids_with_new_block_ids(const std::uint64_t first_allowed_height,
-    const std::uint64_t first_new_block_height,
+static void update_block_ids_with_new_block_ids(const std::uint64_t first_allowed_index,
+    const std::uint64_t first_new_block_index,
     const rct::key &alignment_block_id,
     const std::vector<rct::key> &new_block_ids,
     std::vector<rct::key> &block_ids_inout)
 {
     // 1. check inputs
-    CHECK_AND_ASSERT_THROW_MES(first_new_block_height >= first_allowed_height,
-        "enote store set new block ids (mock): first new block is below the refresh height.");
-    CHECK_AND_ASSERT_THROW_MES(first_new_block_height - first_allowed_height <= block_ids_inout.size(),
+    CHECK_AND_ASSERT_THROW_MES(first_new_block_index >= first_allowed_index,
+        "enote store set new block ids (mock): first new block is below the refresh index.");
+    CHECK_AND_ASSERT_THROW_MES(first_new_block_index - first_allowed_index <= block_ids_inout.size(),
         "enote store set new block ids (mock): new blocks don't line up with existing blocks.");
-    if (first_new_block_height > first_allowed_height)
+    if (first_new_block_index > first_allowed_index)
     {
         CHECK_AND_ASSERT_THROW_MES(alignment_block_id ==
-                block_ids_inout[first_new_block_height - first_allowed_height - 1],
+                block_ids_inout[first_new_block_index - first_allowed_index - 1],
             "enote store set new block ids (mock): alignment block id doesn't align with recorded block ids.");
     }
 
     // 2. update the block ids
-    block_ids_inout.resize(first_new_block_height - first_allowed_height);  //crop old blocks
+    block_ids_inout.resize(first_new_block_index - first_allowed_index);  //crop old blocks
     block_ids_inout.insert(block_ids_inout.end(), new_block_ids.begin(), new_block_ids.end());
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-SpEnoteStoreMockV1::SpEnoteStoreMockV1(const std::uint64_t refresh_height,
+SpEnoteStoreMockV1::SpEnoteStoreMockV1(const std::uint64_t refresh_index,
     const std::uint64_t first_sp_enabled_block_in_chain,
     const std::uint64_t default_spendable_age) :
-        m_refresh_height{refresh_height},
-        m_legacy_fullscan_height{refresh_height - 1},
-        m_legacy_partialscan_height{refresh_height - 1},
-        m_sp_scanned_height{refresh_height - 1},
+        m_refresh_index{refresh_index},
+        m_legacy_fullscan_index{refresh_index - 1},
+        m_legacy_partialscan_index{refresh_index - 1},
+        m_sp_scanned_index{refresh_index - 1},
         m_first_sp_enabled_block_in_chain{first_sp_enabled_block_in_chain},
         m_default_spendable_age{default_spendable_age}
 {}
@@ -115,90 +115,90 @@ boost::multiprecision::uint128_t SpEnoteStoreMockV1::get_balance(
     return balance;
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::uint64_t SpEnoteStoreMockV1::top_block_height() const
+std::uint64_t SpEnoteStoreMockV1::top_block_index() const
 {
     // 1. no blocks
     if (m_legacy_block_ids.size() == 0 &&
         m_sp_block_ids.size() == 0)
-        return m_refresh_height - 1;
+        return m_refresh_index - 1;
 
-    // 2. only legacy blocks
+    // 2. only have legacy blocks
     if (m_sp_block_ids.size() == 0)
-        return m_refresh_height + m_legacy_block_ids.size() - 1;
+        return m_refresh_index + m_legacy_block_ids.size() - 1;
 
-    // 3. only seraphis blocks
+    // 3. only have seraphis blocks
     if (m_legacy_block_ids.size() == 0)
-        return this->sp_refresh_height() + m_sp_block_ids.size() - 1;
+        return this->sp_refresh_index() + m_sp_block_ids.size() - 1;
 
-    // 4. multi-type blocks
+    // 4. have legacy and seraphis blocks
     return std::max(
-            m_refresh_height + m_legacy_block_ids.size() - 1,
-            this->sp_refresh_height() + m_sp_block_ids.size() - 1
+            m_refresh_index + m_legacy_block_ids.size() - 1,
+            this->sp_refresh_index() + m_sp_block_ids.size() - 1
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpEnoteStoreMockV1::try_get_block_id_for_legacy_partialscan(const std::uint64_t block_height,
+bool SpEnoteStoreMockV1::try_get_block_id_for_legacy_partialscan(const std::uint64_t block_index,
     rct::key &block_id_out) const
 {
     // 1. check error states
-    if (block_height < m_refresh_height ||
-        block_height > m_refresh_height + m_legacy_block_ids.size() - 1 ||
+    if (block_index < m_refresh_index ||
+        block_index > m_refresh_index + m_legacy_block_ids.size() - 1 ||
         m_legacy_block_ids.size() == 0)
         return false;
 
-    // 2. assume a block id is 'unknown' if its height is above the last legacy partial-scanned block height
-    if (block_height + 1 > m_legacy_partialscan_height + 1)
+    // 2. assume a block id is 'unknown' if its index is above the last legacy partial-scanned block index
+    if (block_index + 1 > m_legacy_partialscan_index + 1)
         return false;
 
     // 3. get the block id
-    block_id_out = m_legacy_block_ids[block_height - m_refresh_height];
+    block_id_out = m_legacy_block_ids[block_index - m_refresh_index];
 
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpEnoteStoreMockV1::try_get_block_id_for_legacy_fullscan(const std::uint64_t block_height,
+bool SpEnoteStoreMockV1::try_get_block_id_for_legacy_fullscan(const std::uint64_t block_index,
     rct::key &block_id_out) const
 {
     // 1. check error states
-    if (block_height < m_refresh_height ||
-        block_height > m_refresh_height + m_legacy_block_ids.size() - 1 ||
+    if (block_index < m_refresh_index ||
+        block_index > m_refresh_index + m_legacy_block_ids.size() - 1 ||
         m_legacy_block_ids.size() == 0)
         return false;
 
-    // 2. assume a block id is 'unknown' if its height is above the last legacy full-scanned block height
-    if (block_height + 1 > m_legacy_fullscan_height + 1)
+    // 2. assume a block id is 'unknown' if its index is above the last legacy full-scanned block index
+    if (block_index + 1 > m_legacy_fullscan_index + 1)
         return false;
 
     // 3. get the block id
-    block_id_out = m_legacy_block_ids[block_height - m_refresh_height];
+    block_id_out = m_legacy_block_ids[block_index - m_refresh_index];
 
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpEnoteStoreMockV1::try_get_block_id_for_sp(const std::uint64_t block_height, rct::key &block_id_out) const
+bool SpEnoteStoreMockV1::try_get_block_id_for_sp(const std::uint64_t block_index, rct::key &block_id_out) const
 {
     // 1. check error states
-    if (block_height < this->sp_refresh_height() ||
-        block_height > this->sp_refresh_height() + m_sp_block_ids.size() - 1 ||
+    if (block_index < this->sp_refresh_index() ||
+        block_index > this->sp_refresh_index() + m_sp_block_ids.size() - 1 ||
         m_sp_block_ids.size() == 0)
         return false;
 
-    // 2. assume a block id is 'unknown' if its height is above the last seraphis scanned block height
-    if (block_height + 1 > m_sp_scanned_height + 1)
+    // 2. assume a block id is 'unknown' if its index is above the last seraphis scanned block index
+    if (block_index + 1 > m_sp_scanned_index + 1)
         return false;
 
     // 3. get the block id
-    block_id_out = m_sp_block_ids[block_height - this->sp_refresh_height()];
+    block_id_out = m_sp_block_ids[block_index - this->sp_refresh_index()];
 
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpEnoteStoreMockV1::try_get_block_id(const std::uint64_t block_height, rct::key &block_id_out) const
+bool SpEnoteStoreMockV1::try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const
 {
     // try to get the block id from each of the scan types
-    return try_get_block_id_for_legacy_partialscan(block_height, block_id_out) ||
-        try_get_block_id_for_legacy_fullscan(block_height, block_id_out) ||
-        try_get_block_id_for_sp(block_height, block_id_out);
+    return try_get_block_id_for_legacy_partialscan(block_index, block_id_out) ||
+        try_get_block_id_for_legacy_fullscan(block_index, block_id_out) ||
+        try_get_block_id_for_sp(block_index, block_id_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool SpEnoteStoreMockV1::has_enote_with_key_image(const crypto::key_image &key_image) const
@@ -335,50 +335,50 @@ void SpEnoteStoreMockV1::import_legacy_key_image(const crypto::key_image &legacy
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::set_last_legacy_fullscan_height(const std::uint64_t new_height)
+void SpEnoteStoreMockV1::set_last_legacy_fullscan_index(const std::uint64_t new_index)
 {
-    // 1. set this scan height (+1 because if no scanning has been done then we are below the refresh height)
-    CHECK_AND_ASSERT_THROW_MES(new_height + 1 >= m_refresh_height,
-        "mock enote store (set legacy fullscan height): new height is below refresh height.");
-    CHECK_AND_ASSERT_THROW_MES(new_height + 1 <= m_refresh_height + m_legacy_block_ids.size(),
-        "mock enote store (set legacy fullscan height): new height is above known block range.");
+    // 1. set this scan index (+1 because if no scanning has been done then we are below the refresh index)
+    CHECK_AND_ASSERT_THROW_MES(new_index + 1 >= m_refresh_index,
+        "mock enote store (set legacy fullscan index): new index is below refresh index.");
+    CHECK_AND_ASSERT_THROW_MES(new_index + 1 <= m_refresh_index + m_legacy_block_ids.size(),
+        "mock enote store (set legacy fullscan index): new index is above known block range.");
 
-    m_legacy_fullscan_height = new_height;
+    m_legacy_fullscan_index = new_index;
 
-    // 2. update legacy partial scan height
+    // 2. update legacy partial scan index
     // - fullscan qualifies as partialscan
-    // note: this update won't fix inaccuracy in the m_legacy_partialscan_height caused by a reorg, although
-    //       in practice reorgs that reduce the chain height are extremely rare/nonexistent outside unit tests;
-    //       moreoever, the partialscan height is meaningless unless view-only scanning (in which case the fullscan
-    //       height will almost certainly only be updated using a manual workflow that can only repair reorgs by
+    // note: this update won't fix inaccuracy in the m_legacy_partialscan_index caused by a reorg, although
+    //       in practice reorgs that reduce the chain index are extremely rare/nonexistent outside unit tests;
+    //       moreoever, the partialscan index is meaningless unless view-only scanning (in which case the fullscan
+    //       index will almost certainly only be updated using a manual workflow that can only repair reorgs by
     //       re-running the workflow anyway)
-    m_legacy_partialscan_height = std::max(m_legacy_partialscan_height + 1, m_legacy_fullscan_height + 1) - 1;
+    m_legacy_partialscan_index = std::max(m_legacy_partialscan_index + 1, m_legacy_fullscan_index + 1) - 1;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::set_last_legacy_partialscan_height(const std::uint64_t new_height)
+void SpEnoteStoreMockV1::set_last_legacy_partialscan_index(const std::uint64_t new_index)
 {
-    // 1. set this scan height
-    CHECK_AND_ASSERT_THROW_MES(new_height + 1 >= m_refresh_height,
-        "mock enote store (set legacy partialscan height): new height is below refresh height.");
-    CHECK_AND_ASSERT_THROW_MES(new_height + 1 <= m_refresh_height + m_legacy_block_ids.size(),
-        "mock enote store (set legacy partialscan height): new height is above known block range.");
+    // 1. set this scan index
+    CHECK_AND_ASSERT_THROW_MES(new_index + 1 >= m_refresh_index,
+        "mock enote store (set legacy partialscan index): new index is below refresh index.");
+    CHECK_AND_ASSERT_THROW_MES(new_index + 1 <= m_refresh_index + m_legacy_block_ids.size(),
+        "mock enote store (set legacy partialscan index): new index is above known block range.");
 
-    m_legacy_partialscan_height = new_height;
+    m_legacy_partialscan_index = new_index;
 
-    // 2. update legacy full scan height
-    // - if partialscan height is below fullscan height, assume this means there was a reorg
-    m_legacy_fullscan_height = std::min(m_legacy_fullscan_height + 1, m_legacy_partialscan_height + 1) - 1;
+    // 2. update legacy full scan index
+    // - if partialscan index is below fullscan index, assume this means there was a reorg
+    m_legacy_fullscan_index = std::min(m_legacy_fullscan_index + 1, m_legacy_partialscan_index + 1) - 1;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::set_last_sp_scanned_height(const std::uint64_t new_height)
+void SpEnoteStoreMockV1::set_last_sp_scanned_index(const std::uint64_t new_index)
 {
-    // set this scan height
-    CHECK_AND_ASSERT_THROW_MES(new_height + 1 >= this->sp_refresh_height(),
-        "mock enote store (set seraphis scan height): new height is below refresh height.");
-    CHECK_AND_ASSERT_THROW_MES(new_height + 1 <= this->sp_refresh_height() + m_sp_block_ids.size(),
-        "mock enote store (set seraphis scan height): new height is above known block range.");
+    // set this scan index
+    CHECK_AND_ASSERT_THROW_MES(new_index + 1 >= this->sp_refresh_index(),
+        "mock enote store (set seraphis scan index): new index is below refresh index.");
+    CHECK_AND_ASSERT_THROW_MES(new_index + 1 <= this->sp_refresh_index() + m_sp_block_ids.size(),
+        "mock enote store (set seraphis scan index): new index is above known block range.");
 
-    m_sp_scanned_height = new_height;
+    m_sp_scanned_index = new_index;
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_intermediate_legacy_records_from_nonledger(
@@ -532,9 +532,9 @@ boost::multiprecision::uint128_t SpEnoteStoreMockV1::get_balance_intermediate_le
         if (exclusions.find(EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED) != exclusions.end() &&
             current_contextual_record.m_origin_context.m_origin_status == SpEnoteOriginStatus::ONCHAIN &&
             onchain_legacy_enote_is_locked(
-                    current_contextual_record.m_origin_context.m_block_height,
+                    current_contextual_record.m_origin_context.m_block_index,
                     current_contextual_record.m_record.m_unlock_time,
-                    this->top_block_height(),
+                    this->top_block_index(),
                     m_default_spendable_age,
                     static_cast<std::uint64_t>(std::time(nullptr)))
                 )
@@ -612,9 +612,9 @@ boost::multiprecision::uint128_t SpEnoteStoreMockV1::get_balance_full_legacy(
         if (exclusions.find(EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED) != exclusions.end() &&
             current_contextual_record.m_origin_context.m_origin_status == SpEnoteOriginStatus::ONCHAIN &&
             onchain_legacy_enote_is_locked(
-                    current_contextual_record.m_origin_context.m_block_height,
+                    current_contextual_record.m_origin_context.m_block_index,
                     current_contextual_record.m_record.m_unlock_time,
-                    this->top_block_height(),
+                    this->top_block_index(),
                     m_default_spendable_age,
                     static_cast<std::uint64_t>(std::time(nullptr)))
                 )
@@ -692,8 +692,8 @@ boost::multiprecision::uint128_t SpEnoteStoreMockV1::get_balance_seraphis(
         if (exclusions.find(EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED) != exclusions.end() &&
             current_contextual_record.m_origin_context.m_origin_status == SpEnoteOriginStatus::ONCHAIN &&
             onchain_sp_enote_is_locked(
-                    current_contextual_record.m_origin_context.m_block_height,
-                    this->top_block_height(),
+                    current_contextual_record.m_origin_context.m_block_index,
+                    this->top_block_index(),
                     m_default_spendable_age
                 ))
             continue;
@@ -712,14 +712,14 @@ void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_legacy_intermediate(
     const std::vector<rct::key> &new_block_ids)
 {
     // 1. set new block ids in range [first_new_block, end of chain]
-    update_block_ids_with_new_block_ids(m_refresh_height,
+    update_block_ids_with_new_block_ids(m_refresh_index,
         first_new_block,
         alignment_block_id,
         new_block_ids,
         m_legacy_block_ids);
 
-    // 2. update scanning height for this scan mode (assumed to be LEGACY_INTERMEDIATE_FULL)
-    this->set_last_legacy_partialscan_height(first_new_block + new_block_ids.size() - 1);
+    // 2. update scanning index for this scan mode (assumed to be LEGACY_INTERMEDIATE_FULL)
+    this->set_last_legacy_partialscan_index(first_new_block + new_block_ids.size() - 1);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
@@ -729,14 +729,14 @@ void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_legacy_full(const st
     const std::vector<rct::key> &new_block_ids)
 {
     // 1. set new block ids in range [first_new_block, end of chain]
-    update_block_ids_with_new_block_ids(m_refresh_height,
+    update_block_ids_with_new_block_ids(m_refresh_index,
         first_new_block,
         alignment_block_id,
         new_block_ids,
         m_legacy_block_ids);
 
-    // 2. update scanning height for this scan mode (assumed to be LEGACY_FULL)
-    this->set_last_legacy_fullscan_height(first_new_block + new_block_ids.size() - 1);
+    // 2. update scanning index for this scan mode (assumed to be LEGACY_FULL)
+    this->set_last_legacy_fullscan_index(first_new_block + new_block_ids.size() - 1);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
@@ -746,14 +746,14 @@ void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_sp(const std::uint64
     const std::vector<rct::key> &new_block_ids)
 {
     // 1. set new block ids in range [first_new_block, end of chain]
-    update_block_ids_with_new_block_ids(this->sp_refresh_height(),
+    update_block_ids_with_new_block_ids(this->sp_refresh_index(),
         first_new_block,
         alignment_block_id,
         new_block_ids,
         m_sp_block_ids);
 
-    // 2. update scanning height for this scan mode (assumed to be SERAPHIS)
-    this->set_last_sp_scanned_height(first_new_block + new_block_ids.size() - 1);
+    // 2. update scanning index for this scan mode (assumed to be SERAPHIS)
+    this->set_last_sp_scanned_index(first_new_block + new_block_ids.size() - 1);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
@@ -939,7 +939,7 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_ledger_update(const std::uint64_t
             // remove onchain enotes in range [first_new_block, end of chain]
             if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status ==
                     SpEnoteOriginStatus::ONCHAIN &&
-                mapped_contextual_enote_record.second.m_origin_context.m_block_height >= first_new_block)
+                mapped_contextual_enote_record.second.m_origin_context.m_block_index >= first_new_block)
             {
                 mapped_identifiers_of_removed_enotes[
                         onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
@@ -983,7 +983,7 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_ledger_update(const std::uint64_t
         [first_new_block](const SpEnoteSpentContextV1 &spent_context) -> bool
         {
             return spent_context.m_spent_status == SpEnoteSpentStatus::SPENT_ONCHAIN &&
-                spent_context.m_block_height >= first_new_block;
+                spent_context.m_block_index >= first_new_block;
         });
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -1067,7 +1067,7 @@ void SpEnoteStoreMockV1::clean_maps_for_sp_ledger_update(const std::uint64_t fir
                 // remove onchain enotes in range [first_new_block, end of chain]
                 if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status ==
                         SpEnoteOriginStatus::ONCHAIN &&
-                    mapped_contextual_enote_record.second.m_origin_context.m_block_height >= first_new_block)
+                    mapped_contextual_enote_record.second.m_origin_context.m_block_index >= first_new_block)
                 {
                     tx_ids_of_removed_enotes.insert(
                             mapped_contextual_enote_record.second.m_origin_context.m_transaction_id

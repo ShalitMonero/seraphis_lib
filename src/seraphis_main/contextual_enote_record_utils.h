@@ -51,27 +51,27 @@ namespace sp
 
 /**
 * brief: onchain_legacy_enote_is_locked - check if an on-chain legacy enote is locked (can't be spent)
-* param: enote_origin_height -
+* param: enote_origin_block_index -
 * param: enote_unlock_time -
-* param: chain_height -
+* param: top_block_index -
 * param: default_spendable_age -
 * param: current_time -
 * return: true if the enote is locked
 */
-bool onchain_legacy_enote_is_locked(const std::uint64_t enote_origin_height,
+bool onchain_legacy_enote_is_locked(const std::uint64_t enote_origin_block_index,
     const std::uint64_t enote_unlock_time,
-    const std::uint64_t chain_height,
+    const std::uint64_t top_block_index,
     const std::uint64_t default_spendable_age,
     const std::uint64_t current_time);
 /**
 * brief: onchain_sp_enote_is_locked - check if an on-chain seraphis enote is locked (can't be spent)
-* param: enote_origin_height -
-* param: chain_height -
+* param: enote_origin_block_index -
+* param: top_block_index -
 * param: default_spendable_age -
 * return: true if the enote is locked
 */
-bool onchain_sp_enote_is_locked(const std::uint64_t enote_origin_height,
-    const std::uint64_t chain_height,
+bool onchain_sp_enote_is_locked(const std::uint64_t enote_origin_block_index,
+    const std::uint64_t top_block_index,
     const std::uint64_t default_spendable_age);
 /**
 * brief: legacy_enote_has_highest_amount_in_set - check if a specified legacy enote has the highest amount in

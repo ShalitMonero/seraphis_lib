@@ -68,20 +68,20 @@ namespace mocks
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
 template <typename MapT>
-static void erase_ledger_cache_map_from_height(const std::uint64_t pop_height, MapT &map_inout)
+static void erase_ledger_cache_map_from_index(const std::uint64_t pop_index, MapT &map_inout)
 {
     static_assert(std::is_same<typename MapT::key_type, std::uint64_t>::value, "erase ledger map key is not uint64_t");
 
     if (map_inout.size() == 0)
         return;
 
-    // erase entire map if pop height is below first known height, otherwise erase from pop height directly
-    const std::uint64_t height_to_erase_from =
-        map_inout.begin()->first >= pop_height
+    // erase entire map if pop index is below first known index, otherwise erase from pop index directly
+    const std::uint64_t index_to_erase_from =
+        map_inout.begin()->first >= pop_index
         ? map_inout.begin()->first
-        : pop_height;
+        : pop_index;
 
-    map_inout.erase(map_inout.find(height_to_erase_from), map_inout.end());
+    map_inout.erase(map_inout.find(index_to_erase_from), map_inout.end());
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -94,9 +94,14 @@ MockLedgerContext::MockLedgerContext(const std::uint64_t first_seraphis_allowed_
         "mock ledger context (constructor): invalid seraphis tx era range.");
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::uint64_t MockLedgerContext::chain_height() const
+std::uint64_t MockLedgerContext::top_block_index() const
 {
     return m_block_infos.size() - 1;
+}
+//-------------------------------------------------------------------------------------------------------------------
+std::uint64_t MockLedgerContext::chain_height() const
+{
+    return this->top_block_index() + 1;
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool MockLedgerContext::cryptonote_key_image_exists_unconfirmed(const crypto::key_image &key_image) const
@@ -225,11 +230,11 @@ void MockLedgerContext::clear_unconfirmed_cache()
     this->clear_unconfirmed_cache_impl();
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::uint64_t MockLedgerContext::pop_chain_at_height(const std::uint64_t pop_height)
+std::uint64_t MockLedgerContext::pop_chain_at_index(const std::uint64_t pop_index)
 {
     boost::unique_lock<boost::shared_mutex> lock{m_context_mutex};
 
-    return this->pop_chain_at_height_impl(pop_height);
+    return this->pop_chain_at_index_impl(pop_index);
 }
 //-------------------------------------------------------------------------------------------------------------------
 std::uint64_t MockLedgerContext::pop_blocks(const std::size_t num_blocks)
@@ -247,7 +252,7 @@ void MockLedgerContext::get_unconfirmed_chunk_sp(const crypto::x25519_secret_key
     this->get_unconfirmed_chunk_sp_impl(xk_find_received, chunk_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void MockLedgerContext::get_onchain_chunk_legacy(const std::uint64_t chunk_start_height,
+void MockLedgerContext::get_onchain_chunk_legacy(const std::uint64_t chunk_start_index,
     const std::uint64_t chunk_max_size,
     const rct::key &legacy_base_spend_pubkey,
     const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
@@ -257,7 +262,7 @@ void MockLedgerContext::get_onchain_chunk_legacy(const std::uint64_t chunk_start
 {
     boost::shared_lock<boost::shared_mutex> lock{m_context_mutex};
 
-    this->get_onchain_chunk_legacy_impl(chunk_start_height,
+    this->get_onchain_chunk_legacy_impl(chunk_start_index,
         chunk_max_size,
         legacy_base_spend_pubkey,
         legacy_subaddress_map,
@@ -266,14 +271,14 @@ void MockLedgerContext::get_onchain_chunk_legacy(const std::uint64_t chunk_start
         chunk_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void MockLedgerContext::get_onchain_chunk_sp(const std::uint64_t chunk_start_height,
+void MockLedgerContext::get_onchain_chunk_sp(const std::uint64_t chunk_start_index,
     const std::uint64_t chunk_max_size,
     const crypto::x25519_secret_key &xk_find_received,
     EnoteScanningChunkLedgerV1 &chunk_out) const
 {
     boost::shared_lock<boost::shared_mutex> lock{m_context_mutex};
 
-    this->get_onchain_chunk_sp_impl(chunk_start_height, chunk_max_size, xk_find_received, chunk_out);
+    this->get_onchain_chunk_sp_impl(chunk_start_index, chunk_max_size, xk_find_received, chunk_out);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // internal implementation details
@@ -305,7 +310,7 @@ bool MockLedgerContext::try_add_unconfirmed_coinbase_v1_impl(const rct::key &coi
 {
     /// check failure modes
 
-    // 1. fail if tx id is duplicated (bug since coinbase block height check should prevent this)
+    // 1. fail if tx id is duplicated (bug since coinbase block index check should prevent this)
     CHECK_AND_ASSERT_THROW_MES(m_unconfirmed_tx_key_images.find(coinbase_tx_id) == m_unconfirmed_tx_key_images.end(),
         "mock tx ledger (adding unconfirmed coinbase tx): tx id already exists in key image map (bug).");
     CHECK_AND_ASSERT_THROW_MES(m_unconfirmed_tx_output_contents.find(coinbase_tx_id) ==
@@ -401,8 +406,8 @@ std::uint64_t MockLedgerContext::add_legacy_coinbase_impl(const rct::key &tx_id,
     /// checks
 
     // a. can only add blocks with a mock legacy coinbase tx prior to first seraphis-enabled block
-    CHECK_AND_ASSERT_THROW_MES(this->chain_height() + 1 < m_first_seraphis_only_block,
-        "mock tx ledger (adding legacy coinbase tx): chain height is above last block that can have a legacy coinbase "
+    CHECK_AND_ASSERT_THROW_MES(this->top_block_index() + 1 < m_first_seraphis_only_block,
+        "mock tx ledger (adding legacy coinbase tx): chain index is above last block that can have a legacy coinbase "
         "tx.");
 
     // b. accumulated output count is consistent
@@ -416,13 +421,13 @@ std::uint64_t MockLedgerContext::add_legacy_coinbase_impl(const rct::key &tx_id,
 
 
     /// update state
-    const std::uint64_t new_height{this->chain_height() + 1};
+    const std::uint64_t new_index{this->top_block_index() + 1};
 
     // 1. add legacy key images (mockup: force key images into chain as part of coinbase tx)
     for (const crypto::key_image &legacy_key_image : legacy_key_images_for_block)
         m_legacy_key_images.insert(legacy_key_image);
 
-    m_blocks_of_tx_key_images[new_height][tx_id] = {std::move(legacy_key_images_for_block), {}};
+    m_blocks_of_tx_key_images[new_index][tx_id] = {std::move(legacy_key_images_for_block), {}};
 
     // 2. add tx outputs
 
@@ -438,24 +443,24 @@ std::uint64_t MockLedgerContext::add_legacy_coinbase_impl(const rct::key &tx_id,
     }
 
     // c. add this block's accumulated output count
-    m_accumulated_legacy_output_counts[new_height] = total_legacy_output_count;
+    m_accumulated_legacy_output_counts[new_index] = total_legacy_output_count;
 
-    if (new_height >= m_first_seraphis_allowed_block)
-        m_accumulated_sp_output_counts[new_height] = m_sp_squashed_enotes.size();
+    if (new_index >= m_first_seraphis_allowed_block)
+        m_accumulated_sp_output_counts[new_index] = m_sp_squashed_enotes.size();
 
     // d. add this block's tx output contents
-    m_blocks_of_legacy_tx_output_contents[new_height][tx_id] = {unlock_time, std::move(memo), std::move(output_enotes)};
+    m_blocks_of_legacy_tx_output_contents[new_index][tx_id] = {unlock_time, std::move(memo), std::move(output_enotes)};
 
-    if (new_height >= m_first_seraphis_allowed_block)
-        m_blocks_of_sp_tx_output_contents[new_height];
+    if (new_index >= m_first_seraphis_allowed_block)
+        m_blocks_of_sp_tx_output_contents[new_index];
 
     // 3. add block info (random block ID and zero timestamp in mockup)
-    m_block_infos[new_height] = {rct::pkGen(), 0};
+    m_block_infos[new_index] = {rct::pkGen(), 0};
 
     // 4. clear unconfirmed cache
     this->clear_unconfirmed_cache_impl();
 
-    return new_height;
+    return new_index;
 }
 //-------------------------------------------------------------------------------------------------------------------
 std::uint64_t MockLedgerContext::commit_unconfirmed_txs_v1_impl(const rct::key &coinbase_tx_id,
@@ -514,8 +519,8 @@ std::uint64_t MockLedgerContext::commit_unconfirmed_txs_v1_impl(const rct::key &
         "mock tx ledger (committing unconfirmed txs): inconsistent number of accumulated outputs (bug).");
 
     // f. can only add blocks with seraphis txs at first seraphis-enabled block
-    CHECK_AND_ASSERT_THROW_MES(this->chain_height() + 1 >= m_first_seraphis_allowed_block,
-        "mock tx ledger (committing unconfirmed txs): cannot make seraphis block because block height is too low.");
+    CHECK_AND_ASSERT_THROW_MES(this->top_block_index() + 1 >= m_first_seraphis_allowed_block,
+        "mock tx ledger (committing unconfirmed txs): cannot make seraphis block because block index is too low.");
 
 
     /// add mock coinbase tx to unconfirmed cache
@@ -528,12 +533,12 @@ std::uint64_t MockLedgerContext::commit_unconfirmed_txs_v1_impl(const rct::key &
 
 
     /// update state
-    const std::uint64_t new_height{this->chain_height() + 1};
+    const std::uint64_t new_index{this->top_block_index() + 1};
 
     // 1. add key images
     m_legacy_key_images.insert(m_unconfirmed_legacy_key_images.begin(), m_unconfirmed_legacy_key_images.end());
     m_sp_key_images.insert(m_unconfirmed_sp_key_images.begin(), m_unconfirmed_sp_key_images.end());
-    m_blocks_of_tx_key_images[new_height] = std::move(m_unconfirmed_tx_key_images);
+    m_blocks_of_tx_key_images[new_index] = std::move(m_unconfirmed_tx_key_images);
 
     // 2. add tx outputs
 
@@ -555,24 +560,24 @@ std::uint64_t MockLedgerContext::commit_unconfirmed_txs_v1_impl(const rct::key &
     }
 
     // c. add this block's accumulated output count
-    m_accumulated_sp_output_counts[new_height] = total_sp_output_count;
+    m_accumulated_sp_output_counts[new_index] = total_sp_output_count;
 
-    if (new_height < m_first_seraphis_only_block)
-        m_accumulated_legacy_output_counts[new_height] = m_legacy_enote_references.size();
+    if (new_index < m_first_seraphis_only_block)
+        m_accumulated_legacy_output_counts[new_index] = m_legacy_enote_references.size();
 
     // d. steal the unconfirmed cache's tx output contents
-    m_blocks_of_sp_tx_output_contents[new_height] = std::move(m_unconfirmed_tx_output_contents);
+    m_blocks_of_sp_tx_output_contents[new_index] = std::move(m_unconfirmed_tx_output_contents);
 
-    if (new_height < m_first_seraphis_only_block)
-        m_blocks_of_legacy_tx_output_contents[new_height];
+    if (new_index < m_first_seraphis_only_block)
+        m_blocks_of_legacy_tx_output_contents[new_index];
 
     // 3. add block info (random block ID and zero timestamp in mockup)
-    m_block_infos[new_height] = {rct::pkGen(), 0};
+    m_block_infos[new_index] = {rct::pkGen(), 0};
 
     // 4. clear unconfirmed chache
     this->clear_unconfirmed_cache_impl();
 
-    return new_height;
+    return new_index;
 }
 //-------------------------------------------------------------------------------------------------------------------
 std::uint64_t MockLedgerContext::commit_unconfirmed_txs_v1_impl(const SpTxCoinbaseV1 &coinbase_tx)
@@ -631,19 +636,20 @@ void MockLedgerContext::clear_unconfirmed_cache_impl()
     m_unconfirmed_tx_output_contents.clear();
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::uint64_t MockLedgerContext::pop_chain_at_height_impl(const std::uint64_t pop_height)
+std::uint64_t MockLedgerContext::pop_chain_at_index_impl(const std::uint64_t pop_index)
 {
-    if (pop_height > this->chain_height())
+    if (pop_index + 1 > this->top_block_index() + 1 ||
+        pop_index + 1 == 0)
         return 0;
 
-    const std::uint64_t num_blocks_to_pop{this->chain_height() - pop_height + 1};
+    const std::uint64_t num_blocks_to_pop{this->top_block_index() - pop_index + 1};
 
     // 1. remove key images
-    for (std::uint64_t height_to_pop{pop_height}; height_to_pop < pop_height + num_blocks_to_pop; ++height_to_pop)
+    for (std::uint64_t index_to_pop{pop_index}; index_to_pop < pop_index + num_blocks_to_pop; ++index_to_pop)
     {
-        if (m_blocks_of_tx_key_images.find(height_to_pop) != m_blocks_of_tx_key_images.end())
+        if (m_blocks_of_tx_key_images.find(index_to_pop) != m_blocks_of_tx_key_images.end())
         {
-            for (const auto &tx_key_images : m_blocks_of_tx_key_images[height_to_pop])
+            for (const auto &tx_key_images : m_blocks_of_tx_key_images[index_to_pop])
             {
                 for (const crypto::key_image &key_image : std::get<0>(tx_key_images.second))
                     m_legacy_key_images.erase(key_image);
@@ -657,17 +663,17 @@ std::uint64_t MockLedgerContext::pop_chain_at_height_impl(const std::uint64_t po
     if (m_accumulated_legacy_output_counts.size() > 0)
     {
         // sanity check
-        if (pop_height > 0)
+        if (pop_index > 0)
         {
-            CHECK_AND_ASSERT_THROW_MES(m_accumulated_legacy_output_counts.find(pop_height - 1) !=
+            CHECK_AND_ASSERT_THROW_MES(m_accumulated_legacy_output_counts.find(pop_index - 1) !=
                     m_accumulated_legacy_output_counts.end(),
                 "mock ledger context (popping chain): accumulated legacy output counts has a hole (bug).");
         }
 
-        // remove all outputs starting in the pop_height block
+        // remove all outputs starting in the pop_index block
         const std::uint64_t first_output_to_remove =
-            pop_height > 0
-            ? m_accumulated_legacy_output_counts[pop_height - 1]
+            pop_index > 0
+            ? m_accumulated_legacy_output_counts[pop_index - 1]
             : 0;
 
         m_legacy_enote_references.erase(m_legacy_enote_references.find(first_output_to_remove),
@@ -678,37 +684,37 @@ std::uint64_t MockLedgerContext::pop_chain_at_height_impl(const std::uint64_t po
     if (m_accumulated_sp_output_counts.size() > 0)
     {
         // sanity check
-        if (pop_height > m_first_seraphis_allowed_block)
+        if (pop_index > m_first_seraphis_allowed_block)
         {
-            CHECK_AND_ASSERT_THROW_MES(m_accumulated_sp_output_counts.find(pop_height - 1) !=
+            CHECK_AND_ASSERT_THROW_MES(m_accumulated_sp_output_counts.find(pop_index - 1) !=
                     m_accumulated_sp_output_counts.end(),
                 "mock ledger context (popping chain): accumulated seraphis output counts has a hole (bug).");
         }
 
-        // remove all outputs starting in the pop_height block
+        // remove all outputs starting in the pop_index block
         const std::uint64_t first_output_to_remove =
-            pop_height > m_first_seraphis_allowed_block
-            ? m_accumulated_sp_output_counts[pop_height - 1]
+            pop_index > m_first_seraphis_allowed_block
+            ? m_accumulated_sp_output_counts[pop_index - 1]
             : 0;
 
         m_sp_squashed_enotes.erase(m_sp_squashed_enotes.find(first_output_to_remove), m_sp_squashed_enotes.end());
     }
 
     // 4. clean up block maps
-    erase_ledger_cache_map_from_height(pop_height, m_blocks_of_tx_key_images);
-    erase_ledger_cache_map_from_height(pop_height, m_accumulated_legacy_output_counts);
-    erase_ledger_cache_map_from_height(pop_height, m_accumulated_sp_output_counts);
-    erase_ledger_cache_map_from_height(pop_height, m_blocks_of_legacy_tx_output_contents);
-    erase_ledger_cache_map_from_height(pop_height, m_blocks_of_sp_tx_output_contents);
-    erase_ledger_cache_map_from_height(pop_height, m_block_infos);
+    erase_ledger_cache_map_from_index(pop_index, m_blocks_of_tx_key_images);
+    erase_ledger_cache_map_from_index(pop_index, m_accumulated_legacy_output_counts);
+    erase_ledger_cache_map_from_index(pop_index, m_accumulated_sp_output_counts);
+    erase_ledger_cache_map_from_index(pop_index, m_blocks_of_legacy_tx_output_contents);
+    erase_ledger_cache_map_from_index(pop_index, m_blocks_of_sp_tx_output_contents);
+    erase_ledger_cache_map_from_index(pop_index, m_block_infos);
 
     return num_blocks_to_pop;
 }
 //-------------------------------------------------------------------------------------------------------------------
 std::uint64_t MockLedgerContext::pop_blocks_impl(const std::size_t num_blocks)
 {
-    const std::uint64_t chain_height{this->chain_height()};
-    return pop_chain_at_height_impl(chain_height + 1 >= num_blocks ? chain_height + 1 - num_blocks : 0);
+    const std::uint64_t top_block_index{this->top_block_index()};
+    return pop_chain_at_index_impl(top_block_index + 1 >= num_blocks ? top_block_index + 1 - num_blocks : 0);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void MockLedgerContext::get_unconfirmed_chunk_sp_impl(const crypto::x25519_secret_key &xk_find_received,
@@ -761,7 +767,7 @@ void MockLedgerContext::get_unconfirmed_chunk_sp_impl(const crypto::x25519_secre
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
-void MockLedgerContext::get_onchain_chunk_legacy_impl(const std::uint64_t chunk_start_height,
+void MockLedgerContext::get_onchain_chunk_legacy_impl(const std::uint64_t chunk_start_index,
     const std::uint64_t chunk_max_size,
     const rct::key &legacy_base_spend_pubkey,
     const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
@@ -774,21 +780,21 @@ void MockLedgerContext::get_onchain_chunk_legacy_impl(const std::uint64_t chunk_
     chunk_out.m_block_ids.clear();
 
     /// 1. failure cases
-    if (this->chain_height() + 1 == 0 ||
-        chunk_start_height >= m_first_seraphis_only_block ||
-        chunk_start_height > this->chain_height() ||
+    if (this->top_block_index() + 1 == 0 ||
+        chunk_start_index >= m_first_seraphis_only_block ||
+        chunk_start_index > this->top_block_index() ||
         chunk_max_size == 0)
     {
         // set empty chunk info: top of the legacy-enabled chain
-        chunk_out.m_start_height = std::min(m_first_seraphis_only_block, this->chain_height() + 1);
-        chunk_out.m_end_height = chunk_out.m_start_height;
+        chunk_out.m_start_index = std::min(m_first_seraphis_only_block, this->top_block_index() + 1);
+        chunk_out.m_end_index = chunk_out.m_start_index;
 
-        if (chunk_out.m_start_height > 0)
+        if (chunk_out.m_start_index > 0)
         {
-            CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_height - 1) != m_block_infos.end(),
+            CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_index - 1) != m_block_infos.end(),
                 "onchain chunk legacy-view scanning (mock ledger context): block ids map incorrect indexing (bug).");
 
-            chunk_out.m_prefix_block_id = std::get<rct::key>(m_block_infos.at(chunk_out.m_start_height - 1));
+            chunk_out.m_prefix_block_id = std::get<rct::key>(m_block_infos.at(chunk_out.m_start_index - 1));
         }
         else
             chunk_out.m_prefix_block_id = rct::zero();
@@ -798,36 +804,36 @@ void MockLedgerContext::get_onchain_chunk_legacy_impl(const std::uint64_t chunk_
 
 
     /// 2. set block information
-    // a. block range (cap on the lowest of: chain height, seraphis-only range begins, chunk size)
-    chunk_out.m_start_height = chunk_start_height;
-    chunk_out.m_end_height =
-        std::min({this->chain_height() + 1, m_first_seraphis_only_block, chunk_start_height + chunk_max_size});
+    // a. block range (cap on the lowest of: chain index, seraphis-only range begins, chunk size)
+    chunk_out.m_start_index = chunk_start_index;
+    chunk_out.m_end_index =
+        std::min({this->top_block_index() + 1, m_first_seraphis_only_block, chunk_start_index + chunk_max_size});
 
-    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_end_height > chunk_out.m_start_height,
+    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_end_index > chunk_out.m_start_index,
         "onchain chunk legacy-view scanning (mock ledger context): chunk has no blocks below failure tests (bug).");
-    CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_height) != m_block_infos.end() &&
-            m_block_infos.find(chunk_out.m_end_height - 1) != m_block_infos.end(),
+    CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_index) != m_block_infos.end() &&
+            m_block_infos.find(chunk_out.m_end_index - 1) != m_block_infos.end(),
         "onchain chunk legacy-view scanning (mock ledger context): block range outside of block ids map (bug).");
 
     // b. prefix block id
     chunk_out.m_prefix_block_id =
-        chunk_start_height > 0
-        ? std::get<rct::key>(m_block_infos.at(chunk_start_height - 1))
+        chunk_start_index > 0
+        ? std::get<rct::key>(m_block_infos.at(chunk_start_index - 1))
         : rct::zero();
 
     // c. block ids in the range
-    chunk_out.m_block_ids.reserve(chunk_out.m_end_height - chunk_out.m_start_height);
+    chunk_out.m_block_ids.reserve(chunk_out.m_end_index - chunk_out.m_start_index);
 
     std::for_each(
-            m_block_infos.find(chunk_out.m_start_height),
-            m_block_infos.find(chunk_out.m_end_height),
+            m_block_infos.find(chunk_out.m_start_index),
+            m_block_infos.find(chunk_out.m_end_index),
             [&](const auto &mapped_block_info)
             {
                 chunk_out.m_block_ids.emplace_back(std::get<rct::key>(mapped_block_info.second));
             }
         );
 
-    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_block_ids.size() == chunk_out.m_end_height - chunk_out.m_start_height,
+    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_block_ids.size() == chunk_out.m_end_index - chunk_out.m_start_index,
         "onchain chunk legacy-view scanning (mock ledger context): invalid number of block ids acquired (bug).");
 
 
@@ -838,29 +844,29 @@ void MockLedgerContext::get_onchain_chunk_legacy_impl(const std::uint64_t chunk_
     // b. get adjusted chunk end
     // - we did this when defining the chunk end
 
-    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_start_height) !=
+    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_start_index) !=
             m_blocks_of_legacy_tx_output_contents.end(),
         "onchain chunk legacy-view scanning (mock ledger context): start of chunk not known in tx outputs map (bug).");
-    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_end_height - 1) !=
+    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_end_index - 1) !=
             m_blocks_of_legacy_tx_output_contents.end(),
         "onchain chunk legacy-view scanning (mock ledger context): end of chunk not known in tx outputs map (bug).");
-    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_tx_key_images.find(chunk_out.m_start_height) !=
+    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_tx_key_images.find(chunk_out.m_start_index) !=
             m_blocks_of_tx_key_images.end(),
         "onchain chunk legacy-view scanning (mock ledger context): start of chunk not known in key images map (bug).");
-    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_tx_key_images.find(chunk_out.m_end_height - 1) !=
+    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_tx_key_images.find(chunk_out.m_end_index - 1) !=
             m_blocks_of_tx_key_images.end(),
         "onchain chunk legacy-view scanning (mock ledger context): end of chunk not known in key images map (bug).");
 
     // a. initialize output count to the total number of legacy enotes in the ledger before the first block to scan
     std::uint64_t total_output_count_before_tx{0};
 
-    if (chunk_out.m_start_height > 0)
+    if (chunk_out.m_start_index > 0)
     {
-        CHECK_AND_ASSERT_THROW_MES(m_accumulated_legacy_output_counts.find(chunk_out.m_start_height - 1) !=
+        CHECK_AND_ASSERT_THROW_MES(m_accumulated_legacy_output_counts.find(chunk_out.m_start_index - 1) !=
                 m_accumulated_legacy_output_counts.end(),
             "onchain chunk legacy-view scanning (mock ledger context): output counts missing a block (bug).");
 
-        total_output_count_before_tx = m_accumulated_legacy_output_counts.at(chunk_out.m_start_height - 1);
+        total_output_count_before_tx = m_accumulated_legacy_output_counts.at(chunk_out.m_start_index - 1);
     }
 
     // b. legacy-view scan each block in the range
@@ -868,12 +874,12 @@ void MockLedgerContext::get_onchain_chunk_legacy_impl(const std::uint64_t chunk_
     SpContextualKeyImageSetV1 collected_key_images;
 
     std::for_each(
-            m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_start_height),
-            m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_end_height),
+            m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_start_index),
+            m_blocks_of_legacy_tx_output_contents.find(chunk_out.m_end_index),
             [&](const auto &block_of_tx_output_contents)
             {
                 CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(block_of_tx_output_contents.first) != m_block_infos.end(),
-                    "onchain chunk legacy-view scanning (mock ledger context): block infos map missing height (bug).");
+                    "onchain chunk legacy-view scanning (mock ledger context): block infos map missing index (bug).");
 
                 for (const auto &tx_with_output_contents : block_of_tx_output_contents.second)
                 {
@@ -943,7 +949,7 @@ void MockLedgerContext::get_onchain_chunk_legacy_impl(const std::uint64_t chunk_
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
-void MockLedgerContext::get_onchain_chunk_sp_impl(const std::uint64_t chunk_start_height,
+void MockLedgerContext::get_onchain_chunk_sp_impl(const std::uint64_t chunk_start_index,
     const std::uint64_t chunk_max_size,
     const crypto::x25519_secret_key &xk_find_received,
     EnoteScanningChunkLedgerV1 &chunk_out) const
@@ -953,20 +959,20 @@ void MockLedgerContext::get_onchain_chunk_sp_impl(const std::uint64_t chunk_star
     chunk_out.m_block_ids.clear();
 
     /// 1. failure cases
-    if (this->chain_height() + 1 == 0 ||
-        chunk_start_height > this->chain_height() ||
+    if (this->top_block_index() + 1 == 0 ||
+        chunk_start_index > this->top_block_index() ||
         chunk_max_size == 0)
     {
         // set empty chunk info: top of the chain
-        chunk_out.m_start_height = this->chain_height() + 1;
-        chunk_out.m_end_height = chunk_out.m_start_height;
+        chunk_out.m_start_index = this->top_block_index() + 1;
+        chunk_out.m_end_index = chunk_out.m_start_index;
 
-        if (chunk_out.m_start_height > 0)
+        if (chunk_out.m_start_index > 0)
         {
-            CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_height - 1) != m_block_infos.end(),
+            CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_index - 1) != m_block_infos.end(),
                 "onchain chunk find-received scanning (mock ledger context): block ids map incorrect indexing (bug).");
 
-            chunk_out.m_prefix_block_id = std::get<rct::key>(m_block_infos.at(chunk_out.m_start_height - 1));
+            chunk_out.m_prefix_block_id = std::get<rct::key>(m_block_infos.at(chunk_out.m_start_index - 1));
         }
         else
             chunk_out.m_prefix_block_id = rct::zero();
@@ -977,57 +983,57 @@ void MockLedgerContext::get_onchain_chunk_sp_impl(const std::uint64_t chunk_star
 
     /// 2. set block information
     // a. block range
-    chunk_out.m_start_height = chunk_start_height;
-    chunk_out.m_end_height = std::min(this->chain_height() + 1, chunk_start_height + chunk_max_size);
+    chunk_out.m_start_index = chunk_start_index;
+    chunk_out.m_end_index = std::min(this->top_block_index() + 1, chunk_start_index + chunk_max_size);
 
-    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_end_height > chunk_out.m_start_height,
+    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_end_index > chunk_out.m_start_index,
         "onchain chunk find-received scanning (mock ledger context): chunk has no blocks below failure tests (bug).");
-    CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_height) != m_block_infos.end() &&
-            m_block_infos.find(chunk_out.m_end_height - 1) != m_block_infos.end(),
+    CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(chunk_out.m_start_index) != m_block_infos.end() &&
+            m_block_infos.find(chunk_out.m_end_index - 1) != m_block_infos.end(),
         "onchain chunk find-received scanning (mock ledger context): block range outside of block ids map (bug).");
 
     // b. prefix block id
     chunk_out.m_prefix_block_id =
-        chunk_start_height > 0
-        ? std::get<rct::key>(m_block_infos.at(chunk_start_height - 1))
+        chunk_start_index > 0
+        ? std::get<rct::key>(m_block_infos.at(chunk_start_index - 1))
         : rct::zero();
 
     // c. block ids in the range
-    chunk_out.m_block_ids.reserve(chunk_out.m_end_height - chunk_out.m_start_height);
+    chunk_out.m_block_ids.reserve(chunk_out.m_end_index - chunk_out.m_start_index);
 
     std::for_each(
-            m_block_infos.find(chunk_out.m_start_height),
-            m_block_infos.find(chunk_out.m_end_height),
+            m_block_infos.find(chunk_out.m_start_index),
+            m_block_infos.find(chunk_out.m_end_index),
             [&](const auto &mapped_block_info)
             {
                 chunk_out.m_block_ids.emplace_back(std::get<rct::key>(mapped_block_info.second));
             }
         );
 
-    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_block_ids.size() == chunk_out.m_end_height - chunk_out.m_start_height,
+    CHECK_AND_ASSERT_THROW_MES(chunk_out.m_block_ids.size() == chunk_out.m_end_index - chunk_out.m_start_index,
         "onchain chunk find-received scanning (mock ledger context): invalid number of block ids acquired (bug).");
 
 
     /// 3. scan blocks in the chunk range that may contain seraphis enotes or key images
     // a. early return if chunk doesn't cover any seraphis enabled blocks
-    if (chunk_out.m_end_height <= m_first_seraphis_allowed_block)
+    if (chunk_out.m_end_index <= m_first_seraphis_allowed_block)
         return;
 
     // b. get adjusted chunk start
     const std::uint64_t chunk_start_adjusted{
-            std::max(chunk_out.m_start_height + 1, m_first_seraphis_allowed_block + 1) - 1
+            std::max(chunk_out.m_start_index + 1, m_first_seraphis_allowed_block + 1) - 1
         };
 
     CHECK_AND_ASSERT_THROW_MES(m_blocks_of_sp_tx_output_contents.find(chunk_start_adjusted) !=
             m_blocks_of_sp_tx_output_contents.end(),
         "onchain chunk find-received scanning (mock ledger context): start of chunk not known in tx outputs map (bug).");
-    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_sp_tx_output_contents.find(chunk_out.m_end_height - 1) !=
+    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_sp_tx_output_contents.find(chunk_out.m_end_index - 1) !=
             m_blocks_of_sp_tx_output_contents.end(),
         "onchain chunk find-received scanning (mock ledger context): end of chunk not known in tx outputs map (bug).");
     CHECK_AND_ASSERT_THROW_MES(m_blocks_of_tx_key_images.find(chunk_start_adjusted) !=
             m_blocks_of_tx_key_images.end(),
         "onchain chunk find-received scanning (mock ledger context): start of chunk not known in key images map (bug).");
-    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_tx_key_images.find(chunk_out.m_end_height - 1) !=
+    CHECK_AND_ASSERT_THROW_MES(m_blocks_of_tx_key_images.find(chunk_out.m_end_index - 1) !=
             m_blocks_of_tx_key_images.end(),
         "onchain chunk find-received scanning (mock ledger context): end of chunk not known in key images map (bug).");
 
@@ -1049,11 +1055,11 @@ void MockLedgerContext::get_onchain_chunk_sp_impl(const std::uint64_t chunk_star
 
     std::for_each(
             m_blocks_of_sp_tx_output_contents.find(chunk_start_adjusted),
-            m_blocks_of_sp_tx_output_contents.find(chunk_out.m_end_height),
+            m_blocks_of_sp_tx_output_contents.find(chunk_out.m_end_index),
             [&](const auto &block_of_tx_output_contents)
             {
                 CHECK_AND_ASSERT_THROW_MES(m_block_infos.find(block_of_tx_output_contents.first) != m_block_infos.end(),
-                    "onchain chunk find-received scanning (mock ledger context): block infos map missing height (bug).");
+                    "onchain chunk find-received scanning (mock ledger context): block infos map missing index (bug).");
 
                 for (const auto &tx_with_output_contents : block_of_tx_output_contents.second)
                 {

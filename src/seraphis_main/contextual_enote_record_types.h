@@ -93,8 +93,8 @@ enum class SpEnoteSpentStatus : unsigned char
 ///
 struct SpEnoteOriginContextV1 final
 {
-    /// block height of tx (-1 if height is unknown)
-    std::uint64_t m_block_height{static_cast<std::uint64_t>(-1)};
+    /// block index of tx (-1 if index is unknown)
+    std::uint64_t m_block_index{static_cast<std::uint64_t>(-1)};
     /// timestamp of tx's block (-1 if timestamp is unknown)
     std::uint64_t m_block_timestamp{static_cast<std::uint64_t>(-1)};
     /// tx id of the tx (0 if tx is unknown)
@@ -117,8 +117,8 @@ struct SpEnoteOriginContextV1 final
 ///
 struct SpEnoteSpentContextV1 final
 {
-    /// block height of tx where it was spent (-1 if unspent or height is unknown)
-    std::uint64_t m_block_height{static_cast<std::uint64_t>(-1)};
+    /// block index of tx where it was spent (-1 if unspent or index is unknown)
+    std::uint64_t m_block_index{static_cast<std::uint64_t>(-1)};
     /// timestamp of tx's block (-1 if timestamp is unknown)
     std::uint64_t m_block_timestamp{static_cast<std::uint64_t>(-1)};
     /// tx id of the tx where it was spent (0 if unspent or tx is unknown)

@@ -82,9 +82,15 @@ public:
 
 //member functions
     /**
-    * brief: chain_height - get current chain height
+    * brief: top_block_index - get index of the chain's top block
     *   - returns uint64{-1} if there are no blocks
-    * return: current chain height (num blocks - 1)
+    * return: top block index (num blocks - 1)
+    */
+    std::uint64_t top_block_index() const;
+    /**
+    * brief: chain_height - get size of the chain
+    *   - returns 0 if there are no blocks
+    * return: current chain height
     */
     std::uint64_t chain_height() const;
     /**
@@ -132,7 +138,7 @@ public:
     std::uint64_t num_sp_enotes() const { return max_sp_enote_index() + 1; }
     /**
     * brief: get_onchain_chunk_legacy - legacy view scan a chunk of blocks
-    * param: chunk_start_height -
+    * param: chunk_start_index -
     * param: chunk_max_size -
     * param: legacy_base_spend_pubkey -
     * param: legacy_subaddress_map -
@@ -140,7 +146,7 @@ public:
     * param: legacy_scan_mode -
     * outparam: chunk_out - chunk of scanned blocks (or empty chunk representing top of current chain)
     */
-    void get_onchain_chunk_legacy(const std::uint64_t chunk_start_height,
+    void get_onchain_chunk_legacy(const std::uint64_t chunk_start_index,
         const std::uint64_t chunk_max_size,
         const rct::key &legacy_base_spend_pubkey,
         const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
@@ -149,12 +155,12 @@ public:
         EnoteScanningChunkLedgerV1 &chunk_out) const;
     /**
     * brief: get_onchain_chunk_sp - find-received scan a chunk of blocks
-    * param: chunk_start_height -
+    * param: chunk_start_index -
     * param: chunk_max_size -
     * param: xk_find_received -
     * outparam: chunk_out - chunk of scanned blocks (or empty chunk representing top of current chain)
     */
-    void get_onchain_chunk_sp(const std::uint64_t chunk_start_height,
+    void get_onchain_chunk_sp(const std::uint64_t chunk_start_index,
         const std::uint64_t chunk_max_size,
         const crypto::x25519_secret_key &xk_find_received,
         EnoteScanningChunkLedgerV1 &chunk_out) const;
@@ -180,7 +186,7 @@ public:
     * param: memo -
     * param: legacy_key_images_for_block -
     * param: output_enotes -
-    * return: block height of newly added block
+    * return: block index of newly added block
     */
     std::uint64_t add_legacy_coinbase(const rct::key &tx_id,
         const std::uint64_t unlock_time,
@@ -195,7 +201,7 @@ public:
     * param: mock_coinbase_input_context -
     * param: mock_coinbase_tx_supplement -
     * param: mock_coinbase_output_enotes -
-    * return: block height of newly added block
+    * return: block index of newly added block
     */
     std::uint64_t commit_unconfirmed_txs_v1(const rct::key &mock_coinbase_input_context,
         SpTxSupplementV1 mock_coinbase_tx_supplement,
@@ -203,12 +209,12 @@ public:
     /**
     * brief: commit_unconfirmed_cache_v1 - move all unconfirmed txs onto the chain in a new block, with new
     *      coinbase tx
-    *   - throws if the coinbase tx's block height does not equal the ledger's next block height
+    *   - throws if the coinbase tx's block index does not equal the ledger's next block index
     *   - clears the unconfirmed tx cache
     *   - note: currently does NOT validate the coinbase tx
     *   - note2: currently does nothing with the block reward
     * param: coinbase_tx -
-    * return: block height of newly added block
+    * return: block index of newly added block
     */
     std::uint64_t commit_unconfirmed_txs_v1(const SpTxCoinbaseV1 &coinbase_tx);
     /**
@@ -221,11 +227,11 @@ public:
     */
     void clear_unconfirmed_cache();
     /**
-    * brief: pop_chain_at_height - remove all blocks >= the specified block height from the chain
-    * param: pop_height - first block to pop from the chain
+    * brief: pop_chain_at_index - remove all blocks >= the specified block index from the chain
+    * param: pop_index - first block to pop from the chain
     * return: number of blocks popped
     */
-    std::uint64_t pop_chain_at_height(const std::uint64_t pop_height);
+    std::uint64_t pop_chain_at_index(const std::uint64_t pop_index);
     /**
     * brief: pop_blocks - remove a specified number of blocks from the chain
     * param: num_blocks - number of blocks to remove
@@ -256,18 +262,18 @@ private:
     std::uint64_t commit_unconfirmed_txs_v1_impl(const SpTxCoinbaseV1 &coinbase_tx);
     void remove_tx_from_unconfirmed_cache_impl(const rct::key &tx_id);
     void clear_unconfirmed_cache_impl();
-    std::uint64_t pop_chain_at_height_impl(const std::uint64_t pop_height);
+    std::uint64_t pop_chain_at_index_impl(const std::uint64_t pop_index);
     std::uint64_t pop_blocks_impl(const std::size_t num_blocks);
     void get_unconfirmed_chunk_sp_impl(const crypto::x25519_secret_key &xk_find_received,
         EnoteScanningChunkNonLedgerV1 &chunk_out) const;
-    void get_onchain_chunk_legacy_impl(const std::uint64_t chunk_start_height,
+    void get_onchain_chunk_legacy_impl(const std::uint64_t chunk_start_index,
         const std::uint64_t chunk_max_size,
         const rct::key &legacy_base_spend_pubkey,
         const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
         const crypto::secret_key &legacy_view_privkey,
         const LegacyScanMode legacy_scan_mode,
         EnoteScanningChunkLedgerV1 &chunk_out) const;
-    void get_onchain_chunk_sp_impl(const std::uint64_t chunk_start_height,
+    void get_onchain_chunk_sp_impl(const std::uint64_t chunk_start_index,
         const std::uint64_t chunk_max_size,
         const crypto::x25519_secret_key &xk_find_received,
         EnoteScanningChunkLedgerV1 &chunk_out) const;
@@ -314,7 +320,7 @@ private:
     std::unordered_set<crypto::key_image> m_sp_key_images;
     /// map of tx key images
     std::map<
-        std::uint64_t,      // block height
+        std::uint64_t,      // block index
         std::map<
             sortable_key,   // tx id
             std::pair<
@@ -329,21 +335,21 @@ private:
     std::map<std::uint64_t, rct::key> m_sp_squashed_enotes;
     /// map of accumulated output counts (legacy)
     std::map<
-        std::uint64_t,  // block height
+        std::uint64_t,  // block index
         std::uint64_t   // total number of legacy enotes including those in this block
     > m_accumulated_legacy_output_counts;
     /// map of accumulated output counts (seraphis)
     std::map<
-        std::uint64_t,  // block height
+        std::uint64_t,  // block index
         std::uint64_t   // total number of seraphis enotes including those in this block
     > m_accumulated_sp_output_counts;
     /// map of legacy tx outputs
     std::map<
-        std::uint64_t,        // block height
+        std::uint64_t,        // block index
         std::map<
             sortable_key,     // tx id
             std::tuple<       // tx output contents
-                std::uint64_t,                    // unlock time (only height representation supported here)
+                std::uint64_t,                    // unlock time
                 TxExtra,                          // tx memo
                 std::vector<LegacyEnoteVariant>   // output enotes
             >
@@ -351,7 +357,7 @@ private:
     > m_blocks_of_legacy_tx_output_contents;
     /// map of seraphis tx outputs
     std::map<
-        std::uint64_t,        // block height
+        std::uint64_t,        // block index
         std::map<
             sortable_key,     // tx id
             std::tuple<       // tx output contents
@@ -363,7 +369,7 @@ private:
     > m_blocks_of_sp_tx_output_contents;
     /// map of block info
     std::map<
-        std::uint64_t,  // block height
+        std::uint64_t,  // block index
         std::tuple<
             rct::key,       // block ID
             std::uint64_t   // block timestamp
