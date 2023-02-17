@@ -88,10 +88,11 @@ static void run_mock_tx_test(const std::size_t legacy_ring_size,
         // mock params
         SpTxParamPackV1 tx_params;
 
-        tx_params.legacy_ring_size = legacy_ring_size;
-        tx_params.ref_set_decomp_n = ref_set_decomp_n;
-        tx_params.ref_set_decomp_m = ref_set_decomp_m;
-        tx_params.bin_config = bin_config;
+        tx_params.legacy_ring_size         = legacy_ring_size;
+        tx_params.ref_set_decomp_n         = ref_set_decomp_n;
+        tx_params.ref_set_decomp_m         = ref_set_decomp_m;
+        tx_params.num_random_memo_elements = 0;
+        tx_params.bin_config               = bin_config;
 
         // make tx
         SpTxType tx;

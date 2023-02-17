@@ -122,6 +122,10 @@ private:
     };
 
 //transcript builders
+    void append_character(const unsigned char character)
+    {
+        m_transcript += static_cast<char>(character);
+    }
     void append_uint(const std::uint64_t unsigned_integer)
     {
         unsigned char v_variable[(sizeof(std::uint64_t) * 8 + 6) / 7];
@@ -138,7 +142,7 @@ private:
             return;
 
         static_assert(sizeof(SpTranscriptBuilderFlag) <= sizeof(std::uint64_t), "");
-        this->append_uint(static_cast<std::uint64_t>(flag));
+        this->append_character(static_cast<unsigned char>(flag));
     }
     void append_length(const std::size_t length)
     {
@@ -246,6 +250,16 @@ private:
     void append_impl(const boost::string_ref label, const std::vector<char> &vector_buffer)
     {
         this->append_labeled_buffer(label, vector_buffer.data(), vector_buffer.size());
+    }
+    void append_impl(const boost::string_ref label, const char single_character)
+    {
+        this->append_label(label);
+        this->append_character(static_cast<unsigned char>(single_character));
+    }
+    void append_impl(const boost::string_ref label, const unsigned char single_character)
+    {
+        this->append_label(label);
+        this->append_character(single_character);
     }
     template<typename T,
         std::enable_if_t<std::is_unsigned<T>::value, bool> = true>
