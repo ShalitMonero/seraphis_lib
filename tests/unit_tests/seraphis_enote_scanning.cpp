@@ -2476,7 +2476,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
         };
 
     //import key images for onetime addresses of intermediate records in the enote store
-    ASSERT_NO_THROW(enote_store.import_legacy_key_image(key_image, enote_1.m_onetime_address));
+    ASSERT_TRUE(enote_store.try_import_legacy_key_image(key_image, enote_1.m_onetime_address));
 
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
@@ -2521,7 +2521,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_2)
     ASSERT_TRUE(enote_store.top_block_index() == 1);  //key image recovery scan should not update block index
 
     //update legacy fullscan index in enote store to partialscan index the store had when exporting onetime addresses
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle));
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
@@ -2720,7 +2720,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         };
 
     //import key images: enote 1 in block 0
-    ASSERT_NO_THROW(enote_store.import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
+    ASSERT_TRUE(enote_store.try_import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
@@ -2750,7 +2750,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle_1));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 0);
@@ -2779,7 +2779,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         };
 
     //import key image: enote 2 in block 1
-    ASSERT_NO_THROW(enote_store.import_legacy_key_image(key_image_2, enote_2.m_onetime_address));
+    ASSERT_TRUE(enote_store.try_import_legacy_key_image(key_image_2, enote_2.m_onetime_address));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 0);
@@ -2809,7 +2809,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 3);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle_2));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
@@ -2851,7 +2851,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_3));
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle_3));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
@@ -2886,7 +2886,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index (this is redundant since the reorg only popped blocks)
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_4));
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle_4));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 1);
@@ -2975,7 +2975,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index (should do nothing)
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_5));
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle_5));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
@@ -3056,13 +3056,205 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index (should do nothing)
-    ASSERT_NO_THROW(enote_store.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_6));
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle_6));
 
     ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
 }
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis_enote_scanning, legacy_pre_transition_4)
+{
+    /// setup
+
+    // 1. config
+    const RefreshLedgerEnoteStoreConfig refresh_config{
+            .m_reorg_avoidance_depth = 1,
+            .m_max_chunk_size = 1,
+            .m_max_partialscan_attempts = 0
+        };
+
+    // 2. user keys
+    legacy_mock_keys legacy_keys;
+    make_legacy_mock_keys(legacy_keys);
+
+    // 3. user normal address
+    //const rct::key normal_addr_spendkey{legacy_keys.Ks};
+    //const rct::key normal_addr_viewkey{rct::scalarmultBase(rct::sk2rct(legacy_keys.k_v))};
+
+    // 4. user subaddress
+    rct::key subaddr_spendkey;
+    rct::key subaddr_viewkey;
+    cryptonote::subaddress_index subaddr_index;
+
+    gen_legacy_subaddress(legacy_keys.Ks, legacy_keys.k_v, subaddr_spendkey, subaddr_viewkey, subaddr_index);
+
+    std::unordered_map<rct::key, cryptonote::subaddress_index> legacy_subaddress_map;
+    legacy_subaddress_map[subaddr_spendkey] = subaddr_index;
+
+
+    /// test
+
+    // 3. manual scanning with key image imports: test 3 (with reorg that drops a partialscanned block)
+    MockLedgerContext ledger_context{10000, 10000};
+    SpEnoteStoreMockV1 enote_store{0, 10000, 0};
+
+    //make enotes: 1 -> user, 1 -> rand
+    LegacyEnoteV5 enote_1;
+    rct::key enote_ephemeral_pubkey_1;
+    crypto::key_image key_image_1;
+
+    prepare_mock_v5_legacy_enote_for_transfer(subaddr_spendkey,
+        subaddr_viewkey,
+        legacy_keys.Ks,
+        legacy_subaddress_map,
+        legacy_keys.k_s,
+        legacy_keys.k_v,
+        1,  //amount
+        0,  //index in planned mock coinbase tx
+        make_secret_key(),
+        enote_1,
+        enote_ephemeral_pubkey_1,
+        key_image_1);
+
+    TxExtra tx_extra_1;
+    ASSERT_TRUE(try_append_legacy_enote_ephemeral_pubkeys_to_tx_extra(
+            {
+                enote_ephemeral_pubkey_1
+            },
+            tx_extra_1
+        ));
+
+    //block 0: 1 -> user
+    ASSERT_NO_THROW(ledger_context.add_legacy_coinbase(
+            rct::pkGen(),
+            0,
+            tx_extra_1,
+            {},
+            {
+                enote_1
+            }
+        ));
+
+    //make enote: 2 -> user
+    LegacyEnoteV5 enote_2;
+    rct::key enote_ephemeral_pubkey_2;
+    crypto::key_image key_image_2;
+
+    prepare_mock_v5_legacy_enote_for_transfer(subaddr_spendkey,
+        subaddr_viewkey,
+        legacy_keys.Ks,
+        legacy_subaddress_map,
+        legacy_keys.k_s,
+        legacy_keys.k_v,
+        2,  //amount
+        0,  //index in planned mock coinbase tx
+        make_secret_key(),
+        enote_2,
+        enote_ephemeral_pubkey_2,
+        key_image_2);
+
+    TxExtra tx_extra_2;
+    ASSERT_TRUE(try_append_legacy_enote_ephemeral_pubkeys_to_tx_extra(
+            {
+                enote_ephemeral_pubkey_2
+            },
+            tx_extra_2
+        ));
+
+    //block 1: 2 -> user
+    ASSERT_NO_THROW(ledger_context.add_legacy_coinbase(
+            rct::pkGen(),
+            0,
+            tx_extra_2,
+            {},
+            {
+                enote_2
+            }
+        ));
+
+    //intermediate scan
+    refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
+        legacy_subaddress_map,
+        legacy_keys.k_v,
+        LegacyScanMode::SCAN,
+        refresh_config,
+        ledger_context,
+        enote_store);
+
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 1);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
+    ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 2);
+    ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 3);
+    ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN},
+        {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 0);
+
+    //get intermediate scan index
+    const std::uint64_t intermediate_index_pre_import_cycle_1{
+            enote_store.top_legacy_partialscanned_block_index()
+        };
+
+    //pop block 1 (in the middle of an intermediate scan cycle)
+    ledger_context.pop_blocks(1);
+
+        //intermediate scan again (emulating a user who, for whatever reason, refreshes again)
+        refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
+            legacy_subaddress_map,
+            legacy_keys.k_v,
+            LegacyScanMode::SCAN,
+            refresh_config,
+            ledger_context,
+            enote_store);
+
+        ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+        ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
+        ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 1);
+        ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+            {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
+        ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+            {SpEnoteSpentStatus::SPENT_ONCHAIN},
+            {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 0);
+
+    //import key images: enote 1 in block 0, enote 2 in block 1
+    ASSERT_TRUE(enote_store.try_import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
+    ASSERT_FALSE(enote_store.try_import_legacy_key_image(key_image_2, enote_2.m_onetime_address));  //ignore failed import
+
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
+    ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
+    ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
+    ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN},
+        {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);  //intermediate record promoted to full
+
+    //legacy key image scan (does nothing, no enotes where spent)
+    refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
+        legacy_subaddress_map,
+        legacy_keys.k_v,
+        LegacyScanMode::KEY_IMAGES_ONLY,
+        refresh_config,
+        ledger_context,
+        enote_store);
+
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0);
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == -1);
+    ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
+    ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 1);
+    ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN},
+        {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
+
+    //set fullscan index to saved intermediate block index
+    ASSERT_NO_THROW(enote_store.update_legacy_fullscan_index_for_import_cycle(intermediate_index_pre_import_cycle_1));
+
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 0); //index not effected
+    ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 0);  //index not effected
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_enote_scanning, legacy_pre_transition_5)
 {
     /// setup
 
@@ -3236,7 +3428,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         };
 
     //import key image: enote 1
-    ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
+    ASSERT_TRUE(enote_store_int.try_import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
@@ -3266,7 +3458,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 1);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_1));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 0);
@@ -3322,7 +3515,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_2));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 1);
@@ -3368,7 +3562,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_3));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_3));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 0);
@@ -3422,7 +3617,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_4));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_4));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 1);
@@ -3476,7 +3672,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_5));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_5));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 2);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 2);
@@ -3495,7 +3692,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_4)
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 0);
 }
 //-------------------------------------------------------------------------------------------------------------------
-TEST(seraphis_enote_scanning, legacy_pre_transition_5)
+TEST(seraphis_enote_scanning, legacy_pre_transition_6)
 {
     /// setup
 
@@ -3682,7 +3879,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         };
 
     //import key image: enote 1
-    ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image, enote_1a.m_onetime_address));
+    ASSERT_TRUE(enote_store_int.try_import_legacy_key_image(key_image, enote_1a.m_onetime_address));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
@@ -3712,7 +3909,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 5);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_1));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 1);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 1);
@@ -3758,7 +3956,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_2));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 0);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 0);
@@ -3823,7 +4022,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_3));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_3));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 2);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 2);
@@ -3878,7 +4078,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_4));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_4));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 3);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 3);
@@ -3926,7 +4127,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_5));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_5));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 2);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 2);
@@ -3946,7 +4148,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_5)
         {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 4);
 }
 //-------------------------------------------------------------------------------------------------------------------
-TEST(seraphis_enote_scanning, legacy_pre_transition_6)
+TEST(seraphis_enote_scanning, legacy_pre_transition_7)
 {
     /// setup
 
@@ -4276,9 +4478,9 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
         };
 
     //import key images: enotes 1, 2, 3
-    ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
-    ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image_2, enote_2.m_onetime_address));
-    ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image_3, enote_3.m_onetime_address));
+    ASSERT_TRUE(enote_store_int.try_import_legacy_key_image(key_image_1, enote_1.m_onetime_address));
+    ASSERT_TRUE(enote_store_int.try_import_legacy_key_image(key_image_2, enote_2.m_onetime_address));
+    ASSERT_TRUE(enote_store_int.try_import_legacy_key_image(key_image_3, enote_3.m_onetime_address));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 4);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
@@ -4316,7 +4518,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
         EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 3);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_1));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 4);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 4);
@@ -4338,7 +4541,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_6)
         {EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 3);  //enotes 1, 2, 3 are unlocked
 }
 //-------------------------------------------------------------------------------------------------------------------
-TEST(seraphis_enote_scanning, legacy_pre_transition_7)
+TEST(seraphis_enote_scanning, legacy_pre_transition_8)
 {
     /// setup
 
@@ -4610,7 +4813,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_7)
         };
 
     //import key image: enote 1
-    ASSERT_NO_THROW(enote_store_int.import_legacy_key_image(key_image, enote_1a.m_onetime_address));
+    ASSERT_TRUE(enote_store_int.try_import_legacy_key_image(key_image, enote_1a.m_onetime_address));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 3);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == -1);
@@ -4648,7 +4851,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_7)
         EnoteStoreBalanceUpdateExclusions::ORIGIN_LEDGER_LOCKED}) == 2);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_1));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_1));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 3);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 3);
@@ -4715,7 +4919,8 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_7)
     ASSERT_TRUE(enote_store_int.legacy_intermediate_records().size() == 0);
 
     //set fullscan index to saved intermediate block index
-    ASSERT_NO_THROW(enote_store_int.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle_2));
+    ASSERT_NO_THROW(enote_store_int.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle_2));
 
     ASSERT_TRUE(enote_store_int.top_legacy_partialscanned_block_index() == 4);
     ASSERT_TRUE(enote_store_int.top_legacy_fullscanned_block_index() == 4);
@@ -4834,7 +5039,7 @@ static void legacy_view_scan_recovery_cycle(const legacy_mock_keys &legacy_keys,
     // 4. import expected key images (will fail if the onetime addresses and key images don't line up)
     for (std::size_t i{0}; i < legacy_onetime_addresses_expected.size(); ++i)
     {
-        ASSERT_NO_THROW(enote_store_inout.import_legacy_key_image(legacy_key_images_expected[i],
+        ASSERT_TRUE(enote_store_inout.try_import_legacy_key_image(legacy_key_images_expected[i],
             legacy_onetime_addresses_expected[i]));
     }
 
@@ -4878,7 +5083,8 @@ static void legacy_view_scan_recovery_cycle(const legacy_mock_keys &legacy_keys,
         else break;
     }
 
-    ASSERT_NO_THROW(enote_store_inout.set_last_legacy_fullscan_index(highest_aligned_index_post_import_cycle));
+    ASSERT_NO_THROW(enote_store_inout.update_legacy_fullscan_index_for_import_cycle(
+        highest_aligned_index_post_import_cycle));
 
     // 9. check the legacy fullscan index is at the expected value
     ASSERT_TRUE(enote_store_inout.top_legacy_fullscanned_block_index() == expected_final_legacy_fullscan_index);

@@ -272,13 +272,13 @@ bool SpEnoteStoreMockV1::try_get_sp_enote_record(const crypto::key_image &key_im
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::import_legacy_key_image(const crypto::key_image &legacy_key_image,
+bool SpEnoteStoreMockV1::try_import_legacy_key_image(const crypto::key_image &legacy_key_image,
     const rct::key &onetime_address)
 {
     // 1. we are done if there are no enote records for this onetime address
     if (m_tracked_legacy_onetime_address_duplicates.find(onetime_address) ==
         m_tracked_legacy_onetime_address_duplicates.end())
-        return;
+        return false;
 
     // 2. if this key image appeared in a seraphis tx, get the spent context
     SpEnoteSpentContextV1 spent_context{};
@@ -333,6 +333,15 @@ void SpEnoteStoreMockV1::import_legacy_key_image(const crypto::key_image &legacy
         // f. save to the legacy key image set
         m_legacy_key_images[legacy_key_image] = onetime_address;
     }
+
+    return true;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void SpEnoteStoreMockV1::update_legacy_fullscan_index_for_import_cycle(const std::uint64_t saved_index)
+{
+    // clamp the imported index to the top known block index in case blocks were popped in the middle of an import
+    //   cycle and the enote store was refreshed before this function call
+    this->set_last_legacy_fullscan_index(std::min(saved_index + 1, m_refresh_index + m_legacy_block_ids.size()) - 1);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::set_last_legacy_fullscan_index(const std::uint64_t new_index)
@@ -1220,7 +1229,7 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_rec
     m_legacy_key_images[new_record.m_record.m_key_image] = onetime_address_ref(new_record.m_record.m_enote);
 
     // 8. import this key image to force-promote all intermediate records with different identifiers to full records
-    this->import_legacy_key_image(new_record.m_record.m_key_image, onetime_address_ref(new_record.m_record.m_enote));
+    this->try_import_legacy_key_image(new_record.m_record.m_key_image, onetime_address_ref(new_record.m_record.m_enote));
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL

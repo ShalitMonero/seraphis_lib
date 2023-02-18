@@ -148,7 +148,7 @@ static void refresh_user_enote_store_legacy_multisig(const std::vector<multisig:
     // 5. import acquired key images (will fail if the onetime addresses and key images don't line up)
     for (const auto &recovered_key_image : recovered_key_images)
     {
-        ASSERT_NO_THROW(enote_store_inout.import_legacy_key_image(recovered_key_image.second,
+        ASSERT_TRUE(enote_store_inout.try_import_legacy_key_image(recovered_key_image.second,
             rct::pk2rct(recovered_key_image.first)));
     }
 
@@ -165,7 +165,8 @@ static void refresh_user_enote_store_legacy_multisig(const std::vector<multisig:
     ASSERT_TRUE(enote_store_inout.legacy_intermediate_records().size() == 0);
 
     // 8. update the legacy fullscan index to account for a complete view-only scan cycle with key image recovery
-    ASSERT_NO_THROW(enote_store_inout.set_last_legacy_fullscan_index(intermediate_index_pre_import_cycle));
+    ASSERT_NO_THROW(enote_store_inout.update_legacy_fullscan_index_for_import_cycle(
+        intermediate_index_pre_import_cycle));
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------

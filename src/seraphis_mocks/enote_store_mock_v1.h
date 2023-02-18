@@ -118,10 +118,12 @@ public:
     bool try_get_sp_enote_record(const crypto::key_image &key_image,
         SpContextualEnoteRecordV1 &contextual_record_out) const;
 
-    /// import a legacy key image
+    /// try to import a legacy key image
     /// PRECONDITION1: the legacy key image was computed from/for the input onetime address
-    /// PRECONDITION2: the onetime address is already known by the enote store (e.g. from intermediate legacy scanning)
-    void import_legacy_key_image(const crypto::key_image &legacy_key_image, const rct::key &onetime_address);
+    /// returns false if the onetime address is unknown (e.g. due to a reorg)
+    bool try_import_legacy_key_image(const crypto::key_image &legacy_key_image, const rct::key &onetime_address);
+    /// update the legacy fullscan index as part of a legacy key image import cycle
+    void update_legacy_fullscan_index_for_import_cycle(const std::uint64_t saved_index);
 
     /// setters for scan indices
     /// WARNING: misuse of these will mess up the enote store's state (to recover: set index(s) below problem then
