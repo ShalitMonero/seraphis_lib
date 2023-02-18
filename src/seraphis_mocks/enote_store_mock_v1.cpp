@@ -347,11 +347,10 @@ void SpEnoteStoreMockV1::set_last_legacy_fullscan_index(const std::uint64_t new_
 
     // 2. update legacy partial scan index
     // - fullscan qualifies as partialscan
-    // note: this update won't fix inaccuracy in the m_legacy_partialscan_index caused by a reorg, although
-    //       in practice reorgs that reduce the chain index are extremely rare/nonexistent outside unit tests;
-    //       moreoever, the partialscan index is meaningless unless view-only scanning (in which case the fullscan
-    //       index will almost certainly only be updated using a manual workflow that can only repair reorgs by
-    //       re-running the workflow anyway)
+    // note: this update intentionally won't fix inaccuracy in the m_legacy_partialscan_index caused by a reorg, because
+    //       in manual workflows the legacy partialscan index is often higher than the legacy fullscan index; the
+    //       partialscan index only matters when doing a manual view-only workflow, and any reorg-induced inaccuracy
+    //       in that height will be fixed by re-running that workflow
     m_legacy_partialscan_index = std::max(m_legacy_partialscan_index + 1, m_legacy_fullscan_index + 1) - 1;
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -736,6 +735,10 @@ void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_legacy_full(const st
         m_legacy_block_ids);
 
     // 2. update scanning index for this scan mode (assumed to be LEGACY_FULL)
+    // note: we must set the partialscan index here in case a reorg dropped blocks; we don't do it inside the
+    //       set_last_legacy_fullscan_index() function because it needs to be used a manual view-scanning workflows
+    //       where the legacy fullscan index will often lag behind the partialscan index
+    this->set_last_legacy_partialscan_index(first_new_block + new_block_ids.size() - 1);
     this->set_last_legacy_fullscan_index(first_new_block + new_block_ids.size() - 1);
 }
 //-------------------------------------------------------------------------------------------------------------------

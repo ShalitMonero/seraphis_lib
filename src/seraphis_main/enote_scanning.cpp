@@ -35,6 +35,7 @@
 #include "enote_scanning_context.h"
 #include "enote_store_updater.h"
 #include "ringct/rctTypes.h"
+#include "seraphis_crypto/sp_crypto_utils.h"
 
 //third party headers
 #include <boost/optional/optional.hpp>
@@ -156,17 +157,20 @@ struct ChainContiguityMarker final
 static std::uint64_t get_reorg_avoidance_depth(const std::uint64_t default_reorg_avoidance_depth,
     const std::uint64_t completed_fullscan_attempts)
 {
-    // 1. start at the default depth for the first and second fullscan attempts
-    // - back off the default depth twice to better support unit tests that study partial rescans
-    if (completed_fullscan_attempts <= 1)
-        return default_reorg_avoidance_depth;
+    // 1. start at a depth of zero
+    // - this avoids accidentally reorging your enote store if the basic-chunk backend only has a portion
+    //   of the blocks in your initial reorg avoidance depth range available when 'get chunk' is called (in the case
+    //   where there wasn't actually a reorg and the backend is just catching up)
+    if (completed_fullscan_attempts == 0)
+        return 0;
 
     // 2. check that the default depth is not 0
+    // - check this after one fullscan attempt to support unit tests that set the reorg avoidance depth to 0
     CHECK_AND_ASSERT_THROW_MES(default_reorg_avoidance_depth > 0,
         "refresh ledger for enote store: tried more than one fullscan with zero reorg avoidance depth.");
 
     // 3. 10 ^ (fullscan attempts) * default depth
-    return static_cast<uint64_t>(std::pow(10, completed_fullscan_attempts - 1) * default_reorg_avoidance_depth);    
+    return uint_pow(10, completed_fullscan_attempts - 1) * default_reorg_avoidance_depth;
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
@@ -177,7 +181,7 @@ static void set_initial_contiguity_marker(const EnoteStoreUpdater &enote_store_u
     // 1. set the block index
     contiguity_marker_inout.m_block_index = initial_refresh_index - 1;
 
-    // 2. set the block id if we aren't at the unpdater's prefix block
+    // 2. set the block id if we aren't at the updater's prefix block
     if (contiguity_marker_inout.m_block_index != enote_store_updater.refresh_index() - 1)
     {
         // getting a block id should always succeed if we are starting past the prefix block of the updater
@@ -591,6 +595,8 @@ bool refresh_enote_store_ledger(const RefreshLedgerEnoteStoreConfig &config,
         //       the true location of alignment divergence is unknown; moreover, the distance between the first
         //       desired start index and the enote store's refresh index may be very large; if a fixed back-off were
         //       used, then it could take many fullscan attempts to find the point of divergence
+        // note: we start at '0', which means if a NEED_PARTIALSCAN is detected before any NEED_FULLSCANs then we will
+        //       have to loop through and get a NEED_FULLSCAN before the reorg can be resolved (it should be fairly cheap)
         const std::uint64_t reorg_avoidance_depth{
                 get_reorg_avoidance_depth(config.m_reorg_avoidance_depth, fullscan_attempts)
             };

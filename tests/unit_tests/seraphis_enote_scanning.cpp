@@ -3021,7 +3021,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         ledger_context,
         enote_store);
 
-    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 3);  //incorrect, must intermediate scan
+    ASSERT_TRUE(enote_store.top_legacy_partialscanned_block_index() == 2);  //fullscan fixed our intermediate index
     ASSERT_TRUE(enote_store.top_legacy_fullscanned_block_index() == 2);
     ASSERT_TRUE(enote_store.legacy_intermediate_records().size() == 0);
     ASSERT_TRUE(enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN},
@@ -3030,8 +3030,7 @@ TEST(seraphis_enote_scanning, legacy_pre_transition_3)
         {SpEnoteSpentStatus::SPENT_ONCHAIN},
         {EnoteStoreBalanceUpdateExclusions::LEGACY_INTERMEDIATE}) == 6);
 
-    //intermediate scan to fix index trackers (these can get messed up if doing both intermediate and full scans,
-    //which will never be done in practice)
+    //intermediate scan to show there is no effect on index trackers
     refresh_user_enote_store_legacy_intermediate(legacy_keys.Ks,
         legacy_subaddress_map,
         legacy_keys.k_v,
