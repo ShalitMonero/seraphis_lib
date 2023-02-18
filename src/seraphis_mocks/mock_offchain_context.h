@@ -42,7 +42,6 @@
 #include "seraphis_main/tx_component_types_legacy.h"
 
 //third party headers
-#include <boost/thread/shared_mutex.hpp>
 
 //standard headers
 #include <map>
@@ -117,23 +116,10 @@ public:
         EnoteScanningChunkNonLedgerV1 &chunk_out) const;
 
 private:
-    /// implementations of the above, without internally locking the mutex (all expected to be no-fail)
-    bool cryptonote_key_image_exists_impl(const crypto::key_image &key_image) const;
-    bool seraphis_key_image_exists_impl(const crypto::key_image &key_image) const;
     bool try_add_v1_impl(const std::vector<LegacyEnoteImageV2> &legacy_input_images,
         const std::vector<SpEnoteImageV1> &sp_input_images,
         const SpTxSupplementV1 &tx_supplement,
         const std::vector<SpEnoteV1> &output_enotes);
-    bool try_add_partial_tx_v1_impl(const SpPartialTxV1 &partial_tx);
-    bool try_add_tx_v1_impl(const SpTxSquashedV1 &tx);
-    void remove_tx_from_cache_impl(const rct::key &input_context);
-    void remove_tx_with_key_image_from_cache_impl(const crypto::key_image &key_image);
-    void clear_cache_impl();
-    void get_offchain_chunk_sp_impl(const crypto::x25519_secret_key &xk_find_received,
-        EnoteScanningChunkNonLedgerV1 &chunk_out) const;
-
-    /// context mutex (mutable for use in const member functions)
-    mutable boost::shared_mutex m_context_mutex;
 
     /// legacy key images
     std::unordered_set<crypto::key_image> m_legacy_key_images;
