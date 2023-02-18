@@ -199,7 +199,7 @@ void process_chunk_intermediate_sp(const rct::key &jamtis_spend_pubkey,
 * param: chunk_basic_records_per_tx - [ tx id : contextual basic record ]
 * param: chunk_contextual_key_images -
 * outparam: found_enote_records_out - [ seraphis KI : legacy contextual intermediate enote record ]
-* outparam: found_spent_key_images_out - [ seraphis KI : spent context ]
+* outparam: found_spent_sp_key_images_out - [ seraphis KI : spent context ]
 * outparam: legacy_key_images_in_sp_selfspends_out - [ legacy KI : spent context ]
 */
 void process_chunk_full_sp(const rct::key &jamtis_spend_pubkey,
@@ -212,7 +212,7 @@ void process_chunk_full_sp(const rct::key &jamtis_spend_pubkey,
     const std::unordered_map<rct::key, std::list<ContextualBasicRecordVariant>> &chunk_basic_records_per_tx,
     const std::list<SpContextualKeyImageSetV1> &chunk_contextual_key_images,
     std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1> &found_enote_records_out,
-    std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images_out,
+    std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_sp_key_images_out,
     std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfspends_out);
 
 } //namespace sp

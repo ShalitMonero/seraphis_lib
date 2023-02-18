@@ -108,7 +108,7 @@ static bool try_view_scan_legacy_enote_v1(const rct::key &legacy_base_spend_pubk
                 .m_enote_tx_index     = enote_index,
                 .m_enote_ledger_index = total_enotes_before_tx + enote_index,
                 .m_origin_status      = origin_status,
-                .m_memo = tx_memo
+                .m_memo               = tx_memo
             };
 
     return true;
@@ -288,7 +288,7 @@ static std::unordered_set<rct::key> process_chunk_sp_selfsend_pass(
     const std::unordered_map<rct::key, std::list<ContextualBasicRecordVariant>> &chunk_basic_records_per_tx,
     const std::list<SpContextualKeyImageSetV1> &chunk_contextual_key_images,
     std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1> &found_enote_records_inout,
-    std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images_inout,
+    std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_sp_key_images_inout,
     std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfspends_inout)
 {
     // for each tx in this chunk that spends one of our enotes, check if any of the basic records attached to that
@@ -334,7 +334,7 @@ static std::unordered_set<rct::key> process_chunk_sp_selfsend_pass(
                     origin_context_ref(contextual_basic_record),
                     chunk_contextual_key_images,
                     found_enote_records_inout,
-                    found_spent_key_images_inout,
+                    found_spent_sp_key_images_inout,
                     txs_have_spent_enotes_fresh);
 
                 // c. record all legacy key images attached to this selfsend for the caller to deal with
@@ -579,9 +579,7 @@ void process_chunk_intermediate_legacy(const rct::key &legacy_base_spend_pubkey,
         [&](const SpEnoteSpentContextV1 &spent_context, const crypto::key_image &key_image)
         {
             // ask callback if key image is known (i.e. if the key image is attached to an owned enote acquired before
-            //    the current scan process)
-            // note: we cannot detect if enotes owned in this scan are also spent in this scan, because in intermediate
-            //       scanning only the legacy viewkey is available, so key images of new legacy enotes can't be computed
+            //    this chunk)
             if (check_key_image_is_known_func(key_image))
             {
                 // a. record the found spent key image
@@ -646,15 +644,8 @@ void process_chunk_full_legacy(const rct::key &legacy_base_spend_pubkey,
         [&](const SpEnoteSpentContextV1 &spent_context, const crypto::key_image &key_image)
         {
             // a. ask callback if key image is known (i.e. if the key image is attached to an owned enote acquired before
-            //    the current scan process)
-            // b. check if owned enotes acquired earlier in this scan process (before this chunk) have this key image
-            if (check_key_image_is_known_func(key_image) ||
-                std::find_if(found_enote_records_out.begin(), found_enote_records_out.end(),
-                    [&key_image](const auto &mapped_legacy_record) -> bool
-                    {
-                        return mapped_legacy_record.second.m_record.m_key_image == key_image;
-                    }) != found_enote_records_out.end()
-                )
+            //    this chunk)
+            if (check_key_image_is_known_func(key_image))
             {
                 // i. record the found spent key image
                 found_spent_key_images_out[key_image];
@@ -755,11 +746,11 @@ void process_chunk_full_sp(const rct::key &jamtis_spend_pubkey,
     const std::unordered_map<rct::key, std::list<ContextualBasicRecordVariant>> &chunk_basic_records_per_tx,
     const std::list<SpContextualKeyImageSetV1> &chunk_contextual_key_images,
     std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1> &found_enote_records_out,
-    std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images_out,
+    std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_sp_key_images_out,
     std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfspends_out)
 {
     found_enote_records_out.clear();
-    found_spent_key_images_out.clear();
+    found_spent_sp_key_images_out.clear();
     legacy_key_images_in_sp_selfspends_out.clear();
 
     // 1. check if any owned enotes acquired before this chunk were spent in this chunk (key image matches)
@@ -769,16 +760,14 @@ void process_chunk_full_sp(const rct::key &jamtis_spend_pubkey,
         [&](const SpEnoteSpentContextV1 &spent_context, const crypto::key_image &key_image)
         {
             // a. ask callback if key image is known (i.e. if the key image is attached to an owned enote acquired before
-            //    the current scan process)
-            // b. check if owned enotes acquired earlier in this scan process (before this chunk) have this key image
-            if (check_key_image_is_known_func(key_image) ||
-                found_enote_records_out.find(key_image) != found_enote_records_out.end())
+            //    this chunk)
+            if (check_key_image_is_known_func(key_image))
             {
                 // i. record the found spent key image
-                found_spent_key_images_out[key_image];
+                found_spent_sp_key_images_out[key_image];
 
                 // ii. update its spent context (use update instead of assignment in case of duplicates)
-                try_update_enote_spent_context_v1(spent_context, found_spent_key_images_out[key_image]);
+                try_update_enote_spent_context_v1(spent_context, found_spent_sp_key_images_out[key_image]);
 
                 // iii. record tx id of the tx that contains this key image (this tx spent an enote that we acquired
                 //      before this chunk)
@@ -788,17 +777,18 @@ void process_chunk_full_sp(const rct::key &jamtis_spend_pubkey,
 
     for (const SpContextualKeyImageSetV1 &contextual_key_image_set : chunk_contextual_key_images)
     {
-        // note: do not invoke the key image handler for legacy key images in the chunk; legacy key images will
-        //       be collected along with their spent contexts in the selfsend pass
+        // - We don't check if legacy key images are known from before this chunk because during a comprehensive view-only
+        //   scan legacy key images are not computable by the legacy view key, so there may be owned legacy enotes with
+        //   unknown key images. This means there may be txs in this chunk with our selfsends but only legacy key images
+        //   that can't be identified - so we need to do a selfsend check on all of those txs. All legacy key images in
+        //   txs that have both legacy key images and seraphis selfsends will be recorded along with their spent contexts
+        //   for the caller to cache in preparation for when they are able to match key images with legacy enotes.
 
         // a. invoke the key image handler for seraphis key images in the chunk
         for (const crypto::key_image &key_image : contextual_key_image_set.m_sp_key_images)
             key_image_handler(contextual_key_image_set.m_spent_context, key_image);
 
-        // b. save tx id of txs that contain at least one legacy key image, so they can be examined by the selfsend pass
-        // - Checking if a legacy key image is known before this chunk may fail during a view-only scan because legacy
-        //   key images are not computable by the legacy view key. This means txs with legacy key images may or may not
-        //   contain seraphis selfsend outputs, so we always need to check them.
+        // b. save tx ids of txs that contain at least one legacy key image, so they can be examined by the selfsend pass
         if (contextual_key_image_set.m_legacy_key_images.size() > 0)
             txs_have_spent_enotes.insert(contextual_key_image_set.m_spent_context.m_transaction_id);
     }
@@ -834,7 +824,7 @@ void process_chunk_full_sp(const rct::key &jamtis_spend_pubkey,
                     origin_context_ref(contextual_basic_record),
                     chunk_contextual_key_images,
                     found_enote_records_out,
-                    found_spent_key_images_out,
+                    found_spent_sp_key_images_out,
                     txs_have_spent_enotes);
             } catch (...) {}
         }
@@ -855,7 +845,7 @@ void process_chunk_full_sp(const rct::key &jamtis_spend_pubkey,
                 chunk_basic_records_per_tx,
                 chunk_contextual_key_images,
                 found_enote_records_out,
-                found_spent_key_images_out,
+                found_spent_sp_key_images_out,
                 legacy_key_images_in_sp_selfspends_out);
     }
 }
