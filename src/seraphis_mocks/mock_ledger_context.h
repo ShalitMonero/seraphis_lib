@@ -31,6 +31,7 @@
 // Mock ledger context.
 // WARNING: txs added to the mock ledger aren't auto-validated (aside from key image checks)
 // WARNING: reference set proof element getters do NOT check if the elements are spendable (i.e. if they are unlocked)
+// WARNING: this object is not inherently thread-safe; use a read/write lock to manage its lifetime if needed
 
 #pragma once
 
@@ -45,7 +46,6 @@
 #include "seraphis_main/tx_component_types.h"
 
 //third party headers
-#include <boost/thread/shared_mutex.hpp>
 
 //standard headers
 #include <map>
@@ -137,6 +137,94 @@ public:
     */
     std::uint64_t num_sp_enotes() const { return max_sp_enote_index() + 1; }
     /**
+    * brief: clear_unconfirmed_cache - remove all data stored in unconfirmed cache
+    */
+    void clear_unconfirmed_cache();
+    /**
+    * brief: remove_tx_from_unconfirmed_cache - remove a tx from the unconfirmed cache
+    * param: tx_id - tx id of tx to remove
+    */
+    void remove_tx_from_unconfirmed_cache(const rct::key &tx_id);
+    /**
+    * brief: add_legacy_coinbase - make a block with a mock legacy coinbase tx (containing legacy key images)
+    * param: tx_id -
+    * param: unlock_time -
+    * param: memo -
+    * param: legacy_key_images_for_block -
+    * param: output_enotes -
+    * return: block index of newly added block
+    */
+    std::uint64_t add_legacy_coinbase(const rct::key &tx_id,
+        const std::uint64_t unlock_time,
+        TxExtra memo,
+        std::vector<crypto::key_image> legacy_key_images_for_block,
+        std::vector<LegacyEnoteVariant> output_enotes);
+    /**
+    * brief: try_add_unconfirmed_coinbase_v1 - try to add a mock seraphis coinbase tx to the 'unconfirmed' tx cache
+    * param: coinbase_tx_id -
+    * param: input_context -
+    * param: tx_supplement -
+    * param: output_enotes -
+    * return: true if adding the tx succeeded
+    */
+    bool try_add_unconfirmed_coinbase_v1(const rct::key &coinbase_tx_id,
+        const rct::key &input_context,
+        SpTxSupplementV1 tx_supplement,
+        std::vector<SpEnoteVariant> output_enotes);
+    /**
+    * brief: try_add_unconfirmed_tx_v1 - try to add a full transaction to the 'unconfirmed' tx cache
+    *   - fails if there are key image duplicates with: unconfirmed, onchain
+    *   - auto-removes any offchain entries that have overlapping key images with this tx
+    * param: tx -
+    * return: true if adding succeeded
+    */
+    bool try_add_unconfirmed_tx_v1(const SpTxSquashedV1 &tx);
+    /**
+    * brief: commit_unconfirmed_cache_v1 - move all unconfirmed txs onto the chain in a new block, with new mock coinbase tx
+    *   - clears the unconfirmed tx cache
+    *   - note: currently does NOT validate if coinbase enotes are sorted properly
+    *   - note2: permits seraphis enotes of any type (coinbase or regular enotes) for convenience in mockups
+    * param: coinbase_tx_id -
+    * param: mock_coinbase_input_context -
+    * param: mock_coinbase_tx_supplement -
+    * param: mock_coinbase_output_enotes -
+    * return: block index of newly added block
+    */
+    std::uint64_t commit_unconfirmed_txs_v1(const rct::key &coinbase_tx_id,
+        const rct::key &mock_coinbase_input_context,
+        SpTxSupplementV1 mock_coinbase_tx_supplement,
+        std::vector<SpEnoteVariant> mock_coinbase_output_enotes);
+    /**
+    * brief: commit_unconfirmed_cache_v1 - move all unconfirmed txs onto the chain in a new block, with new
+    *      coinbase tx
+    *   - throws if the coinbase tx's block index does not equal the ledger's next block index
+    *   - clears the unconfirmed tx cache
+    *   - note: currently does NOT validate the coinbase tx
+    *   - note2: currently does nothing with the block reward
+    * param: coinbase_tx -
+    * return: block index of newly added block
+    */
+    std::uint64_t commit_unconfirmed_txs_v1(const SpTxCoinbaseV1 &coinbase_tx);
+    /**
+    * brief: pop_chain_at_index - remove all blocks >= the specified block index from the chain
+    * param: pop_index - first block to pop from the chain
+    * return: number of blocks popped
+    */
+    std::uint64_t pop_chain_at_index(const std::uint64_t pop_index);
+    /**
+    * brief: pop_blocks - remove a specified number of blocks from the chain
+    * param: num_blocks - number of blocks to remove
+    * return: number of blocks popped
+    */
+    std::uint64_t pop_blocks(const std::size_t num_blocks);
+    /**
+    * brief: get_unconfirmed_chunk_sp - try to find-received scan the unconfirmed tx cache
+    * param: xk_find_received -
+    * outparam: chunk_out -
+    */
+    void get_unconfirmed_chunk_sp(const crypto::x25519_secret_key &xk_find_received,
+        EnoteScanningChunkNonLedgerV1 &chunk_out) const;
+    /**
     * brief: get_onchain_chunk_legacy - legacy view scan a chunk of blocks
     * param: chunk_start_index -
     * param: chunk_max_size -
@@ -164,123 +252,8 @@ public:
         const std::uint64_t chunk_max_size,
         const crypto::x25519_secret_key &xk_find_received,
         EnoteScanningChunkLedgerV1 &chunk_out) const;
-    /**
-    * brief: get_unconfirmed_chunk_sp - try to find-received scan the unconfirmed tx cache
-    * param: xk_find_received -
-    * outparam: chunk_out -
-    */
-    void get_unconfirmed_chunk_sp(const crypto::x25519_secret_key &xk_find_received,
-        EnoteScanningChunkNonLedgerV1 &chunk_out) const;
-    /**
-    * brief: try_add_unconfirmed_tx_v1 - try to add a full transaction to the 'unconfirmed' tx cache
-    *   - fails if there are key image duplicates with: unconfirmed, onchain
-    *   - auto-removes any offchain entries that have overlapping key images with this tx
-    * param: tx -
-    * return: true if adding succeeded
-    */
-    bool try_add_unconfirmed_tx_v1(const SpTxSquashedV1 &tx);
-    /**
-    * brief: add_legacy_coinbase - make a block with a mock legacy coinbase tx (containing legacy key images)
-    * param: tx_id -
-    * param: unlock_time -
-    * param: memo -
-    * param: legacy_key_images_for_block -
-    * param: output_enotes -
-    * return: block index of newly added block
-    */
-    std::uint64_t add_legacy_coinbase(const rct::key &tx_id,
-        const std::uint64_t unlock_time,
-        TxExtra memo,
-        std::vector<crypto::key_image> legacy_key_images_for_block,
-        std::vector<LegacyEnoteVariant> output_enotes);
-    /**
-    * brief: commit_unconfirmed_cache_v1 - move all unconfirmed txs onto the chain in a new block, with new mock coinbase tx
-    *   - clears the unconfirmed tx cache
-    *   - note: currently does NOT validate if coinbase enotes are sorted properly
-    *   - note2: permits seraphis enotes of any type (coinbase or regular enotes) for convenience in mockups
-    * param: mock_coinbase_input_context -
-    * param: mock_coinbase_tx_supplement -
-    * param: mock_coinbase_output_enotes -
-    * return: block index of newly added block
-    */
-    std::uint64_t commit_unconfirmed_txs_v1(const rct::key &mock_coinbase_input_context,
-        SpTxSupplementV1 mock_coinbase_tx_supplement,
-        std::vector<SpEnoteVariant> mock_coinbase_output_enotes);
-    /**
-    * brief: commit_unconfirmed_cache_v1 - move all unconfirmed txs onto the chain in a new block, with new
-    *      coinbase tx
-    *   - throws if the coinbase tx's block index does not equal the ledger's next block index
-    *   - clears the unconfirmed tx cache
-    *   - note: currently does NOT validate the coinbase tx
-    *   - note2: currently does nothing with the block reward
-    * param: coinbase_tx -
-    * return: block index of newly added block
-    */
-    std::uint64_t commit_unconfirmed_txs_v1(const SpTxCoinbaseV1 &coinbase_tx);
-    /**
-    * brief: remove_tx_from_unconfirmed_cache - remove a tx from the unconfirmed cache
-    * param: tx_id - tx id of tx to remove
-    */
-    void remove_tx_from_unconfirmed_cache(const rct::key &tx_id);
-    /**
-    * brief: clear_unconfirmed_cache - remove all data stored in unconfirmed cache
-    */
-    void clear_unconfirmed_cache();
-    /**
-    * brief: pop_chain_at_index - remove all blocks >= the specified block index from the chain
-    * param: pop_index - first block to pop from the chain
-    * return: number of blocks popped
-    */
-    std::uint64_t pop_chain_at_index(const std::uint64_t pop_index);
-    /**
-    * brief: pop_blocks - remove a specified number of blocks from the chain
-    * param: num_blocks - number of blocks to remove
-    * return: number of blocks popped
-    */
-    std::uint64_t pop_blocks(const std::size_t num_blocks);
 
 private:
-    /// implementations of the above, without internally locking the ledger mutex (all expected to either succeed or throw)
-    bool cryptonote_key_image_exists_unconfirmed_impl(const crypto::key_image &key_image) const;
-    bool seraphis_key_image_exists_unconfirmed_impl(const crypto::key_image &key_image) const;
-    bool cryptonote_key_image_exists_onchain_impl(const crypto::key_image &key_image) const;
-    bool seraphis_key_image_exists_onchain_impl(const crypto::key_image &key_image) const;
-    bool try_add_unconfirmed_coinbase_v1_impl(const rct::key &coinbase_tx_id,
-        const rct::key &input_context,
-        SpTxSupplementV1 tx_supplement,
-        std::vector<SpEnoteVariant> output_enotes);
-    bool try_add_unconfirmed_tx_v1_impl(const SpTxSquashedV1 &tx);
-    std::uint64_t add_legacy_coinbase_impl(const rct::key &tx_id,
-        const std::uint64_t unlock_time,
-        TxExtra memo,
-        std::vector<crypto::key_image> legacy_key_images_for_block,
-        std::vector<LegacyEnoteVariant> output_enotes);
-    std::uint64_t commit_unconfirmed_txs_v1_impl(const rct::key &coinbase_tx_id,
-        const rct::key &mock_coinbase_input_context,
-        SpTxSupplementV1 mock_coinbase_tx_supplement,
-        std::vector<SpEnoteVariant> mock_coinbase_output_enotes);
-    std::uint64_t commit_unconfirmed_txs_v1_impl(const SpTxCoinbaseV1 &coinbase_tx);
-    void remove_tx_from_unconfirmed_cache_impl(const rct::key &tx_id);
-    void clear_unconfirmed_cache_impl();
-    std::uint64_t pop_chain_at_index_impl(const std::uint64_t pop_index);
-    std::uint64_t pop_blocks_impl(const std::size_t num_blocks);
-    void get_unconfirmed_chunk_sp_impl(const crypto::x25519_secret_key &xk_find_received,
-        EnoteScanningChunkNonLedgerV1 &chunk_out) const;
-    void get_onchain_chunk_legacy_impl(const std::uint64_t chunk_start_index,
-        const std::uint64_t chunk_max_size,
-        const rct::key &legacy_base_spend_pubkey,
-        const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
-        const crypto::secret_key &legacy_view_privkey,
-        const LegacyScanMode legacy_scan_mode,
-        EnoteScanningChunkLedgerV1 &chunk_out) const;
-    void get_onchain_chunk_sp_impl(const std::uint64_t chunk_start_index,
-        const std::uint64_t chunk_max_size,
-        const crypto::x25519_secret_key &xk_find_received,
-        EnoteScanningChunkLedgerV1 &chunk_out) const;
-
-    /// context mutex (mutable for use in const member functions)
-    mutable boost::shared_mutex m_context_mutex;
-
     /// first block where a seraphis tx is allowed (this block and all following must have a seraphis coinbase tx)
     std::uint64_t m_first_seraphis_allowed_block;
     /// first block where only seraphis txs are allowed
