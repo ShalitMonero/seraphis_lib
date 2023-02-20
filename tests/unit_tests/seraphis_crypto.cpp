@@ -31,6 +31,7 @@ extern "C"
 {
 #include "crypto/crypto-ops.h"
 }
+#include "crypto/eclib_test.h"
 #include "crypto/generators.h"
 #include "crypto/x25519.h"
 #include "device/device.hpp"
@@ -291,5 +292,18 @@ TEST(seraphis_crypto, multiexp_utility)
 
     sp::SpMultiexp{{builder10}}.get_result(result);
     ASSERT_TRUE(result == rct::scalarmultKey(rct::pippenger(rct_builder10), weight));
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_crypto, eclib_test)
+{
+    using eclib = crypto::eclib_test;
+
+    const eclib::key constant{20};
+    eclib::key temp;
+
+    eclib::core_func(constant, temp);
+    EXPECT_TRUE(temp == 200);
+    eclib::utils::util_func(constant, temp);
+    EXPECT_TRUE(temp == 40);
 }
 //-------------------------------------------------------------------------------------------------------------------
