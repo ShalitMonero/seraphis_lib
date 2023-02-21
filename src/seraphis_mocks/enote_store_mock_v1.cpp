@@ -65,7 +65,10 @@ static void update_block_ids_with_new_block_ids(const std::uint64_t first_allowe
     const std::uint64_t first_new_block_index,
     const rct::key &alignment_block_id,
     const std::vector<rct::key> &new_block_ids,
-    std::vector<rct::key> &block_ids_inout)
+    std::vector<rct::key> &block_ids_inout,
+    std::uint64_t &old_top_index_out,
+    std::uint64_t &range_start_index_out,
+    std::uint64_t &num_blocks_added_out)
 {
     // 1. check inputs
     CHECK_AND_ASSERT_THROW_MES(first_new_block_index >= first_allowed_index,
@@ -79,7 +82,12 @@ static void update_block_ids_with_new_block_ids(const std::uint64_t first_allowe
             "enote store set new block ids (mock): alignment block id doesn't align with recorded block ids.");
     }
 
-    // 2. update the block ids
+    // 2. save the diff
+    old_top_index_out     = first_allowed_index + block_ids_inout.size();
+    range_start_index_out = first_new_block_index;
+    num_blocks_added_out  = new_block_ids.size();
+
+    // 3. update the block ids
     block_ids_inout.resize(first_new_block_index - first_allowed_index);  //crop old blocks
     block_ids_inout.insert(block_ids_inout.end(), new_block_ids.begin(), new_block_ids.end());
 }
@@ -273,7 +281,8 @@ bool SpEnoteStoreMockV1::try_get_sp_enote_record(const crypto::key_image &key_im
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool SpEnoteStoreMockV1::try_import_legacy_key_image(const crypto::key_image &legacy_key_image,
-    const rct::key &onetime_address)
+    const rct::key &onetime_address,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. we are done if there are no enote records for this onetime address
     if (m_tracked_legacy_onetime_address_duplicates.find(onetime_address) ==
@@ -295,9 +304,10 @@ bool SpEnoteStoreMockV1::try_import_legacy_key_image(const crypto::key_image &le
             continue;
 
         // b. update the spent context
-        try_update_enote_spent_context_v1(
-            m_legacy_contextual_enote_records.at(legacy_enote_identifier).m_spent_context,
-            spent_context);
+        if (try_update_enote_spent_context_v1(
+                m_legacy_contextual_enote_records.at(legacy_enote_identifier).m_spent_context,
+                spent_context))
+            changes_inout.emplace_back(UpdatedLegacySpentContext{legacy_enote_identifier});
     }
 
     // 4. promote intermediate enote records with this onetime address to full enote records
@@ -318,6 +328,7 @@ bool SpEnoteStoreMockV1::try_import_legacy_key_image(const crypto::key_image &le
             m_legacy_intermediate_contextual_enote_records[legacy_enote_identifier].m_record,
             legacy_key_image,
             m_legacy_contextual_enote_records[legacy_enote_identifier].m_record);
+        changes_inout.emplace_back(NewLegacyRecord{legacy_enote_identifier});
 
         // d. set the full record's contexts
         update_contextual_enote_record_contexts_v1(
@@ -329,6 +340,7 @@ bool SpEnoteStoreMockV1::try_import_legacy_key_image(const crypto::key_image &le
 
         // e. remove the intermediate record
         m_legacy_intermediate_contextual_enote_records.erase(legacy_enote_identifier);
+        changes_inout.emplace_back(RemovedLegacyIntermediateRecord{legacy_enote_identifier});
 
         // f. save to the legacy key image set
         m_legacy_key_images[legacy_key_image] = onetime_address;
@@ -392,101 +404,113 @@ void SpEnoteStoreMockV1::set_last_sp_scanned_index(const std::uint64_t new_index
 void SpEnoteStoreMockV1::update_with_intermediate_legacy_records_from_nonledger(
     const SpEnoteOriginStatus nonledger_origin_status,
     const std::unordered_map<rct::key, LegacyContextualIntermediateEnoteRecordV1> &found_enote_records,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. clean up enote store maps in preparation for adding fresh enotes and key images
-    this->clean_maps_for_legacy_nonledger_update(nonledger_origin_status, found_spent_key_images);
+    this->clean_maps_for_legacy_nonledger_update(nonledger_origin_status, found_spent_key_images, changes_inout);
 
     // 2. add found enotes
     for (const auto &found_enote_record : found_enote_records)
-        this->add_record(found_enote_record.second);
+        this->add_record(found_enote_record.second, changes_inout);
 
     // 3. update contexts of stored enotes with found spent key images
-    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images);
+    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_intermediate_legacy_records_from_ledger(const std::uint64_t first_new_block,
     const rct::key &alignment_block_id,
     const std::vector<rct::key> &new_block_ids,
     const std::unordered_map<rct::key, LegacyContextualIntermediateEnoteRecordV1> &found_enote_records,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. update block tracking info
-    this->update_with_new_blocks_from_ledger_legacy_intermediate(first_new_block, alignment_block_id, new_block_ids);
+    this->update_with_new_blocks_from_ledger_legacy_intermediate(first_new_block,
+        alignment_block_id,
+        new_block_ids,
+        changes_inout);
 
     // 2. clean up enote store maps in preparation for adding fresh enotes and key images
-    this->clean_maps_for_legacy_ledger_update(first_new_block, found_spent_key_images);
+    this->clean_maps_for_legacy_ledger_update(first_new_block, found_spent_key_images, changes_inout);
 
     // 3. add found enotes
     for (const auto &found_enote_record : found_enote_records)
-        this->add_record(found_enote_record.second);
+        this->add_record(found_enote_record.second, changes_inout);
 
     // 4. update contexts of stored enotes with found spent key images
-    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images);
+    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_intermediate_legacy_found_spent_key_images(
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. clean up enote store maps that conflict with the found spent key images (which take precedence)
-    this->clean_maps_for_found_spent_legacy_key_images(found_spent_key_images);
+    this->clean_maps_for_found_spent_legacy_key_images(found_spent_key_images, changes_inout);
 
     // 2. update contexts of stored enotes with found spent key images
-    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images);
+    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_legacy_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status,
     const std::unordered_map<rct::key, LegacyContextualEnoteRecordV1> &found_enote_records,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. clean up enote store maps in preparation for adding fresh enotes and key images
-    this->clean_maps_for_legacy_nonledger_update(nonledger_origin_status, found_spent_key_images);
+    this->clean_maps_for_legacy_nonledger_update(nonledger_origin_status, found_spent_key_images, changes_inout);
 
     // 2. add found enotes
     for (const auto &found_enote_record : found_enote_records)
-        this->add_record(found_enote_record.second);
+        this->add_record(found_enote_record.second, changes_inout);
 
     // 3. update contexts of stored enotes with found spent key images
-    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images);
+    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_legacy_records_from_ledger(const std::uint64_t first_new_block,
     const rct::key &alignment_block_id,
     const std::vector<rct::key> &new_block_ids,
     const std::unordered_map<rct::key, LegacyContextualEnoteRecordV1> &found_enote_records,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. update block tracking info
-    this->update_with_new_blocks_from_ledger_legacy_full(first_new_block, alignment_block_id, new_block_ids);
+    this->update_with_new_blocks_from_ledger_legacy_full(first_new_block,
+        alignment_block_id,
+        new_block_ids,
+        changes_inout);
 
     // 2. clean up enote store maps in preparation for adding fresh enotes and key images
-    this->clean_maps_for_legacy_ledger_update(first_new_block, found_spent_key_images);
+    this->clean_maps_for_legacy_ledger_update(first_new_block, found_spent_key_images, changes_inout);
 
     // 3. add found enotes
     for (const auto &found_enote_record : found_enote_records)
-        this->add_record(found_enote_record.second);
+        this->add_record(found_enote_record.second, changes_inout);
 
     // 4. update contexts of stored enotes with found spent key images
-    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images);
+    this->update_legacy_with_fresh_found_spent_key_images(found_spent_key_images, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_sp_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status, 
     const std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1> &found_enote_records,
     const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. remove records that will be replaced
-    this->clean_maps_for_sp_nonledger_update(nonledger_origin_status);
+    this->clean_maps_for_sp_nonledger_update(nonledger_origin_status, changes_inout);
 
     // 2. add found enotes
     for (const auto &found_enote_record : found_enote_records)
-        this->add_record(found_enote_record.second);
+        this->add_record(found_enote_record.second, changes_inout);
 
     // 3. update spent contexts of stored enotes with found spent key images
-    this->update_sp_with_fresh_found_spent_key_images(found_spent_key_images);
+    this->update_sp_with_fresh_found_spent_key_images(found_spent_key_images, changes_inout);
 
     // 4. handle legacy key images attached to self-spends
-    this->handle_legacy_key_images_from_sp_selfsends(legacy_key_images_in_sp_selfsends);
+    this->handle_legacy_key_images_from_sp_selfsends(legacy_key_images_in_sp_selfsends, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_sp_records_from_ledger(const std::uint64_t first_new_block,
@@ -494,23 +518,24 @@ void SpEnoteStoreMockV1::update_with_sp_records_from_ledger(const std::uint64_t 
     const std::vector<rct::key> &new_block_ids,
     const std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1> &found_enote_records,
     const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. update block tracking info
-    this->update_with_new_blocks_from_ledger_sp(first_new_block, alignment_block_id, new_block_ids);
+    this->update_with_new_blocks_from_ledger_sp(first_new_block, alignment_block_id, new_block_ids, changes_inout);
 
     // 2. remove records that will be replaced
-    this->clean_maps_for_sp_ledger_update(first_new_block);
+    this->clean_maps_for_sp_ledger_update(first_new_block, changes_inout);
 
     // 3. add found enotes
     for (const auto &found_enote_record : found_enote_records)
-        this->add_record(found_enote_record.second);
+        this->add_record(found_enote_record.second, changes_inout);
 
     // 4. update contexts of stored enotes with found spent key images
-    this->update_sp_with_fresh_found_spent_key_images(found_spent_key_images);
+    this->update_sp_with_fresh_found_spent_key_images(found_spent_key_images, changes_inout);
 
     // 5. handle legacy key images attached to self-spends (this should be a subset of found_spent_key_images)
-    this->handle_legacy_key_images_from_sp_selfsends(legacy_key_images_in_sp_selfsends);
+    this->handle_legacy_key_images_from_sp_selfsends(legacy_key_images_in_sp_selfsends, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
@@ -717,14 +742,20 @@ boost::multiprecision::uint128_t SpEnoteStoreMockV1::get_balance_seraphis(
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_legacy_intermediate(const std::uint64_t first_new_block,
     const rct::key &alignment_block_id,
-    const std::vector<rct::key> &new_block_ids)
+    const std::vector<rct::key> &new_block_ids,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. set new block ids in range [first_new_block, end of chain]
+    LegacyIntermediateBlocksDiff diff{};
     update_block_ids_with_new_block_ids(m_refresh_index,
         first_new_block,
         alignment_block_id,
         new_block_ids,
-        m_legacy_block_ids);
+        m_legacy_block_ids,
+        diff.old_top_index,
+        diff.range_start_index,
+        diff.num_blocks_added);
+    changes_inout.emplace_back(diff);
 
     // 2. update scanning index for this scan mode (assumed to be LEGACY_INTERMEDIATE_FULL)
     this->set_last_legacy_partialscan_index(first_new_block + new_block_ids.size() - 1);
@@ -734,14 +765,20 @@ void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_legacy_intermediate(
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_legacy_full(const std::uint64_t first_new_block,
     const rct::key &alignment_block_id,
-    const std::vector<rct::key> &new_block_ids)
+    const std::vector<rct::key> &new_block_ids,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. set new block ids in range [first_new_block, end of chain]
+    LegacyBlocksDiff diff{};
     update_block_ids_with_new_block_ids(m_refresh_index,
         first_new_block,
         alignment_block_id,
         new_block_ids,
-        m_legacy_block_ids);
+        m_legacy_block_ids,
+        diff.old_top_index,
+        diff.range_start_index,
+        diff.num_blocks_added);
+    changes_inout.emplace_back(diff);
 
     // 2. update scanning index for this scan mode (assumed to be LEGACY_FULL)
     // note: we must set the partialscan index here in case a reorg dropped blocks; we don't do it inside the
@@ -755,14 +792,20 @@ void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_legacy_full(const st
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_sp(const std::uint64_t first_new_block,
     const rct::key &alignment_block_id,
-    const std::vector<rct::key> &new_block_ids)
+    const std::vector<rct::key> &new_block_ids,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. set new block ids in range [first_new_block, end of chain]
+    SpBlocksDiff diff{};
     update_block_ids_with_new_block_ids(this->sp_refresh_index(),
         first_new_block,
         alignment_block_id,
         new_block_ids,
-        m_sp_block_ids);
+        m_sp_block_ids,
+        diff.old_top_index,
+        diff.range_start_index,
+        diff.num_blocks_added);
+    changes_inout.emplace_back(diff);
 
     // 2. update scanning index for this scan mode (assumed to be SERAPHIS)
     this->set_last_sp_scanned_index(first_new_block + new_block_ids.size() - 1);
@@ -771,7 +814,8 @@ void SpEnoteStoreMockV1::update_with_new_blocks_from_ledger_sp(const std::uint64
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::clean_maps_for_found_spent_legacy_key_images(
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. if a found legacy key image is in the 'legacy key images from sp txs' map, remove it from that map
     // - a fresh spent context for legacy key images implies seraphis txs were reorged; we want to guarantee that the
@@ -805,7 +849,10 @@ void SpEnoteStoreMockV1::clean_maps_for_found_spent_legacy_key_images(
                 spent_contexts_removed_from_sp_selfsends.end() &&
             spent_contexts_removed_from_sp_selfsends.at(mapped_contextual_enote_record.second.m_record.m_key_image) ==
                 mapped_contextual_enote_record.second.m_spent_context.m_transaction_id)
+        {
             mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
+            changes_inout.emplace_back(ClearedLegacySpentContext{mapped_contextual_enote_record.first});
+        }
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -815,10 +862,11 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_legacy_enotes(
     const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
     const std::unordered_map<rct::key, std::unordered_set<rct::key>> &mapped_identifiers_of_removed_enotes,
     const std::unordered_map<rct::key, crypto::key_image> &mapped_key_images_of_removed_enotes,
-    const std::function<bool(const SpEnoteSpentContextV1&)> &spent_context_clearable_func)
+    const std::function<bool(const SpEnoteSpentContextV1&)> &spent_context_clearable_func,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. clean maps that conflict with the found spent key images
-    this->clean_maps_for_found_spent_legacy_key_images(found_spent_key_images);
+    this->clean_maps_for_found_spent_legacy_key_images(found_spent_key_images, changes_inout);
 
     // 2. clear spent contexts referencing removed blocks or the unconfirmed cache if the corresponding legacy key image
     //    is not in the seraphis legacy key image tracker
@@ -829,9 +877,13 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_legacy_enotes(
                 m_legacy_key_images_in_sp_selfsends.end())
             continue;
 
-        // clear spent contexts that are clearable (i.e. point to txs that the enote store considers nonexistent)
-        if (spent_context_clearable_func(mapped_contextual_enote_record.second.m_spent_context))
-            mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
+        // ignore spent contexts that aren't clearable according to the caller
+        if (!spent_context_clearable_func(mapped_contextual_enote_record.second.m_spent_context))
+            continue;
+
+        // clear spent contexts that point to txs that the enote store considers nonexistent
+        mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
+        changes_inout.emplace_back(ClearedLegacySpentContext{mapped_contextual_enote_record.first});
     }
 
     // 3. clean up legacy trackers
@@ -866,7 +918,8 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_legacy_enotes(
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::clean_maps_for_legacy_nonledger_update(const SpEnoteOriginStatus nonledger_origin_status,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     CHECK_AND_ASSERT_THROW_MES(nonledger_origin_status == SpEnoteOriginStatus::OFFCHAIN ||
             nonledger_origin_status == SpEnoteOriginStatus::UNCONFIRMED,
@@ -878,20 +931,34 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_nonledger_update(const SpEnoteOri
     auto legacy_contextual_record_is_removable_func =
         [&](const auto &mapped_contextual_enote_record) -> bool
         {
-            // remove all enotes of specified nonledger origin
-            if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status == nonledger_origin_status)
-            {
-                mapped_identifiers_of_removed_enotes[
-                        onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
-                    ].insert(mapped_contextual_enote_record.first);
+            // ignore enotes of unspecified origin
+            if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status != nonledger_origin_status)
+                return false;
 
-                return true;
-            }
+            mapped_identifiers_of_removed_enotes[
+                    onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
+                ].insert(mapped_contextual_enote_record.first);
 
-            return false;
+            return true;
         };
 
-    // a. legacy full records
+    // a. legacy intermediate records
+    tools::for_all_in_map_erase_if(m_legacy_intermediate_contextual_enote_records,
+            [&](const auto &mapped_contextual_enote_record) -> bool
+            {
+                // a. check if the record is removable
+                if (!legacy_contextual_record_is_removable_func(mapped_contextual_enote_record))
+                    return false;
+
+                // b. record the identifier of the record being removed
+                changes_inout.emplace_back(RemovedLegacyIntermediateRecord{mapped_contextual_enote_record.first});
+
+                // c. remove the record
+                return true;
+            }
+        );
+
+    // b. legacy full records
     std::unordered_map<rct::key, crypto::key_image> mapped_key_images_of_removed_enotes;  //mapped to onetime address
 
     tools::for_all_in_map_erase_if(m_legacy_contextual_enote_records,
@@ -906,14 +973,13 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_nonledger_update(const SpEnoteOri
                         onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
                     ] = mapped_contextual_enote_record.second.m_record.m_key_image;
 
-                // c. remove the record
+                // c. record the identifier of the record being removed
+                changes_inout.emplace_back(RemovedLegacyRecord{mapped_contextual_enote_record.first});
+
+                // d. remove the record
                 return true;
             }
         );
-
-    // b. legacy intermediate records
-    tools::for_all_in_map_erase_if(m_legacy_intermediate_contextual_enote_records,
-        legacy_contextual_record_is_removable_func);
 
     // 2. clean maps for removed enotes
     // - set the spent context test function to the nonledger type, which means any spent contexts of that type
@@ -934,13 +1000,15 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_nonledger_update(const SpEnoteOri
                 return true;
 
             return false;
-        });
+        },
+        changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::clean_maps_for_legacy_ledger_update(const std::uint64_t first_new_block,
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. remove records that will be replaced
     std::unordered_map<rct::key, std::unordered_set<rct::key>> mapped_identifiers_of_removed_enotes;
@@ -963,7 +1031,23 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_ledger_update(const std::uint64_t
             return false;
         };
 
-    // a. legacy full records
+    // a. legacy intermediate records
+    tools::for_all_in_map_erase_if(m_legacy_intermediate_contextual_enote_records,
+            [&](const auto &mapped_contextual_enote_record) -> bool
+            {
+                // a. check if the record is removable
+                if (!legacy_contextual_record_is_removable_func(mapped_contextual_enote_record))
+                    return false;
+
+                // b. record the identifier of the record being removed
+                changes_inout.emplace_back(RemovedLegacyIntermediateRecord{mapped_contextual_enote_record.first});
+
+                // c. remove the record
+                return true;
+            }
+        );
+
+    // b. legacy full records
     std::unordered_map<rct::key, crypto::key_image> mapped_key_images_of_removed_enotes;  //mapped to onetime address
 
     tools::for_all_in_map_erase_if(m_legacy_contextual_enote_records,
@@ -978,14 +1062,13 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_ledger_update(const std::uint64_t
                         onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
                     ] = mapped_contextual_enote_record.second.m_record.m_key_image;
 
-                // c. remove the record
+                // c. record the identifier of the record being removed
+                changes_inout.emplace_back(RemovedLegacyRecord{mapped_contextual_enote_record.first});
+
+                // d. remove the record
                 return true;
             }
         );
-
-    // b. legacy intermediate records
-    tools::for_all_in_map_erase_if(m_legacy_intermediate_contextual_enote_records,
-        legacy_contextual_record_is_removable_func);
 
     // 2. clean maps for removed enotes
     // - set the spent context test function to check if the context points to a tx in the removed/replaced blocks
@@ -996,14 +1079,16 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_ledger_update(const std::uint64_t
         {
             return spent_context.m_spent_status == SpEnoteSpentStatus::SPENT_ONCHAIN &&
                 spent_context.m_block_index >= first_new_block;
-        });
+        },
+        changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::clean_maps_for_removed_sp_enotes(const std::unordered_set<rct::key> &tx_ids_of_removed_enotes)
+void SpEnoteStoreMockV1::clean_maps_for_removed_sp_enotes(const std::unordered_set<rct::key> &tx_ids_of_removed_enotes,
+    std::list<EnoteStoreChange> &changes_inout)
 {
-    // clear spent contexts referencing the txs of removed enotes (key images appear at the same time as selfsends)
+    // clear spent contexts referencing the txs of removed enotes (key images only appear at the same time as selfsends)
 
     // 1. seraphis enotes
     for (auto &mapped_contextual_enote_record : m_sp_contextual_enote_records)
@@ -1013,6 +1098,7 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_sp_enotes(const std::unordered_s
             continue;
 
         mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
+        changes_inout.emplace_back(ClearedSpSpentContext{mapped_contextual_enote_record.first});
     }
 
     // 2. legacy enotes
@@ -1023,6 +1109,7 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_sp_enotes(const std::unordered_s
             continue;
 
         mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
+        changes_inout.emplace_back(ClearedLegacySpentContext{mapped_contextual_enote_record.first});
     }
 
     // 3. remove legacy key images found in removed txs
@@ -1037,7 +1124,8 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_sp_enotes(const std::unordered_s
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::clean_maps_for_sp_nonledger_update(const SpEnoteOriginStatus nonledger_origin_status)
+void SpEnoteStoreMockV1::clean_maps_for_sp_nonledger_update(const SpEnoteOriginStatus nonledger_origin_status,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     CHECK_AND_ASSERT_THROW_MES(nonledger_origin_status == SpEnoteOriginStatus::OFFCHAIN ||
             nonledger_origin_status == SpEnoteOriginStatus::UNCONFIRMED,
@@ -1049,26 +1137,28 @@ void SpEnoteStoreMockV1::clean_maps_for_sp_nonledger_update(const SpEnoteOriginS
     tools::for_all_in_map_erase_if(m_sp_contextual_enote_records,
             [&](const auto &mapped_contextual_enote_record) -> bool
             {
-                // remove all enotes with the specified origin status
-                if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status == nonledger_origin_status)
-                {
-                    tx_ids_of_removed_enotes.insert(
-                            mapped_contextual_enote_record.second.m_origin_context.m_transaction_id
-                        );
-                    return true;
-                }
+                // ignore enotes that don't have our specified origin status
+                if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status != nonledger_origin_status)
+                    return false;
 
-                return false;
+                tx_ids_of_removed_enotes.insert(
+                        mapped_contextual_enote_record.second.m_origin_context.m_transaction_id
+                    );
+
+                changes_inout.emplace_back(RemovedSpRecord{mapped_contextual_enote_record.first});
+
+                return true;
             }
         );
 
     // 2. clean maps for removed enotes
-    this->clean_maps_for_removed_sp_enotes(tx_ids_of_removed_enotes);
+    this->clean_maps_for_removed_sp_enotes(tx_ids_of_removed_enotes, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::clean_maps_for_sp_ledger_update(const std::uint64_t first_new_block)
+void SpEnoteStoreMockV1::clean_maps_for_sp_ledger_update(const std::uint64_t first_new_block,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. remove records
     std::unordered_set<rct::key> tx_ids_of_removed_enotes;  //note: only txs with selfsends are needed in practice
@@ -1084,6 +1174,7 @@ void SpEnoteStoreMockV1::clean_maps_for_sp_ledger_update(const std::uint64_t fir
                     tx_ids_of_removed_enotes.insert(
                             mapped_contextual_enote_record.second.m_origin_context.m_transaction_id
                         );
+                    changes_inout.emplace_back(RemovedSpRecord{mapped_contextual_enote_record.first});
                     return true;
                 }
 
@@ -1092,12 +1183,13 @@ void SpEnoteStoreMockV1::clean_maps_for_sp_ledger_update(const std::uint64_t fir
         );
 
     // 2. clean maps for removed enotes
-    this->clean_maps_for_removed_sp_enotes(tx_ids_of_removed_enotes);
+    this->clean_maps_for_removed_sp_enotes(tx_ids_of_removed_enotes, changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::add_record(const LegacyContextualIntermediateEnoteRecordV1 &new_record)
+void SpEnoteStoreMockV1::add_record(const LegacyContextualIntermediateEnoteRecordV1 &new_record,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // 1. if key image is known, promote to a full enote record
     if (m_tracked_legacy_onetime_address_duplicates.find(onetime_address_ref(new_record.m_record.m_enote)) !=
@@ -1128,7 +1220,7 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualIntermediateEnoteRecor
                 temp_full_record.m_record);
             temp_full_record.m_origin_context = new_record.m_origin_context;
 
-            this->add_record(temp_full_record);
+            this->add_record(temp_full_record, changes_inout);
             return;
         }
     }
@@ -1144,12 +1236,14 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualIntermediateEnoteRecor
     {
         // add new intermediate record
         m_legacy_intermediate_contextual_enote_records[new_record_identifier] = new_record;
+        changes_inout.emplace_back(NewLegacyIntermediateRecord{new_record_identifier});
     }
     else
     {
         // update intermediate record's origin context
-        try_update_enote_origin_context_v1(new_record.m_origin_context,
-            m_legacy_intermediate_contextual_enote_records[new_record_identifier].m_origin_context);
+        if (try_update_enote_origin_context_v1(new_record.m_origin_context,
+                m_legacy_intermediate_contextual_enote_records[new_record_identifier].m_origin_context))
+            changes_inout.emplace_back(UpdatedLegacyIntermediateOriginContext{new_record_identifier});
     }
 
     // 3. save to the legacy duplicate tracker
@@ -1159,7 +1253,8 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualIntermediateEnoteRecor
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_record)
+void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_record,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     rct::key new_record_identifier;
     get_legacy_enote_identifier(onetime_address_ref(new_record.m_record.m_enote),
@@ -1168,7 +1263,10 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_rec
 
     // 1. add the record or update an existing record's contexts
     if (m_legacy_contextual_enote_records.find(new_record_identifier) == m_legacy_contextual_enote_records.end())
+    {
         m_legacy_contextual_enote_records[new_record_identifier] = new_record;
+        changes_inout.emplace_back(NewLegacyRecord{new_record_identifier});
+    }
     else
     {
         update_contextual_enote_record_contexts_v1(new_record.m_origin_context,
@@ -1176,6 +1274,8 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_rec
                 m_legacy_contextual_enote_records[new_record_identifier].m_origin_context,
                 m_legacy_contextual_enote_records[new_record_identifier].m_spent_context
             );
+        changes_inout.emplace_back(UpdatedLegacySpentContext{new_record_identifier});
+        changes_inout.emplace_back(UpdatedLegacyOriginContext{new_record_identifier});
     }
 
     // 2. if this enote is located in the legacy key image tracker for seraphis txs, update with the tracker's spent
@@ -1186,6 +1286,7 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_rec
         // update the record's spent context
         try_update_enote_spent_context_v1(m_legacy_key_images_in_sp_selfsends.at(new_record.m_record.m_key_image),
             m_legacy_contextual_enote_records[new_record_identifier].m_spent_context);
+        //don't add change record: assume it would be redundant
 
         // note: do not reset the tracker's spent context here, the tracker is a helper cache for the scanning process
         //       and should only be mutated by that code
@@ -1201,6 +1302,7 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_rec
                 m_legacy_intermediate_contextual_enote_records.at(new_record_identifier).m_origin_context,
                 m_legacy_contextual_enote_records[new_record_identifier].m_origin_context
             );
+        //don't add change record: assume it would be redundant
     }
 
     // 4. there may be other full legacy enote records with this record's key image, use them to update the spent context
@@ -1215,11 +1317,13 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_rec
         try_update_enote_spent_context_v1(
             m_legacy_contextual_enote_records.at(legacy_enote_identifier).m_spent_context,
             m_legacy_contextual_enote_records[new_record_identifier].m_spent_context);
+        //don't add change record: assume it would be redundant
     }
 
     // 5. remove the intermediate record with this identifier (must do this before importing the key image, since
     //    the key image importer assumes the intermediate and full legacy maps don't have any overlap)
-    m_legacy_intermediate_contextual_enote_records.erase(new_record_identifier);
+    if (m_legacy_intermediate_contextual_enote_records.erase(new_record_identifier) > 0)
+        changes_inout.emplace_back(RemovedLegacyIntermediateRecord{new_record_identifier});
 
     // 6. save to the legacy duplicate tracker
     m_tracked_legacy_onetime_address_duplicates[onetime_address_ref(new_record.m_record.m_enote)]
@@ -1229,26 +1333,37 @@ void SpEnoteStoreMockV1::add_record(const LegacyContextualEnoteRecordV1 &new_rec
     m_legacy_key_images[new_record.m_record.m_key_image] = onetime_address_ref(new_record.m_record.m_enote);
 
     // 8. import this key image to force-promote all intermediate records with different identifiers to full records
-    this->try_import_legacy_key_image(new_record.m_record.m_key_image, onetime_address_ref(new_record.m_record.m_enote));
+    this->try_import_legacy_key_image(new_record.m_record.m_key_image,
+        onetime_address_ref(new_record.m_record.m_enote),
+        changes_inout);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
-void SpEnoteStoreMockV1::add_record(const SpContextualEnoteRecordV1 &new_record)
+void SpEnoteStoreMockV1::add_record(const SpContextualEnoteRecordV1 &new_record,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     const crypto::key_image &record_key_image{key_image_ref(new_record)};
 
     // add the record or update an existing record's contexts
     if (m_sp_contextual_enote_records.find(record_key_image) == m_sp_contextual_enote_records.end())
+    {
         m_sp_contextual_enote_records[record_key_image] = new_record;
+        changes_inout.emplace_back(NewSpRecord{record_key_image});
+    }
     else
+    {
         update_contextual_enote_record_contexts_v1(new_record, m_sp_contextual_enote_records[record_key_image]);
+        changes_inout.emplace_back(UpdatedSpSpentContext{record_key_image});
+        changes_inout.emplace_back(UpdatedSpOriginContext{record_key_image});
+    }
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_legacy_with_fresh_found_spent_key_images(
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     for (const auto &found_spent_key_image : found_spent_key_images)
     {
@@ -1282,6 +1397,8 @@ void SpEnoteStoreMockV1::update_legacy_with_fresh_found_spent_key_images(
                 found_spent_key_image.second,
                 m_legacy_contextual_enote_records[identifier_of_enote_to_update].m_origin_context,
                 m_legacy_contextual_enote_records[identifier_of_enote_to_update].m_spent_context);
+            changes_inout.emplace_back(UpdatedLegacySpentContext{identifier_of_enote_to_update});
+            changes_inout.emplace_back(UpdatedLegacyOriginContext{identifier_of_enote_to_update});
         }
     }
 }
@@ -1289,7 +1406,8 @@ void SpEnoteStoreMockV1::update_legacy_with_fresh_found_spent_key_images(
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::update_sp_with_fresh_found_spent_key_images(
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     for (const auto &found_spent_key_image : found_spent_key_images)
     {
@@ -1303,13 +1421,16 @@ void SpEnoteStoreMockV1::update_sp_with_fresh_found_spent_key_images(
             found_spent_key_image.second,
             m_sp_contextual_enote_records[found_spent_key_image.first].m_origin_context,
             m_sp_contextual_enote_records[found_spent_key_image.first].m_spent_context);
+        changes_inout.emplace_back(UpdatedSpSpentContext{found_spent_key_image.first});
+        changes_inout.emplace_back(UpdatedSpOriginContext{found_spent_key_image.first});
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
 // MOCK ENOTE STORE INTERNAL
 //-------------------------------------------------------------------------------------------------------------------
 void SpEnoteStoreMockV1::handle_legacy_key_images_from_sp_selfsends(
-    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends)
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends,
+    std::list<EnoteStoreChange> &changes_inout)
 {
     // handle each key image
     for (const auto &legacy_key_image_with_spent_context : legacy_key_images_in_sp_selfsends)
@@ -1322,14 +1443,16 @@ void SpEnoteStoreMockV1::handle_legacy_key_images_from_sp_selfsends(
                 continue;
 
             // b. update the spent context of this legacy enote
-            try_update_enote_spent_context_v1(legacy_key_image_with_spent_context.second,
-                mapped_contextual_enote_record.second.m_spent_context);
+            if (try_update_enote_spent_context_v1(legacy_key_image_with_spent_context.second,
+                    mapped_contextual_enote_record.second.m_spent_context))
+                changes_inout.emplace_back(UpdatedLegacySpentContext{mapped_contextual_enote_record.first});
         }
 
         // 2. save the key image's spent context in the tracker (or update an existing context)
         // note: these are always saved to help with reorg handling
         try_update_enote_spent_context_v1(legacy_key_image_with_spent_context.second,
             m_legacy_key_images_in_sp_selfsends[legacy_key_image_with_spent_context.first]);
+        //don't add change record: the m_legacy_key_images_in_sp_selfsends is an internal cache
     }
 }
 //-------------------------------------------------------------------------------------------------------------------

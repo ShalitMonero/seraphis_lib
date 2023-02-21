@@ -34,6 +34,7 @@
 
 //local headers
 #include "crypto/crypto.h"
+#include "enote_store_change_types.h"
 #include "seraphis_main/contextual_enote_record_types.h"
 
 //third party headers
@@ -84,23 +85,23 @@ public:
         const std::unordered_set<SpEnoteSpentStatus> &spent_statuses = {},
         const std::unordered_set<EnoteStoreBalanceUpdateExclusions> &exclusions = {}) const;
     /// get index of first block the enote store cares about
-    std::uint64_t legacy_refresh_index() const { return m_refresh_index; }
-    std::uint64_t sp_refresh_index() const { return std::max(m_refresh_index, m_first_sp_enabled_block_in_chain); }
+    std::uint64_t legacy_refresh_index() const { return m_refresh_index;                                              }
+    std::uint64_t sp_refresh_index()     const { return std::max(m_refresh_index, m_first_sp_enabled_block_in_chain); }
     /// get index of heighest recorded block (refresh index - 1 if no recorded blocks)
     std::uint64_t top_block_index() const;
     /// get index of heighest block that was legacy fullscanned (view-scan + comprehensive key image checks)
-    std::uint64_t top_legacy_fullscanned_block_index() const { return m_legacy_fullscan_index; }
+    std::uint64_t top_legacy_fullscanned_block_index()    const { return m_legacy_fullscan_index;    }
     /// get index of heighest block that was legacy partialscanned (view-scan only)
     std::uint64_t top_legacy_partialscanned_block_index() const { return m_legacy_partialscan_index; }
     /// get index of heighest block that was seraphis view-balance scanned
-    std::uint64_t top_sp_scanned_block_index() const { return m_sp_scanned_index; }
+    std::uint64_t top_sp_scanned_block_index()            const { return m_sp_scanned_index;         }
 
     /// try to get the recorded block id for a given index and specified scan mode
     /// note: during scanning, different scan modes are assumed to 'not see' block ids obtained by a different scan mode;
     ///       this is necessary to reliably recover from reorgs involving multiple scan modes
     bool try_get_block_id_for_legacy_partialscan(const std::uint64_t block_index, rct::key &block_id_out) const;
-    bool try_get_block_id_for_legacy_fullscan(const std::uint64_t block_index, rct::key &block_id_out) const;
-    bool try_get_block_id_for_sp(const std::uint64_t block_index, rct::key &block_id_out) const;
+    bool try_get_block_id_for_legacy_fullscan   (const std::uint64_t block_index, rct::key &block_id_out) const;
+    bool try_get_block_id_for_sp                (const std::uint64_t block_index, rct::key &block_id_out) const;
     /// try to get the recorded block id for a given index (checks legacy block ids then seraphis block ids)
     bool try_get_block_id(const std::uint64_t block_index, rct::key &block_id_out) const;
     /// check if any stored enote has a given key image
@@ -121,7 +122,9 @@ public:
     /// try to import a legacy key image
     /// PRECONDITION1: the legacy key image was computed from/for the input onetime address
     /// returns false if the onetime address is unknown (e.g. due to a reorg)
-    bool try_import_legacy_key_image(const crypto::key_image &legacy_key_image, const rct::key &onetime_address);
+    bool try_import_legacy_key_image(const crypto::key_image &legacy_key_image,
+        const rct::key &onetime_address,
+        std::list<EnoteStoreChange> &changes_inout);
     /// update the legacy fullscan index as part of a legacy key image import cycle
     void update_legacy_fullscan_index_for_import_cycle(const std::uint64_t saved_index);
 
@@ -129,43 +132,50 @@ public:
     /// WARNING: misuse of these will mess up the enote store's state (to recover: set index(s) below problem then
     //           rescan)
     /// note: to repair the enote store in case of an exception or other error during an update, save all of the last
-    ///       scanned indices from before the update, then reset the enote store with them on failure, and then re-scan
+    ///       scanned indices from before the update, reset the enote store with them (after the failure), and then re-scan
     ///       to repair
-    void set_last_legacy_fullscan_index(const std::uint64_t new_index);
+    void set_last_legacy_fullscan_index   (const std::uint64_t new_index);
     void set_last_legacy_partialscan_index(const std::uint64_t new_index);
-    void set_last_sp_scanned_index(const std::uint64_t new_index);
+    void set_last_sp_scanned_index        (const std::uint64_t new_index);
 
     /// update the store with legacy enote records and associated context
     void update_with_intermediate_legacy_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status,
         const std::unordered_map<rct::key, LegacyContextualIntermediateEnoteRecordV1> &found_enote_records,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
     void update_with_intermediate_legacy_records_from_ledger(const std::uint64_t first_new_block,
         const rct::key &alignment_block_id,
         const std::vector<rct::key> &new_block_ids,
         const std::unordered_map<rct::key, LegacyContextualIntermediateEnoteRecordV1> &found_enote_records,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
     void update_with_intermediate_legacy_found_spent_key_images(
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
     void update_with_legacy_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status,
         const std::unordered_map<rct::key, LegacyContextualEnoteRecordV1> &found_enote_records,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
     void update_with_legacy_records_from_ledger(const std::uint64_t first_new_block,
         const rct::key &alignment_block_id,
         const std::vector<rct::key> &new_block_ids,
         const std::unordered_map<rct::key, LegacyContextualEnoteRecordV1> &found_enote_records,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
 
     /// update the store with seraphis enote records and associated context
     void update_with_sp_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status,
         const std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1> &found_enote_records,
         const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends,
+        std::list<EnoteStoreChange> &changes_inout);
     void update_with_sp_records_from_ledger(const std::uint64_t first_new_block,
         const rct::key &alignment_block_id,
         const std::vector<rct::key> &new_block_ids,
         const std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1> &found_enote_records,
         const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends,
+        std::list<EnoteStoreChange> &changes_inout);
 
 private:
     /// balance helpers
@@ -185,52 +195,68 @@ private:
     /// update the store with a set of new block ids from the ledger
     void update_with_new_blocks_from_ledger_legacy_intermediate(const std::uint64_t first_new_block,
         const rct::key &alignment_block_id,
-        const std::vector<rct::key> &new_block_ids);
+        const std::vector<rct::key> &new_block_ids,
+        std::list<EnoteStoreChange> &changes_inout);
     void update_with_new_blocks_from_ledger_legacy_full(const std::uint64_t first_new_block,
         const rct::key &alignment_block_id,
-        const std::vector<rct::key> &new_block_ids);
+        const std::vector<rct::key> &new_block_ids,
+        std::list<EnoteStoreChange> &changes_inout);
     void update_with_new_blocks_from_ledger_sp(const std::uint64_t first_new_block,
         const rct::key &alignment_block_id,
-        const std::vector<rct::key> &new_block_ids);
+        const std::vector<rct::key> &new_block_ids,
+        std::list<EnoteStoreChange> &changes_inout);
 
     /// clean maps based on new legacy found spent key images
     void clean_maps_for_found_spent_legacy_key_images(
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
     /// clean maps based on details of removed legacy enotes
     void clean_maps_for_removed_legacy_enotes(
         const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
         const std::unordered_map<rct::key, std::unordered_set<rct::key>> &mapped_identifiers_of_removed_enotes,
         const std::unordered_map<rct::key, crypto::key_image> &mapped_key_images_of_removed_enotes,
-        const std::function<bool(const SpEnoteSpentContextV1&)> &spent_context_clearable_func);
+        const std::function<bool(const SpEnoteSpentContextV1&)> &spent_context_clearable_func,
+        std::list<EnoteStoreChange> &changes_inout);
     /// clean up legacy state to prepare for adding fresh legacy enotes and key images
     void clean_maps_for_legacy_nonledger_update(const SpEnoteOriginStatus nonledger_origin_status,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
     /// clean up legacy state to prepare for adding fresh legacy enotes and key images
     void clean_maps_for_legacy_ledger_update(const std::uint64_t first_new_block,
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
 
     /// clean maps based on tx ids of removed seraphis enotes
-    void clean_maps_for_removed_sp_enotes(const std::unordered_set<rct::key> &tx_ids_of_removed_enotes);
+    void clean_maps_for_removed_sp_enotes(const std::unordered_set<rct::key> &tx_ids_of_removed_enotes,
+        std::list<EnoteStoreChange> &changes_inout);
     /// clean up seraphis state to prepare for adding fresh non-ledger seraphis enotes and key images and legacy key images
-    void clean_maps_for_sp_nonledger_update(const SpEnoteOriginStatus nonledger_origin_status);
+    void clean_maps_for_sp_nonledger_update(const SpEnoteOriginStatus nonledger_origin_status,
+        std::list<EnoteStoreChange> &changes_inout);
     /// clean up seraphis state to prepare for adding fresh seraphis enotes and key images and legacy key images
-    void clean_maps_for_sp_ledger_update(const std::uint64_t first_new_block);
+    void clean_maps_for_sp_ledger_update(const std::uint64_t first_new_block,
+        std::list<EnoteStoreChange> &changes_inout);
 
     /// add a record
-    void add_record(const LegacyContextualIntermediateEnoteRecordV1 &new_record);
-    void add_record(const LegacyContextualEnoteRecordV1 &new_record);
-    void add_record(const SpContextualEnoteRecordV1 &new_record);
+    void add_record(const LegacyContextualIntermediateEnoteRecordV1 &new_record,
+        std::list<EnoteStoreChange> &changes_inout);
+    void add_record(const LegacyContextualEnoteRecordV1 &new_record,
+        std::list<EnoteStoreChange> &changes_inout);
+    void add_record(const SpContextualEnoteRecordV1 &new_record,
+        std::list<EnoteStoreChange> &changes_inout);
 
     /// update legacy state with fresh legacy key images that were found to be spent
     void update_legacy_with_fresh_found_spent_key_images(
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
     /// update seraphis state with fresh seraphis key images that were found to be spent
     void update_sp_with_fresh_found_spent_key_images(
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
+        std::list<EnoteStoreChange> &changes_inout);
 
     /// cache legacy key images obtained from seraphis selfsends (i.e. ALL legacy key images spent by user in seraphis txs)
     void handle_legacy_key_images_from_sp_selfsends(
-        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends);
+        const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends,
+        std::list<EnoteStoreChange> &changes_inout);
 
 //member variables
 protected:

@@ -114,13 +114,15 @@ void EnoteStoreUpdaterMockLegacyIntermediate::consume_nonledger_chunk(const SpEn
         found_spent_key_images);
 
     // 2. save the results
+    std::list<EnoteStoreChange> changes;
     if (m_legacy_scan_mode == LegacyScanMode::KEY_IMAGES_ONLY)
-        m_enote_store.update_with_intermediate_legacy_found_spent_key_images(found_spent_key_images);
+        m_enote_store.update_with_intermediate_legacy_found_spent_key_images(found_spent_key_images, changes);
     else
     {
         m_enote_store.update_with_intermediate_legacy_records_from_nonledger(nonledger_origin_status,
             found_enote_records,
-            found_spent_key_images);
+            found_spent_key_images,
+            changes);
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -148,15 +150,17 @@ void EnoteStoreUpdaterMockLegacyIntermediate::consume_onchain_chunk(
         found_spent_key_images);
 
     // 2. save the results
+    std::list<EnoteStoreChange> changes;
     if (m_legacy_scan_mode == LegacyScanMode::KEY_IMAGES_ONLY)
-        m_enote_store.update_with_intermediate_legacy_found_spent_key_images(found_spent_key_images);
+        m_enote_store.update_with_intermediate_legacy_found_spent_key_images(found_spent_key_images, changes);
     else
     {
         m_enote_store.update_with_intermediate_legacy_records_from_ledger(first_new_block,
             alignment_block_id,
             new_block_ids,
             found_enote_records,
-            found_spent_key_images);
+            found_spent_key_images,
+            changes);
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -209,9 +213,11 @@ void EnoteStoreUpdaterMockLegacy::consume_nonledger_chunk(const SpEnoteOriginSta
         found_spent_key_images);
 
     // 2. save the results
+    std::list<EnoteStoreChange> changes;
     m_enote_store.update_with_legacy_records_from_nonledger(nonledger_origin_status,
         found_enote_records,
-        found_spent_key_images);
+        found_spent_key_images,
+        changes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void EnoteStoreUpdaterMockLegacy::consume_onchain_chunk(
@@ -239,11 +245,13 @@ void EnoteStoreUpdaterMockLegacy::consume_onchain_chunk(
         found_spent_key_images);
 
     // 2. save the results
+    std::list<EnoteStoreChange> changes;
     m_enote_store.update_with_legacy_records_from_ledger(first_new_block,
         alignment_block_id,
         new_block_ids,
         found_enote_records,
-        found_spent_key_images);
+        found_spent_key_images,
+        changes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // Seraphis Intermediate
@@ -382,10 +390,12 @@ void EnoteStoreUpdaterMockSp::consume_nonledger_chunk(const SpEnoteOriginStatus 
         legacy_key_images_in_sp_selfsends);
 
     // 2. save the results
+    std::list<EnoteStoreChange> changes;
     m_enote_store.update_with_sp_records_from_nonledger(nonledger_origin_status,
         found_enote_records,
         found_spent_key_images,
-        legacy_key_images_in_sp_selfsends);
+        legacy_key_images_in_sp_selfsends,
+        changes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void EnoteStoreUpdaterMockSp::consume_onchain_chunk(
@@ -417,12 +427,14 @@ void EnoteStoreUpdaterMockSp::consume_onchain_chunk(
         legacy_key_images_in_sp_selfsends);
 
     // 2. save the results
+    std::list<EnoteStoreChange> changes;
     m_enote_store.update_with_sp_records_from_ledger(first_new_block,
         alignment_block_id,
         new_block_ids,
         found_enote_records,
         found_spent_key_images,
-        legacy_key_images_in_sp_selfsends);
+        legacy_key_images_in_sp_selfsends,
+        changes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace mocks
