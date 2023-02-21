@@ -71,6 +71,17 @@ struct LegacyBlocksDiff final
     std::uint64_t num_blocks_added;
 };
 
+/// blocks added from a seraphis intermediate scan update
+struct SpIntermediateBlocksDiff final
+{
+    /// old index of top sp-scanned block
+    std::uint64_t old_top_index;
+
+    /// range of new blocks added
+    std::uint64_t range_start_index;
+    std::uint64_t num_blocks_added;
+};
+
 /// blocks added from a seraphis scan update
 struct SpBlocksDiff final
 {
@@ -118,6 +129,12 @@ struct UpdatedLegacyOriginContext final
     rct::key identifier;
 };
 
+/// a seraphis intermediate record's origin context was updated
+struct UpdatedSpIntermediateOriginContext final
+{
+    rct::key onetime_address;
+};
+
 /// a seraphis record's origin context was updated
 struct UpdatedSpOriginContext final
 {
@@ -134,6 +151,12 @@ struct RemovedLegacyIntermediateRecord final
 struct RemovedLegacyRecord final
 {
     rct::key identifier;
+};
+
+/// a seraphis intermediate record was removed
+struct RemovedSpIntermediateRecord final
+{
+    rct::key onetime_address;
 };
 
 /// a seraphis record was removed
@@ -154,13 +177,28 @@ struct NewLegacyRecord final
     rct::key identifier;
 };
 
+/// a seraphis intermediate record was added
+struct NewSpIntermediateRecord final
+{
+    rct::key onetime_address;
+};
+
 /// a seraphis record was added
 struct NewSpRecord final
 {
     crypto::key_image key_image;
 };
 
-/// 
+/// a change in a seraphis payment validator enote store
+using SpPaymentValidatorStoreChange =
+    tools::variant<
+        SpIntermediateBlocksDiff,
+        UpdatedSpIntermediateOriginContext,
+        RemovedSpIntermediateRecord,
+        NewSpIntermediateRecord
+    >;
+
+/// a change in a generic enote store
 using EnoteStoreChange = 
     tools::variant<
         LegacyIntermediateBlocksDiff,

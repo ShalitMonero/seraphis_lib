@@ -304,7 +304,8 @@ void EnoteStoreUpdaterMockSpIntermediate::consume_nonledger_chunk(const SpEnoteO
         found_enote_records);
 
     // 2. save the results
-    m_enote_store.update_with_sp_records_from_nonledger(nonledger_origin_status, found_enote_records);
+    std::list<SpPaymentValidatorStoreChange> changes;
+    m_enote_store.update_with_sp_records_from_nonledger(nonledger_origin_status, found_enote_records, changes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void EnoteStoreUpdaterMockSpIntermediate::consume_onchain_chunk(
@@ -326,10 +327,12 @@ void EnoteStoreUpdaterMockSpIntermediate::consume_onchain_chunk(
         found_enote_records);
 
     // 2. save the results
+    std::list<SpPaymentValidatorStoreChange> changes;
     m_enote_store.update_with_sp_records_from_ledger(first_new_block,
         alignment_block_id,
         found_enote_records,
-        new_block_ids);
+        new_block_ids,
+        changes);
 }
 //-------------------------------------------------------------------------------------------------------------------
 // Seraphis

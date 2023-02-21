@@ -33,6 +33,7 @@
 
 //local headers
 #include "common/container_helpers.h"
+#include "enote_store_change_types.h"
 #include "misc_log_ex.h"
 #include "seraphis_core/legacy_enote_types.h"
 #include "seraphis_core/legacy_enote_utils.h"
@@ -92,6 +93,8 @@ static void update_block_ids_with_new_block_ids(const std::uint64_t first_allowe
     block_ids_inout.insert(block_ids_inout.end(), new_block_ids.begin(), new_block_ids.end());
 }
 //-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+
 //-------------------------------------------------------------------------------------------------------------------
 SpEnoteStoreMockV1::SpEnoteStoreMockV1(const std::uint64_t refresh_index,
     const std::uint64_t first_sp_enabled_block_in_chain,
