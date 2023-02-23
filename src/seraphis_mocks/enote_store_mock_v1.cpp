@@ -824,38 +824,42 @@ void SpEnoteStoreMockV1::clean_maps_for_found_spent_legacy_key_images(
     // - a fresh spent context for legacy key images implies seraphis txs were reorged; we want to guarantee that the
     //   fresh spent contexts are applied to our stored enotes, and doing this step achieves that
     // - save the key images removed so we can clear the corresponding spent contexts in the enote records
-    std::unordered_map<crypto::key_image, rct::key> spent_contexts_removed_from_sp_selfsends;
+    std::unordered_map<crypto::key_image, rct::key> spent_contexts_removed_from_sp_selfsends;  //[ KI : tx id ]
     for (const auto &found_spent_key_image : found_spent_key_images)
     {
+        // a. ignore key images not in the sp selfsend tracker
         if (m_legacy_key_images_in_sp_selfsends.find(found_spent_key_image.first) ==
             m_legacy_key_images_in_sp_selfsends.end())
             continue;
 
+        // b. record [ KI : tx id ] of spent key images found in the sp selfsend tracker
         spent_contexts_removed_from_sp_selfsends[found_spent_key_image.first] =
             m_legacy_key_images_in_sp_selfsends.at(found_spent_key_image.first).m_transaction_id;
 
+        // c. remove the entry from the sp selfsend tracker
         m_legacy_key_images_in_sp_selfsends.erase(found_spent_key_image.first);
     }
 
     // 2. clear spent contexts referencing legacy key images removed from the seraphis legacy key image tracker
     for (auto &mapped_contextual_enote_record : m_legacy_contextual_enote_records)
     {
-        // ignore legacy key images found in seraphis txs that still exist
+        // a. ignore legacy key images found in seraphis txs that still exist
         if (m_legacy_key_images_in_sp_selfsends.find(mapped_contextual_enote_record.second.m_record.m_key_image) !=
                 m_legacy_key_images_in_sp_selfsends.end())
             continue;
 
-        // clear spent contexts of key images removed from the seraphis selfsends tracker if the entries removed from the
-        //   tracker have the same transaction id (i.e. the spent context recorded next to the key image corresponds with
-        //   the removed tracker)
-        if (spent_contexts_removed_from_sp_selfsends.find(mapped_contextual_enote_record.second.m_record.m_key_image) !=
-                spent_contexts_removed_from_sp_selfsends.end() &&
-            spent_contexts_removed_from_sp_selfsends.at(mapped_contextual_enote_record.second.m_record.m_key_image) ==
-                mapped_contextual_enote_record.second.m_spent_context.m_transaction_id)
-        {
-            mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
-            changes_inout.emplace_back(ClearedLegacySpentContext{mapped_contextual_enote_record.first});
-        }
+        // b. clear spent contexts of key images removed from the seraphis selfsends tracker if the entries removed from
+        //   the tracker have the same transaction id (i.e. the spent context recorded next to the key image corresponds
+        //   with the removed tracker)
+        if (spent_contexts_removed_from_sp_selfsends.find(mapped_contextual_enote_record.second.m_record.m_key_image) ==
+                spent_contexts_removed_from_sp_selfsends.end())
+            continue;
+        if (!(spent_contexts_removed_from_sp_selfsends.at(mapped_contextual_enote_record.second.m_record.m_key_image) ==
+                mapped_contextual_enote_record.second.m_spent_context.m_transaction_id))
+            continue;
+
+        mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
+        changes_inout.emplace_back(ClearedLegacySpentContext{mapped_contextual_enote_record.first});
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -875,16 +879,16 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_legacy_enotes(
     //    is not in the seraphis legacy key image tracker
     for (auto &mapped_contextual_enote_record : m_legacy_contextual_enote_records)
     {
-        // ignore legacy key images found in seraphis txs that still exist
+        // a. ignore legacy key images found in seraphis txs that still exist
         if (m_legacy_key_images_in_sp_selfsends.find(mapped_contextual_enote_record.second.m_record.m_key_image) !=
                 m_legacy_key_images_in_sp_selfsends.end())
             continue;
 
-        // ignore spent contexts that aren't clearable according to the caller
+        // b. ignore spent contexts that aren't clearable according to the caller
         if (!spent_context_clearable_func(mapped_contextual_enote_record.second.m_spent_context))
             continue;
 
-        // clear spent contexts that point to txs that the enote store considers nonexistent
+        // c. clear spent contexts that point to txs that the enote store considers nonexistent
         mapped_contextual_enote_record.second.m_spent_context = SpEnoteSpentContextV1{};
         changes_inout.emplace_back(ClearedLegacySpentContext{mapped_contextual_enote_record.first});
     }
@@ -893,15 +897,18 @@ void SpEnoteStoreMockV1::clean_maps_for_removed_legacy_enotes(
     // a. onetime address duplicate tracker: remove identifiers of removed txs
     for (const auto &mapped_identifiers : mapped_identifiers_of_removed_enotes)
     {
+        // a. ignore unknown onetime addresses
         if (m_tracked_legacy_onetime_address_duplicates.find(mapped_identifiers.first) ==
             m_tracked_legacy_onetime_address_duplicates.end())
             continue;
 
+        // b. remove identifiers of removed enotes
         for (const rct::key &identifier_of_removed_enote : mapped_identifiers.second)
         {
             m_tracked_legacy_onetime_address_duplicates[mapped_identifiers.first].erase(identifier_of_removed_enote);
         }
 
+        // c. clean up empty entries in the duplicate tracker
         if (m_tracked_legacy_onetime_address_duplicates[mapped_identifiers.first].size() == 0)
             m_tracked_legacy_onetime_address_duplicates.erase(mapped_identifiers.first);
     }
@@ -934,14 +941,16 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_nonledger_update(const SpEnoteOri
     auto legacy_contextual_record_is_removable_func =
         [&](const auto &mapped_contextual_enote_record) -> bool
         {
-            // ignore enotes of unspecified origin
+            // a. ignore enotes of unspecified origin
             if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status != nonledger_origin_status)
                 return false;
 
+            // b. save identifiers of records to be removed
             mapped_identifiers_of_removed_enotes[
                     onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
                 ].insert(mapped_contextual_enote_record.first);
 
+            // c. remove the record
             return true;
         };
 
@@ -992,12 +1001,12 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_nonledger_update(const SpEnoteOri
         mapped_key_images_of_removed_enotes,
         [nonledger_origin_status](const SpEnoteSpentContextV1 &spent_context) -> bool
         {
-            // offchain check
+            // a. offchain check
             if (nonledger_origin_status == SpEnoteOriginStatus::OFFCHAIN &&
                 spent_context.m_spent_status == SpEnoteSpentStatus::SPENT_OFFCHAIN)
                 return true;
 
-            // unconfirmed check
+            // b. unconfirmed check
             if (nonledger_origin_status == SpEnoteOriginStatus::UNCONFIRMED &&
                 spent_context.m_spent_status == SpEnoteSpentStatus::SPENT_UNCONFIRMED)
                 return true;
@@ -1019,19 +1028,22 @@ void SpEnoteStoreMockV1::clean_maps_for_legacy_ledger_update(const std::uint64_t
     auto legacy_contextual_record_is_removable_func =
         [&](const auto &mapped_contextual_enote_record) -> bool
         {
-            // remove onchain enotes in range [first_new_block, end of chain]
-            if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status ==
-                    SpEnoteOriginStatus::ONCHAIN &&
-                mapped_contextual_enote_record.second.m_origin_context.m_block_index >= first_new_block)
-            {
-                mapped_identifiers_of_removed_enotes[
-                        onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
-                    ].insert(mapped_contextual_enote_record.first);
+            // a. ignore off-chain records
+            if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status !=
+                    SpEnoteOriginStatus::ONCHAIN)
+                return false;
 
-                return true;
-            }
+            // b. ignore onchain enotes outside of range [first_new_block, end of chain]
+            if (mapped_contextual_enote_record.second.m_origin_context.m_block_index < first_new_block)
+                return false;
 
-            return false;
+            // c. record the identifier of the enote being removed
+            mapped_identifiers_of_removed_enotes[
+                    onetime_address_ref(mapped_contextual_enote_record.second.m_record.m_enote)
+                ].insert(mapped_contextual_enote_record.first);
+
+            // d. remove the record
+            return true;
         };
 
     // a. legacy intermediate records
@@ -1140,16 +1152,19 @@ void SpEnoteStoreMockV1::clean_maps_for_sp_nonledger_update(const SpEnoteOriginS
     tools::for_all_in_map_erase_if(m_sp_contextual_enote_records,
             [&](const auto &mapped_contextual_enote_record) -> bool
             {
-                // ignore enotes that don't have our specified origin status
+                // a. ignore enotes that don't have our specified origin status
                 if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status != nonledger_origin_status)
                     return false;
 
+                // b. save the tx ids of records to be removed
                 tx_ids_of_removed_enotes.insert(
                         mapped_contextual_enote_record.second.m_origin_context.m_transaction_id
                     );
 
+                // c. record the onetime address of the record being removed
                 changes_inout.emplace_back(RemovedSpRecord{mapped_contextual_enote_record.first});
 
+                // d. remove the record
                 return true;
             }
         );
@@ -1169,19 +1184,25 @@ void SpEnoteStoreMockV1::clean_maps_for_sp_ledger_update(const std::uint64_t fir
     tools::for_all_in_map_erase_if(m_sp_contextual_enote_records,
             [&](const auto &mapped_contextual_enote_record) -> bool
             {
-                // remove onchain enotes in range [first_new_block, end of chain]
-                if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status ==
-                        SpEnoteOriginStatus::ONCHAIN &&
-                    mapped_contextual_enote_record.second.m_origin_context.m_block_index >= first_new_block)
-                {
-                    tx_ids_of_removed_enotes.insert(
-                            mapped_contextual_enote_record.second.m_origin_context.m_transaction_id
-                        );
-                    changes_inout.emplace_back(RemovedSpRecord{mapped_contextual_enote_record.first});
-                    return true;
-                }
+                // a. ignore off-chain records
+                if (mapped_contextual_enote_record.second.m_origin_context.m_origin_status !=
+                        SpEnoteOriginStatus::ONCHAIN)
+                    return false;
 
-                return false;
+                // b. ignore onchain enotes outside of range [first_new_block, end of chain]
+                if (mapped_contextual_enote_record.second.m_origin_context.m_block_index < first_new_block)
+                    return false;
+
+                // c. save tx ids of records to be removed
+                tx_ids_of_removed_enotes.insert(
+                        mapped_contextual_enote_record.second.m_origin_context.m_transaction_id
+                    );
+
+                // d. record the onetime address of the record being removed
+                changes_inout.emplace_back(RemovedSpRecord{mapped_contextual_enote_record.first});
+
+                // e. remove the record
+                return true;
             }
         );
 
