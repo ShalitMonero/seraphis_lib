@@ -33,6 +33,7 @@ set(seraphis_main_sources
   enote_record_utils_legacy.cpp
   enote_scanning.cpp
   enote_scanning_utils.cpp
+  sp_knowledge_proof_utils.cpp
   serialization_demo_utils.cpp
   tx_builder_types.cpp
   tx_builder_types_legacy.cpp
