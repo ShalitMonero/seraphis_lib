@@ -178,118 +178,6 @@ static void make_additional_output_special_self_send_v1(const jamtis::JamtisSelf
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void make_additional_output_dummy_v1(const OutputProposalSetExtraTypeV1 additional_output_type,
-    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
-    jamtis::JamtisPaymentProposalV1 &normal_proposal_out)
-{
-    // choose which output type to make, and make it
-    if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_DUMMY)
-    {
-        // normal dummy
-        // - 0 amount
-        make_additional_output_normal_dummy_v1(normal_proposal_out);
-    }
-    else if (additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_DUMMY)
-    {
-        // special dummy
-        // - 0 amount
-        // - shared enote ephemeral pubkey
-        make_additional_output_special_dummy_v1(first_enote_ephemeral_pubkey, normal_proposal_out);
-    }
-    else
-    {
-        CHECK_AND_ASSERT_THROW_MES(false, "Unknown output proposal set extra type (dummy).");
-    }
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static void make_additional_output_selfsend_v1(const OutputProposalSetExtraTypeV1 additional_output_type,
-    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
-    const jamtis::JamtisDestinationV1 &change_destination,
-    const jamtis::JamtisDestinationV1 &dummy_destination,
-    const crypto::secret_key &k_view_balance,
-    const rct::xmr_amount change_amount,
-    jamtis::JamtisPaymentProposalSelfSendV1 &selfsend_proposal_out)
-{
-    // choose which output type to make, and make it
-    if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_SELF_SEND_DUMMY)
-    {
-        // normal self-send dummy
-        // - 0 amount
-        make_additional_output_normal_self_send_v1(jamtis::JamtisSelfSendType::DUMMY,
-            dummy_destination,
-            0,
-            selfsend_proposal_out);
-    }
-    else if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_CHANGE)
-    {
-        // normal change
-        // - 'change' amount
-        make_additional_output_normal_self_send_v1(jamtis::JamtisSelfSendType::CHANGE,
-            change_destination,
-            change_amount,
-            selfsend_proposal_out);
-    }
-    else if (additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_SELF_SEND_DUMMY)
-    {
-        // special self-send dummy
-        // - 0 amount
-        // - shared enote ephemeral pubkey
-        make_additional_output_special_self_send_v1(jamtis::JamtisSelfSendType::DUMMY,
-            first_enote_ephemeral_pubkey,
-            dummy_destination,
-            k_view_balance,
-            0,
-            selfsend_proposal_out);
-    }
-    else if (additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_CHANGE)
-    {
-        // special change
-        // - 'change' amount
-        // - shared enote ephemeral pubkey
-        make_additional_output_special_self_send_v1(jamtis::JamtisSelfSendType::CHANGE,
-            first_enote_ephemeral_pubkey,
-            change_destination,
-            k_view_balance,
-            change_amount,
-            selfsend_proposal_out);
-    }
-    else
-    {
-        CHECK_AND_ASSERT_THROW_MES(false, "Unknown output proposal set extra type (self-send).");
-    }
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static void make_additional_output_v1(const jamtis::JamtisDestinationV1 &change_destination,
-    const jamtis::JamtisDestinationV1 &dummy_destination,
-    const crypto::secret_key &k_view_balance,
-    const rct::xmr_amount change_amount,
-    const OutputProposalSetExtraTypeV1 additional_output_type,
-    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
-    std::vector<jamtis::JamtisPaymentProposalV1> &normal_payment_proposals_inout,
-    std::vector<jamtis::JamtisPaymentProposalSelfSendV1> &selfsend_payment_proposals_inout)
-{
-    if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_DUMMY ||
-        additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_DUMMY)
-    {
-        make_additional_output_dummy_v1(additional_output_type,
-            first_enote_ephemeral_pubkey,
-            tools::add_element(normal_payment_proposals_inout));
-    }
-    else
-    {
-        make_additional_output_selfsend_v1(additional_output_type,
-            first_enote_ephemeral_pubkey,
-            change_destination,
-            dummy_destination,
-            k_view_balance,
-            change_amount,
-            tools::add_element(selfsend_payment_proposals_inout));
-    }
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
 void check_jamtis_payment_proposal_selfsend_semantics_v1(
     const jamtis::JamtisPaymentProposalSelfSendV1 &selfsend_payment_proposal,
     const rct::key &input_context,
@@ -668,6 +556,115 @@ boost::optional<OutputProposalSetExtraTypeV1> try_get_additional_output_type_for
     }
 
     return boost::none;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_additional_output_dummy_v1(const OutputProposalSetExtraTypeV1 additional_output_type,
+    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
+    jamtis::JamtisPaymentProposalV1 &normal_proposal_out)
+{
+    // choose which output type to make, and make it
+    if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_DUMMY)
+    {
+        // normal dummy
+        // - 0 amount
+        make_additional_output_normal_dummy_v1(normal_proposal_out);
+    }
+    else if (additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_DUMMY)
+    {
+        // special dummy
+        // - 0 amount
+        // - shared enote ephemeral pubkey
+        make_additional_output_special_dummy_v1(first_enote_ephemeral_pubkey, normal_proposal_out);
+    }
+    else
+    {
+        CHECK_AND_ASSERT_THROW_MES(false, "Unknown output proposal set extra type (dummy).");
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_additional_output_selfsend_v1(const OutputProposalSetExtraTypeV1 additional_output_type,
+    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
+    const jamtis::JamtisDestinationV1 &change_destination,
+    const jamtis::JamtisDestinationV1 &dummy_destination,
+    const crypto::secret_key &k_view_balance,
+    const rct::xmr_amount change_amount,
+    jamtis::JamtisPaymentProposalSelfSendV1 &selfsend_proposal_out)
+{
+    // choose which output type to make, and make it
+    if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_SELF_SEND_DUMMY)
+    {
+        // normal self-send dummy
+        // - 0 amount
+        make_additional_output_normal_self_send_v1(jamtis::JamtisSelfSendType::DUMMY,
+            dummy_destination,
+            0,
+            selfsend_proposal_out);
+    }
+    else if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_CHANGE)
+    {
+        // normal change
+        // - 'change' amount
+        make_additional_output_normal_self_send_v1(jamtis::JamtisSelfSendType::CHANGE,
+            change_destination,
+            change_amount,
+            selfsend_proposal_out);
+    }
+    else if (additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_SELF_SEND_DUMMY)
+    {
+        // special self-send dummy
+        // - 0 amount
+        // - shared enote ephemeral pubkey
+        make_additional_output_special_self_send_v1(jamtis::JamtisSelfSendType::DUMMY,
+            first_enote_ephemeral_pubkey,
+            dummy_destination,
+            k_view_balance,
+            0,
+            selfsend_proposal_out);
+    }
+    else if (additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_CHANGE)
+    {
+        // special change
+        // - 'change' amount
+        // - shared enote ephemeral pubkey
+        make_additional_output_special_self_send_v1(jamtis::JamtisSelfSendType::CHANGE,
+            first_enote_ephemeral_pubkey,
+            change_destination,
+            k_view_balance,
+            change_amount,
+            selfsend_proposal_out);
+    }
+    else
+    {
+        CHECK_AND_ASSERT_THROW_MES(false, "Unknown output proposal set extra type (self-send).");
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_additional_output_v1(const jamtis::JamtisDestinationV1 &change_destination,
+    const jamtis::JamtisDestinationV1 &dummy_destination,
+    const crypto::secret_key &k_view_balance,
+    const rct::xmr_amount change_amount,
+    const OutputProposalSetExtraTypeV1 additional_output_type,
+    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
+    std::vector<jamtis::JamtisPaymentProposalV1> &normal_payment_proposals_inout,
+    std::vector<jamtis::JamtisPaymentProposalSelfSendV1> &selfsend_payment_proposals_inout)
+{
+    if (additional_output_type == OutputProposalSetExtraTypeV1::NORMAL_DUMMY ||
+        additional_output_type == OutputProposalSetExtraTypeV1::SPECIAL_DUMMY)
+    {
+        make_additional_output_dummy_v1(additional_output_type,
+            first_enote_ephemeral_pubkey,
+            tools::add_element(normal_payment_proposals_inout));
+    }
+    else
+    {
+        make_additional_output_selfsend_v1(additional_output_type,
+            first_enote_ephemeral_pubkey,
+            change_destination,
+            dummy_destination,
+            k_view_balance,
+            change_amount,
+            tools::add_element(selfsend_payment_proposals_inout));
+    }
 }
 //-------------------------------------------------------------------------------------------------------------------
 void finalize_v1_output_proposal_set_v1(const boost::multiprecision::uint128_t &total_input_amount,

@@ -188,6 +188,24 @@ boost::optional<OutputProposalSetExtraTypeV1> try_get_additional_output_type_for
     const std::vector<jamtis::JamtisSelfSendType> &self_send_output_types,
     const bool output_ephemeral_pubkeys_are_unique,
     const rct::xmr_amount change_amount);
+void make_additional_output_dummy_v1(const OutputProposalSetExtraTypeV1 additional_output_type,
+    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
+    jamtis::JamtisPaymentProposalV1 &normal_proposal_out);  //exposed for unit testing
+void make_additional_output_selfsend_v1(const OutputProposalSetExtraTypeV1 additional_output_type,
+    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
+    const jamtis::JamtisDestinationV1 &change_destination,
+    const jamtis::JamtisDestinationV1 &dummy_destination,
+    const crypto::secret_key &k_view_balance,
+    const rct::xmr_amount change_amount,
+    jamtis::JamtisPaymentProposalSelfSendV1 &selfsend_proposal_out);  //exposed for unit testing
+void make_additional_output_v1(const jamtis::JamtisDestinationV1 &change_destination,
+    const jamtis::JamtisDestinationV1 &dummy_destination,
+    const crypto::secret_key &k_view_balance,
+    const rct::xmr_amount change_amount,
+    const OutputProposalSetExtraTypeV1 additional_output_type,
+    const crypto::x25519_pubkey &first_enote_ephemeral_pubkey,
+    std::vector<jamtis::JamtisPaymentProposalV1> &normal_payment_proposals_inout,
+    std::vector<jamtis::JamtisPaymentProposalSelfSendV1> &selfsend_payment_proposals_inout);  //exposed for unit testing
 void finalize_v1_output_proposal_set_v1(const boost::multiprecision::uint128_t &total_input_amount,
     const rct::xmr_amount transaction_fee,
     const jamtis::JamtisDestinationV1 &change_destination,

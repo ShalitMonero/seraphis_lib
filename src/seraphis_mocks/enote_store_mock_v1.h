@@ -107,9 +107,15 @@ public:
     /// check if any stored enote has a given key image
     bool has_enote_with_key_image(const crypto::key_image &key_image) const;
     /// get the legacy intermediate records
-    /// - useful for collecting their onetime addresses and viewkey extensions for key image recovery
+    /// - note: useful for collecting their onetime addresses and viewkey extensions for key image recovery
     const std::unordered_map<rct::key, LegacyContextualIntermediateEnoteRecordV1>& legacy_intermediate_records() const
     { return m_legacy_intermediate_contextual_enote_records; }
+    /// get the legacy full records
+    const std::unordered_map<rct::key, LegacyContextualEnoteRecordV1>& legacy_records() const
+    { return m_legacy_contextual_enote_records; }
+    /// get the seraphis records
+    const std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1>& sp_records() const
+    { return m_sp_contextual_enote_records; }
     /// try to get a legacy enote with a specified key image
     /// - will only return the highest-amount legacy enote among duplicates, and will return false if the
     ///   highest-amount legacy enote is currently in the intermediate records map

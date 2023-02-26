@@ -70,15 +70,12 @@
 #include "boost/multiprecision/cpp_int.hpp"
 #include "gtest/gtest.h"
 
-#include <memory>
-#include <tuple>
 #include <vector>
 
 using namespace sp;
 using namespace jamtis;
 using namespace sp::mocks;
 using namespace jamtis::mocks;
-
 
 //-------------------------------------------------------------------------------------------------------------------
 TEST(seraphis_integration, txtype_squashed_v1)

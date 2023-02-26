@@ -33,8 +33,9 @@
 #include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
-#include "seraphis_main/sp_knowledge_proof_types.h"
-#include "seraphis_main/sp_knowledge_proof_utils.h"
+#include "seraphis_core/binned_reference_set.h"
+#include "seraphis_core/binned_reference_set_utils.h"
+#include "seraphis_core/discretized_fee.h"
 #include "seraphis_core/jamtis_address_tag_utils.h"
 #include "seraphis_core/jamtis_address_utils.h"
 #include "seraphis_core/jamtis_core_utils.h"
@@ -46,37 +47,32 @@
 #include "seraphis_core/legacy_enote_utils.h"
 #include "seraphis_core/sp_core_enote_utils.h"
 #include "seraphis_core/sp_core_types.h"
-#include "seraphis_core/binned_reference_set.h"
-#include "seraphis_core/binned_reference_set_utils.h"
+#include "seraphis_core/tx_extra.h"
+#include "seraphis_crypto/sp_composition_proof.h"
+#include "seraphis_crypto/sp_crypto_utils.h"
+#include "seraphis_main/contextual_enote_record_types.h"
+#include "seraphis_main/contextual_enote_record_utils.h"
+#include "seraphis_main/enote_record_types.h"
+#include "seraphis_main/enote_record_utils.h"
+#include "seraphis_main/enote_scanning.h"
+#include "seraphis_main/enote_scanning_context_simple.h"
+#include "seraphis_main/sp_knowledge_proof_types.h"
+#include "seraphis_main/sp_knowledge_proof_utils.h"
 #include "seraphis_main/tx_builder_types.h"
 #include "seraphis_main/tx_builders_inputs.h"
 #include "seraphis_main/tx_builders_legacy_inputs.h"
 #include "seraphis_main/tx_builders_mixed.h"
 #include "seraphis_main/tx_builders_outputs.h"
 #include "seraphis_main/tx_component_types.h"
-#include "seraphis_main/contextual_enote_record_types.h"
-#include "seraphis_main/contextual_enote_record_utils.h"
-#include "seraphis_core/discretized_fee.h"
-#include "seraphis_main/enote_record_types.h"
-#include "seraphis_main/enote_record_utils.h"
-#include "seraphis_main/enote_scanning.h"
-#include "seraphis_main/enote_scanning_context_simple.h"
-#include "seraphis_core/tx_extra.h"
 #include "seraphis_main/tx_fee_calculator_squashed_v1.h"
 #include "seraphis_main/tx_input_selection.h"
 #include "seraphis_main/tx_input_selection_output_context_v1.h"
 #include "seraphis_main/txtype_squashed_v1.h"
-#include "seraphis_crypto/sp_composition_proof.h"
-#include "seraphis_crypto/sp_crypto_utils.h"
 #include "seraphis_mocks/seraphis_mocks.h"
 
 #include "boost/multiprecision/cpp_int.hpp"
 #include "gtest/gtest.h"
 
-#include <cstdint>
-#include <memory>
-#include <ostream>
-#include <tuple>
 #include <vector>
 
 using namespace sp;
@@ -85,8 +81,439 @@ using namespace sp::mocks;
 using namespace jamtis::mocks;
 using namespace sp::knowledge_proofs;
 
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void enote_knowledge_proofs_helper(const jamtis_mock_keys &keys,
+    const SpEnoteCore &enote_core,
+    const SpEnoteRecordV1 &enote_record,
+    const EnoteOwnershipProofV1 &sender_enote_ownership_proof)
+{
+    // 1. SENDER: validate the sender's enote ownership proof
+    ASSERT_TRUE(verify_enote_ownership_proof_v1(sender_enote_ownership_proof,
+        enote_core.m_amount_commitment,
+        enote_core.m_onetime_address));
+
+    // 2. RECIPIENT: enote ownership proof
+    EnoteOwnershipProofV1 enote_ownership_proof_recipient;
+    make_enote_ownership_proof_v1_receiver(enote_record, keys.K_1_base, keys.k_vb, enote_ownership_proof_recipient);
+
+    ASSERT_TRUE(verify_enote_ownership_proof_v1(enote_ownership_proof_recipient,
+        enote_core.m_amount_commitment,
+        enote_core.m_onetime_address));
+
+    // 3. SENDER/RECIPIENT: enote amount proof
+    EnoteAmountProofV1 enote_amount_proof;
+    make_enote_amount_proof_v1(enote_record.m_amount,
+        enote_record.m_amount_blinding_factor,
+        amount_commitment_ref(enote_record.m_enote),
+        enote_amount_proof);
+
+    ASSERT_TRUE(verify_enote_amount_proof_v1(enote_amount_proof, enote_core.m_amount_commitment));
+
+    // 4. RECIPIENT: enote key image proof
+    EnoteKeyImageProofV1 enote_key_image_proof;
+    make_enote_key_image_proof_v1(enote_record, keys.k_m, keys.k_vb, enote_key_image_proof);
+
+    ASSERT_TRUE(verify_enote_key_image_proof_v1(enote_key_image_proof,
+        enote_core.m_onetime_address,
+        enote_record.m_key_image));
+
+    // 5. RECIPIENT: enote unspent proof for random key image
+    const crypto::key_image random_key_image{rct::rct2ki(rct::pkGen())};
+
+    EnoteUnspentProofV1 enote_unspent_proof_valid;
+    make_enote_unspent_proof_v1(enote_record, keys.k_m, keys.k_vb, random_key_image, enote_unspent_proof_valid);
+
+    ASSERT_TRUE(verify_enote_unspent_proof_v1(enote_unspent_proof_valid,
+        enote_core.m_onetime_address,
+        random_key_image));
+
+    // 6. RECIPIENT: enote unspent proof for the enote's key image (should fail)
+    EnoteUnspentProofV1 enote_unspent_proof_invalid;
+    make_enote_unspent_proof_v1(enote_record,
+        keys.k_m,
+        keys.k_vb,
+        enote_record.m_key_image,
+        enote_unspent_proof_invalid);
+
+    ASSERT_FALSE(verify_enote_unspent_proof_v1(enote_unspent_proof_invalid,
+        enote_core.m_onetime_address,
+        enote_record.m_key_image));
+
+    // 7. SENDER: tx funded proof
+    TxFundedProofV1 tx_funded_proof;
+    make_tx_funded_proof_v1(rct::zero(), enote_record, keys.k_m, keys.k_vb, tx_funded_proof);  //with mock message
+
+    ASSERT_TRUE(verify_tx_funded_proof_v1(tx_funded_proof, rct::zero(), enote_record.m_key_image));
+
+    // 8. SENDER: enote sent proof
+    EnoteSentProofV1 enote_sent_proof;
+    make_enote_sent_proof_v1(sender_enote_ownership_proof, enote_amount_proof, enote_sent_proof);
+
+    ASSERT_TRUE(verify_enote_sent_proof_v1(enote_sent_proof,
+        enote_core.m_amount_commitment,
+        enote_core.m_onetime_address));
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
+static void reserve_proof_helper(const TxValidationContext &validation_context,
+    const jamtis_mock_keys &keys,
+    const SpEnoteStoreMockV1 &enote_store,
+    const boost::multiprecision::uint128_t expected_reserve_amount)
+{
+    // 1. get all of the user's enote records
+    std::vector<SpContextualEnoteRecordV1> all_enote_records;
+    all_enote_records.reserve(enote_store.sp_records().size());
+
+    for (const auto &enote_record : enote_store.sp_records())
+    {
+        all_enote_records.emplace_back(enote_record.second);
+    }
+
+    // 2. make a reserve proof for the user's full balance
+    ReserveProofV1 reserve_proof;
+    make_reserve_proof_v1(rct::zero(), all_enote_records, keys.K_1_base, keys.k_m,keys.k_vb, reserve_proof);
+
+    // 3. verify the reserve proof against the validation context
+    ASSERT_TRUE(verify_reserve_proof_v1(reserve_proof, rct::zero(), validation_context));
+
+    // 4. check the reserve amount
+    ASSERT_TRUE(expected_reserve_amount == total_reserve_amount(reserve_proof));
+}
+//-------------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------------
 
 //-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_knowledge_proofs, address_ownership_proof_K_s)
+{
+    // 1. prepare keys
+    jamtis_mock_keys keys;
+    make_jamtis_mock_keys(keys);
+
+    // 2. address ownership proof on K_s = k_vb X + k_m U
+    AddressOwnershipProofV1 proof;
+    make_address_ownership_proof_v1(rct::zero(), keys.k_m, keys.k_vb, proof);  //with mock message
+
+    // 3. validate the proof
+    ASSERT_TRUE(verify_address_ownership_proof_v1(proof, rct::zero(), keys.K_1_base));
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_knowledge_proofs, address_ownership_and_index_proof_K_1)
+{
+    // 1. prepare keys
+    jamtis_mock_keys keys;
+    make_jamtis_mock_keys(keys);
+
+    // 2. make random address index
+    const address_index_t j{gen_address_index()};
+
+    // 3. make jamtis destination
+    JamtisDestinationV1 destination;
+    make_jamtis_destination_v1(keys.K_1_base, keys.xK_ua, keys.xK_fr, keys.s_ga, j, destination);
+
+    // 4. address ownership proof on K_1
+    AddressOwnershipProofV1 address_ownership_proof;
+    make_address_ownership_proof_v1(rct::zero(), keys.k_m, keys.k_vb, j, address_ownership_proof);  //with mock message
+
+    // 5. validate the address ownership proof
+    ASSERT_TRUE(verify_address_ownership_proof_v1(address_ownership_proof, rct::zero(), destination.m_addr_K1));
+
+    // 6. address index proof on K_1
+    AddressIndexProofV1 address_index_proof;
+    make_address_index_proof_v1(keys.K_1_base, j, keys.s_ga, address_index_proof);
+
+    // 7. validate the address index proof
+    ASSERT_TRUE(verify_address_index_proof_v1(address_index_proof, destination.m_addr_K1));
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_knowledge_proofs, enote_proofs_selfsend_normal)
+{
+    /// send selfsend enote to user
+
+    // 1. user keys
+    jamtis_mock_keys keys;
+    make_jamtis_mock_keys(keys);
+
+    // 2. user address
+    const address_index_t j{gen_address_index()};
+    JamtisDestinationV1 user_address;
+
+    make_jamtis_destination_v1(keys.K_1_base,
+        keys.xK_ua,
+        keys.xK_fr,
+        keys.s_ga,
+        j,
+        user_address);
+
+    // 3. make a self-spend enote paying to address
+    const rct::xmr_amount amount{crypto::rand_idx<rct::xmr_amount>(0)};
+    const crypto::x25519_secret_key enote_privkey{crypto::x25519_secret_key_gen()};
+
+    const jamtis::JamtisSelfSendType self_send_type{JamtisSelfSendType::SELF_SPEND};
+    JamtisPaymentProposalSelfSendV1 payment_proposal_selfspend{user_address,
+        amount,
+        self_send_type,
+        enote_privkey};
+    SpOutputProposalV1 output_proposal;
+    make_v1_output_proposal_v1(payment_proposal_selfspend, keys.k_vb, rct::zero(), output_proposal);
+    SpEnoteV1 enote;
+    get_enote_v1(output_proposal, enote);
+
+    // 4. user recovers an enote record from the enote
+    SpEnoteRecordV1 enote_record;
+    ASSERT_TRUE(try_get_enote_record_v1(enote,
+        output_proposal.m_enote_ephemeral_pubkey,
+        rct::zero(),
+        keys.K_1_base,
+        keys.k_vb,
+        enote_record));
+
+    // 5. enote ownership proof: sender-selfsend
+    EnoteOwnershipProofV1 enote_ownership_proof_sender_selfsend;
+    make_enote_ownership_proof_v1_sender_selfsend(output_proposal.m_enote_ephemeral_pubkey,
+        user_address.m_addr_K1,
+        rct::zero(),
+        keys.k_vb,
+        self_send_type,
+        enote.m_core.m_amount_commitment,
+        enote.m_core.m_onetime_address,
+        enote_ownership_proof_sender_selfsend);
+
+    // 6. complete enote knowledge proof checks
+    enote_knowledge_proofs_helper(keys, enote.m_core, enote_record, enote_ownership_proof_sender_selfsend);
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_knowledge_proofs, enote_proofs_selfsend_special)
+{
+    /// send special selfsend enote to user
+    /// - for 2-out case where the selfsend enote shares its ephemeral pubkey with the other enote
+
+    // 1. user keys
+    jamtis_mock_keys keys;
+    make_jamtis_mock_keys(keys);
+
+    // 2. user address
+    const address_index_t j{gen_address_index()};
+    JamtisDestinationV1 user_address;
+
+    make_jamtis_destination_v1(keys.K_1_base,
+        keys.xK_ua,
+        keys.xK_fr,
+        keys.s_ga,
+        j,
+        user_address);
+
+    // 3. make a special change enote paying to address
+    const rct::xmr_amount amount{crypto::rand_idx<rct::xmr_amount>(0)};
+    const crypto::x25519_pubkey first_enote_ephemeral_pubkey{crypto::x25519_pubkey_gen()};
+
+    JamtisPaymentProposalSelfSendV1 payment_proposal_special_change;
+    make_additional_output_selfsend_v1(OutputProposalSetExtraTypeV1::SPECIAL_CHANGE,
+        first_enote_ephemeral_pubkey,
+        user_address,
+        user_address,
+        keys.k_vb,
+        amount,
+        payment_proposal_special_change);
+    SpOutputProposalV1 output_proposal;
+    make_v1_output_proposal_v1(payment_proposal_special_change, keys.k_vb, rct::zero(), output_proposal);
+    SpEnoteV1 enote;
+    get_enote_v1(output_proposal, enote);
+
+    // 4. user recovers an enote record from the enote
+    SpEnoteRecordV1 enote_record;
+    ASSERT_TRUE(try_get_enote_record_v1(enote,
+        output_proposal.m_enote_ephemeral_pubkey,
+        rct::zero(),
+        keys.K_1_base,
+        keys.k_vb,
+        enote_record));
+
+    // 5. enote ownership proof: sender-selfsend
+    EnoteOwnershipProofV1 enote_ownership_proof_sender_selfsend;
+    make_enote_ownership_proof_v1_sender_selfsend(output_proposal.m_enote_ephemeral_pubkey,
+        user_address.m_addr_K1,
+        rct::zero(),
+        keys.k_vb,
+        payment_proposal_special_change.m_type,
+        enote.m_core.m_amount_commitment,
+        enote.m_core.m_onetime_address,
+        enote_ownership_proof_sender_selfsend);
+
+    // 6. complete enote knowledge proof checks
+    enote_knowledge_proofs_helper(keys, enote.m_core, enote_record, enote_ownership_proof_sender_selfsend);
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_knowledge_proofs, enote_proofs_normal_enote)
+{
+    /// send normal enote to user
+
+    // 1. user keys
+    jamtis_mock_keys keys;
+    make_jamtis_mock_keys(keys);
+
+    // 2. user address
+    const address_index_t j{gen_address_index()};
+    JamtisDestinationV1 user_address;
+
+    make_jamtis_destination_v1(keys.K_1_base,
+        keys.xK_ua,
+        keys.xK_fr,
+        keys.s_ga,
+        j,
+        user_address);
+
+    // 3. make a plain enote paying to address
+    const rct::xmr_amount amount{crypto::rand_idx<rct::xmr_amount>(0)};
+    const crypto::x25519_secret_key enote_privkey{crypto::x25519_secret_key_gen()};
+
+    JamtisPaymentProposalV1 payment_proposal{user_address, amount, enote_privkey};
+    SpOutputProposalV1 output_proposal;
+    make_v1_output_proposal_v1(payment_proposal, rct::zero(), output_proposal);
+    SpEnoteV1 enote;
+    get_enote_v1(output_proposal, enote);
+
+    // 4. user recovers an enote record from the enote
+    SpEnoteRecordV1 enote_record;
+    ASSERT_TRUE(try_get_enote_record_v1(enote,
+        output_proposal.m_enote_ephemeral_pubkey,
+        rct::zero(),
+        keys.K_1_base,
+        keys.k_vb,
+        enote_record));
+
+    // 5. enote ownership proof: sender-plain
+    EnoteOwnershipProofV1 enote_ownership_proof_sender_plain;
+    make_enote_ownership_proof_v1_sender_plain(payment_proposal.m_enote_ephemeral_privkey,
+        user_address,
+        rct::zero(),
+        enote.m_core.m_amount_commitment,
+        enote.m_core.m_onetime_address,
+        enote_ownership_proof_sender_plain);
+
+    // 6. complete enote knowledge proof checks
+    enote_knowledge_proofs_helper(keys, enote.m_core, enote_record, enote_ownership_proof_sender_plain);
+}
+//-------------------------------------------------------------------------------------------------------------------
+TEST(seraphis_knowledge_proofs, reserve_proof)
+{
+    //// send funds back and forth between two users, then each user makes a reserve proof
+
+    /// config
+    const std::size_t max_inputs{1000};
+    const std::size_t fee_per_tx_weight{1};
+    const std::size_t legacy_ring_size{2};
+    const std::size_t ref_set_decomp_n{2};
+    const std::size_t ref_set_decomp_m{2};
+
+    const RefreshLedgerEnoteStoreConfig refresh_config{
+            .m_reorg_avoidance_depth = 1,
+            .m_max_chunk_size = 1,
+            .m_max_partialscan_attempts = 0
+        };
+
+    const FeeCalculatorMockTrivial fee_calculator;  //trivial calculator for easy fee (fee = fee/weight * 1 weight)
+
+    const SpBinnedReferenceSetConfigV1 bin_config{
+            .m_bin_radius = 1,
+            .m_num_bin_members = 2
+        };
+
+    /// mock ledger context for this test
+    MockLedgerContext ledger_context{0, 10000};
+
+
+    /// prepare for membership proofs
+    // a. add enough fake enotes to the ledger so we can reliably make seraphis membership proofs
+    std::vector<rct::xmr_amount> fake_sp_enote_amounts(
+            static_cast<std::size_t>(compute_bin_width(bin_config.m_bin_radius)),
+            0
+        );
+    JamtisDestinationV1 fake_destination;
+    fake_destination = gen_jamtis_destination_v1();
+
+    send_sp_coinbase_amounts_to_user(fake_sp_enote_amounts, fake_destination, ledger_context);
+
+
+    /// make two users
+
+    // a. user keys
+    jamtis_mock_keys user_keys_A;
+    jamtis_mock_keys user_keys_B;
+    make_jamtis_mock_keys(user_keys_A);
+    make_jamtis_mock_keys(user_keys_B);
+
+    // b. seraphis user addresses
+    JamtisDestinationV1 destination_A;
+    JamtisDestinationV1 destination_B;
+    make_random_address_for_user(user_keys_A, destination_A);
+    make_random_address_for_user(user_keys_B, destination_B);
+
+    // c. user enote stores (refresh index = 0; seraphis initial block = 0; default spendable age = 0)
+    SpEnoteStoreMockV1 enote_store_A{0, 0, 0};
+    SpEnoteStoreMockV1 enote_store_B{0, 0, 0};
+
+    // d. user input selectors
+    const InputSelectorMockV1 input_selector_A{enote_store_A};
+    const InputSelectorMockV1 input_selector_B{enote_store_B};
+
+
+    /// initial funding for user A: seraphis 40
+    send_sp_coinbase_amounts_to_user({10, 10, 10, 10}, destination_A, ledger_context);
+
+
+    /// send funds back and forth between users
+
+    // A -> B: 30 (fee: 1)
+    refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
+    ASSERT_TRUE(enote_store_A.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 40);
+    transfer_funds_single_mock_v1(legacy_mock_keys{},
+        user_keys_A,
+        input_selector_A,
+        fee_calculator,
+        fee_per_tx_weight,
+        max_inputs,
+        {{30, destination_B, TxExtra{}}},
+        legacy_ring_size,
+        ref_set_decomp_n,
+        ref_set_decomp_m,
+        bin_config,
+        ledger_context);
+
+    // B -> A: 20 (fee: 1)
+    refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
+    ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 30);
+    transfer_funds_single_mock_v1(legacy_mock_keys{},
+        user_keys_B,
+        input_selector_B,
+        fee_calculator,
+        fee_per_tx_weight,
+        max_inputs,
+        {{20, destination_A, TxExtra{}}},
+        legacy_ring_size,
+        ref_set_decomp_n,
+        ref_set_decomp_m,
+        bin_config,
+        ledger_context);
+
+    // refresh user stores
+    refresh_user_enote_store(user_keys_A, refresh_config, ledger_context, enote_store_A);
+    refresh_user_enote_store(user_keys_B, refresh_config, ledger_context, enote_store_B);
+    ASSERT_TRUE(enote_store_A.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 29);
+    ASSERT_TRUE(enote_store_B.get_balance({SpEnoteOriginStatus::ONCHAIN},
+        {SpEnoteSpentStatus::SPENT_ONCHAIN}) == 9);
+
+    // make and validate their reserve proofs
+    const TxValidationContextMock tx_validation_context{ledger_context};
+
+    reserve_proof_helper(tx_validation_context, user_keys_A, enote_store_A, 29);
+    reserve_proof_helper(tx_validation_context, user_keys_B, enote_store_B, 9);
+}
+//-------------------------------------------------------------------------------------------------------------------
+/*
 TEST(seraphis_knowledge_proofs, sp_all_knowledge_proofs)
 {
     //// demo of sending and receiving SpTxTypeSquashedV1 transactions (WIP)
@@ -506,4 +933,5 @@ TEST(seraphis_knowledge_proofs, sp_all_knowledge_proofs)
         }
     }
 }
+*/
 //-------------------------------------------------------------------------------------------------------------------

@@ -217,7 +217,7 @@ void make_matrix_proof(const rct::key &message,
     }
 
 
-    /// signature openers: alpha * {G}
+    /// signature openers: alpha * {B}
     const crypto::secret_key alpha{rct::rct2sk(rct::skGen())};
     rct::keyV alpha_pubs;
     alpha_pubs.reserve(num_basekeys);

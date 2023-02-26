@@ -37,6 +37,7 @@
 //standard headers
 #include <cstdint>
 #include <cstddef>
+#include <functional>
 
 //forward declarations
 
@@ -144,3 +145,27 @@ bool try_get_jamtis_self_send_type(const JamtisEnoteType enote_type, JamtisSelfS
 
 } //namespace jamtis
 } //namespace sp
+
+/// make jamtis address index hashable
+namespace sp
+{
+namespace jamtis
+{
+static_assert(sizeof(std::size_t) <= sizeof(address_index_t), "");
+inline std::size_t hash_value(const address_index_t &_v)
+{
+    return reinterpret_cast<const std::size_t&>(_v);
+}
+} //namespace jamtis
+} //namespace sp
+namespace std
+{
+template<>
+struct hash<sp::jamtis::address_index_t>
+{
+    std::size_t operator()(const sp::jamtis::address_index_t &_v) const
+    {
+        return reinterpret_cast<const std::size_t&>(_v);
+    }
+};
+} //namespace std

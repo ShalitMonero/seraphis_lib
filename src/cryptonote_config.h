@@ -283,10 +283,9 @@ namespace config
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_COINBASE_V1[] = "sp_txtype_coinbase_v1";
   const constexpr char HASH_KEY_SERAPHIS_TRANSACTION_TYPE_SQUASHED_V1[] = "sp_txtype_squashed_v1";
 
-  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_MESSAGE_V1[] = "sp_seraphis_knowledge_proofs_message_v1";
-  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_MESSAGE_V2[] = "sp_seraphis_knowledge_proofs_message_v2";
-  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_MESSAGE_V3[] = "sp_seraphis_knowledge_proofs_message_v3";
-  const constexpr char HASH_KEY_SERAPHIS_KNOWLEDGE_PROOFS_OFFSET_V1[] = "sp_seraphis_knowledge_proofs_offset_v1";
+  const constexpr char HASH_KEY_SERAPHIS_ADDRESS_OWNERSHIP_PROOF_OFFSET_V1[] = "sp_address_ownership_proof_offset_v1";
+  const constexpr char HASH_KEY_SERAPHIS_ENOTE_KEY_IMAGE_PROOF_MESSAGE_V1[] = "sp_enote_key_image_proof_message_v1";
+  const constexpr char HASH_KEY_SERAPHIS_ENOTE_UNSPENT_PROOF_MESSAGE_V1[] = "sp_enote_unspent_proof_message_v1";
 
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT[] = "bpp2_transcript";
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT_UPDATE[] = "bpp2_tupdate";

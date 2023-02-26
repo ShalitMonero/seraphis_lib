@@ -102,7 +102,7 @@ void make_jamtis_input_context_standard(const std::vector<crypto::key_image> &le
 *    q = H_32(xK_d, xK_e, input_context)
 * param: sender_receiver_DH_derivation - xK_d = xr xK_2 = k_fr xK_e
 * param: enote_ephemeral_pubkey - xK_e
-* param: input_context - [normal: H_32({legacy KI}, {seraphis KI}); coinbase: H_32(block height)]
+* param: input_context - [normal: H_32({legacy KI}, {seraphis KI})] [coinbase: H_32(block height)]
 * outparam: sender_receiver_secret_out - q
 *   - note: this is 'rct::key' instead of 'crypto::secret_key' for better performance in multithreaded environments
 */
@@ -114,9 +114,9 @@ void make_jamtis_sender_receiver_secret_plain(const crypto::x25519_pubkey &sende
 * brief: make_jamtis_sender_receiver_secret_plain - sender-receiver secret q for a normal enote
 *    q = H_32(xr * xk_fr * xG, input_context) => H_32(privkey * DH_key, input_context)
 * param: privkey - [sender: xr] [recipient: xk_fr]
-* param: DH_key - [sender: xK_2] [sender-selfsend-2out: xk_fr * xK_3_other] [recipient: xK_e = xr xK_3]
+* param: DH_key - [sender: xK_2] [recipient: xK_e = xr xK_3]
 * param: enote_ephemeral_pubkey - xK_e
-* param: input_context - [normal: H_32({legacy KI}, {seraphis KI}); coinbase: H_32(block height)]
+* param: input_context - [normal: H_32({legacy KI}, {seraphis KI})] [coinbase: H_32(block height)]
 * outparam: sender_receiver_secret_out - q
 *   - note: this is 'rct::key' instead of 'crypto::secret_key' for better performance in multithreaded environments
 */
@@ -130,7 +130,7 @@ void make_jamtis_sender_receiver_secret_plain(const crypto::x25519_secret_key &p
 *    q = H_32[k_vb](xK_e, input_context)
 * param: k_view_balance - k_vb
 * param: enote_ephemeral_pubkey - xK_e
-* param: input_context - [normal: H_32({legacy KI}, {seraphis KI}); coinbase: H_32(block height)]
+* param: input_context - [normal: H_32({legacy KI}, {seraphis KI})] [coinbase: H_32(block height)]
 * param: self_send_type - type of the self-send enote, used to select the domain separator
 * outparam: sender_receiver_secret_out - q
 *   - note: this is 'rct::key' instead of 'crypto::secret_key' for better performance in multithreaded environments
