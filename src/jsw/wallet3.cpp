@@ -38,13 +38,16 @@
 #include "common/password.h"
 #include "common/scoped_message_writer.h"
 #include "console_handler.h"
+#include "contextual_enote_record_types.h"
 #include "crypto/chacha.h"
+#include "jsw/transaction_history_component.h"
 #include "key_container.h"
 #include "misc_log_ex.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "ringct/rctTypes.h"
+#include "seraphis_core/discretized_fee.h"
 #include "seraphis_core/jamtis_destination.h"
 #include "seraphis_mocks/jamtis_mock_keys.h"
 #include "serialization/binary_utils.h"
@@ -58,6 +61,7 @@
 #include "seraphis_main/enote_scanning.h"
 #include "seraphis_main/enote_scanning_context_simple.h"
 #include "seraphis_mocks/seraphis_mocks.h"
+#include "txtype_squashed_v1.h"
 
 extern "C"
 {
@@ -98,8 +102,9 @@ static const std::string ASCII_OUTPUT_MAGIC = "MoneroAsciiDataV1";
 #define PRINT_USAGE(usage_help) fail_msg_writer() << boost::format(tr("usage: %s")) % usage_help;
 
 const char *USAGE_SHOW_BALANCE("balance [detail]");
-const char *USAGE_SHOW_TRANSFER("transfer <address> <amount>");
+const char *USAGE_SHOW_TRANSFER("show_transfer <txid>");
 const char *USAGE_SHOW_VIEWBALANCE("save_viewbalance");
+const char *USAGE_SHOW_ADDRESS("address");
 
 int main(int argc, char *argv[])
 {
@@ -145,13 +150,23 @@ wallet3::wallet3()
     m_cmd_binder.set_handler("save_viewbalance",
                              boost::bind(&wallet3::on_command, this, &wallet3::save_viewbalance, _1),
                              tr(USAGE_SHOW_VIEWBALANCE), tr("Create a viewbalance wallet from a master wallet."));
-    m_cmd_binder.set_handler("transfer", boost::bind(&wallet3::on_command, this, &wallet3::transfer, _1),
+    m_cmd_binder.set_handler("transfer", boost::bind(&wallet3::on_command, this, &wallet3::transfer_mock_v1, _1),
                              tr(USAGE_SHOW_TRANSFER), tr("Transfer <address> <amount>."));
     m_cmd_binder.set_handler("balance", boost::bind(&wallet3::on_command, this, &wallet3::show_balance, _1),
                              tr(USAGE_SHOW_BALANCE),
                              tr("Show the wallet's balance of the currently selected account."));
+    m_cmd_binder.set_handler("address", boost::bind(&wallet3::on_command, this, &wallet3::show_address, _1),
+                             tr(USAGE_SHOW_ADDRESS),
+                             tr("Show the wallet's address of the currently selected account."));
+    m_cmd_binder.set_handler("show_transfer", boost::bind(&wallet3::on_command, this, &wallet3::show_transfer, _1),
+                             tr(USAGE_SHOW_TRANSFER),
+                             tr("Show information about a specific transfer or the last transfers."));
     m_cmd_binder.set_handler("create_money", boost::bind(&wallet3::on_command, this, &wallet3::create_money, _1),
                              tr("Create fake enotes for wallets."));
+
+    m_cmd_binder.set_handler("fake", boost::bind(&wallet3::on_command, this, &wallet3::fake_txs, _1),
+                             tr("Add fake txs."), tr("Add fake txs"));
+
     m_cmd_binder.set_unknown_command_handler(boost::bind(&wallet3::on_command, this, &wallet3::on_unknown_command, _1));
     m_cmd_binder.set_empty_command_handler(boost::bind(&wallet3::on_empty_command, this));
     m_cmd_binder.set_cancel_handler(boost::bind(&wallet3::on_cancelled_command, this));
@@ -937,15 +952,6 @@ bool wallet3::create_money(const std::vector<std::string> &args)
     else
     {
         m_key_container.get_destination_from_str(local_args[0], destination_address);
-        // std::cout << "Destination K1: " << destination_address.m_addr_K1 <<
-        // std::endl; std::cout << "K_1: "<< destination_address.m_addr_K1 <<
-        // std::endl; std::cout << "K_2: " <<
-        // epee::string_tools::pod_to_hex(destination_address.m_addr_K2) <<
-        // std::endl; std::cout << "K_3: " <<
-        // epee::string_tools::pod_to_hex(destination_address.m_addr_K3) <<
-        // std::endl; std::cout << "t: " <<
-        // epee::string_tools::pod_to_hex(destination_address.m_addr_tag) <<
-        // std::endl;
     }
 
     const RefreshLedgerEnoteStoreConfig refresh_config{
@@ -973,8 +979,146 @@ bool wallet3::show_balance(const std::vector<std::string> &args)
     return true;
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet3::transfer(const std::vector<std::string> &args)
+bool wallet3::show_address(const std::vector<std::string> &args)
 {
+    tools::msg_writer() << tr("Wallet address: ");
+    tools::msg_writer() << get_public_address_w3(m_key_container);
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
+void wallet3::refresh_enote_store()
+{
+    const RefreshLedgerEnoteStoreConfig refresh_config{
+        .m_reorg_avoidance_depth = 1, .m_max_chunk_size = 1, .m_max_partialscan_attempts = 0};
+
+    refresh_user_enote_store(m_key_container.get_keys_sp(), refresh_config, m_ledger_context, m_enote_store);
+}
+//----------------------------------------------------------------------------------------------------
+void wallet3::refresh_transaction_history()
+{
+    // Update Transaction history component
+}
+
+//----------------------------------------------------------------------------------------------------
+bool wallet3::show_transfer(const std::vector<std::string> &args)
+{
+
+    // Refresh enote_store
+    refresh_enote_store();
+
+    // No arguments provided. Show last transfer
+    if (args.size() == 0)
+    {
+        // Show last transactions
+        tools::msg_writer() << tr("Last transactions: ");
+
+        for (const auto &tx : m_thm.tx_history_manager)
+        {
+            std::string destinations = "-";
+            if (!tx.dest_amount.empty())
+            {
+                destinations = "";
+                for (const auto &output : tx.dest_amount)
+                {
+                    if (!destinations.empty()) destinations += ", ";
+
+                    destinations += (output.first) + ":" + std::to_string(output.second);
+                }
+            }
+
+            auto formatter = boost::format("%s %s %s %s");
+
+            message_writer(console_color_default, false) << formatter % tx.txid % "out" % tx.fee % destinations;
+        }
+        return true;
+    }
+
+    // Show info about specific transaction
+    if (args.size() == 1)
+    {
+        auto pred = [args](const transaction_out &tx_out)
+        { return epee::string_tools::pod_to_hex(tx_out.txid) == args[0]; };
+
+        std::vector<transaction_out>::iterator it =
+            std::find_if(std::begin(m_thm.tx_history_manager), std::end(m_thm.tx_history_manager), pred);
+        {
+            if (it != std::end(m_thm.tx_history_manager))
+            {
+                // Found tx_id
+                message_writer() << "Transaction " << args[0] << " was found: ";
+                message_writer() << "<Tx_id>,<direction>,<fee>,<destination>:<amount>";
+
+                std::string destinations = "";
+                for (const auto &output : it->dest_amount)
+                {
+                    if (!destinations.empty()) destinations += ", ";
+
+                    destinations += (output.first) + ":" + std::to_string(output.second);
+                }
+
+                auto formatter = boost::format("%s %s %s %s");
+
+                message_writer() << "Transaction " << args[0] << " was found: ";
+                message_writer() << "<Tx_id>,<direction>,<fee>,<destination>:<amount>";
+                message_writer(console_color_default, false) << formatter % it->txid % "out" % it->fee % destinations;
+
+                message_writer() << "Enotes consumed: ";
+                message_writer() << "<Key image>,<amount>";
+                std::string enotes_consumed;
+                for (auto enote_consumed : it->sp_enote_records)
+                {
+                    enotes_consumed = epee::string_tools::pod_to_hex(enote_consumed.m_record.m_key_image) +
+                                      std::to_string(enote_consumed.m_record.m_amount);
+                    message_writer(console_color_default, false) << enotes_consumed;
+                }
+            }
+            else
+            {
+                // Tx not found
+                message_writer() << "Transaction " << args[0] << " not found.";
+                return true;
+            }
+        }
+    }
+
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::try_add_tx_to_tx_history(const rct::key &tx_id, const SpTxSquashedV1 tx,
+                                       const std::vector<std::pair<std::string, rct::xmr_amount>> &dest)
+{
+    /// Try to fill transaction history for Seraphis
+    transaction_out tx_out{};
+
+    // 1. General Info about tx
+    tx_out.txid = tx_id;
+    try_get_fee_value(tx.m_tx_fee, tx_out.fee);
+
+    // 2. Network data
+    // Connection to daemon?
+
+    // 3. Enotes consumed in the tx
+    SpContextualEnoteRecordV1 temp_sp_enote_records{};
+    for (const auto &sp_input_enotes : tx.m_sp_input_images)
+    {
+        // temp_sp_enote_records
+        m_enote_store.try_get_sp_enote_record(sp_input_enotes.m_core.m_key_image, temp_sp_enote_records);
+        tx_out.sp_enote_records.push_back(temp_sp_enote_records);
+    }
+
+    // 4. Destination and decoys used
+    tx_out.dest_amount = dest;
+
+    // 5. Add transaction history to transaction history manager
+    m_thm.tx_history_manager.push_back(tx_out);
+
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::transfer_mock_v1(const std::vector<std::string> &args)
+{
+    // TODO: case: transfer address1 amount1 address2 amount2 ...
+
     std::vector<std::string> local_args = args;
 
     JamtisDestinationV1 destination_address;
@@ -986,17 +1130,16 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 
     m_key_container.get_destination_from_str(local_args[0], destination_address);
     rct::xmr_amount amount{std::stoull(local_args[1])};
-    // cryptonote::parse_amount(amount,local_args[1]);
 
-    // Data for transfer
     const RefreshLedgerEnoteStoreConfig refresh_config{
         .m_reorg_avoidance_depth = 1, .m_max_chunk_size = 1, .m_max_partialscan_attempts = 0};
 
     refresh_user_enote_store(m_key_container.get_keys_sp(), refresh_config, m_ledger_context, m_enote_store);
+
     auto balance = m_enote_store.get_balance({SpEnoteOriginStatus::ONCHAIN}, {SpEnoteSpentStatus::SPENT_ONCHAIN});
     if (amount >= balance)
     {
-        tools::fail_msg_writer() << tr("Fail. You are trying to spend more than your available balance.");
+        tools::fail_msg_writer() << tr("Failed. You are trying to spend more than you have in your balance.");
         return true;
     }
 
@@ -1035,12 +1178,14 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 
     rct::key tx_id;
     get_sp_tx_squashed_v1_txid(single_tx, tx_id);
+    message_writer() << tr("Transaction ") << epee::string_tools::pod_to_hex(tx_id) << tr(" submitted to network.");
 
-    tools::msg_writer() << tr("Transaction ") << epee::string_tools::pod_to_hex(tx_id) << tr(" submitted to network.");
+    // Try adding tx to transaction history component
+    try_add_tx_to_tx_history(tx_id, single_tx, {{args[0], amount}});
 
     return true;
 }
-
+//----------------------------------------------------------------------------------------------------
 bool wallet3::help(const std::vector<std::string> &args)
 {
     if (args.empty())
@@ -1053,8 +1198,35 @@ bool wallet3::help(const std::vector<std::string> &args)
         message_writer() << tr("\"create_money \" - Creates 5 enotes of 1000 each to own wallet.");
         message_writer() << tr("\"transfer <address> <amount>\" - Send XMR to an address.");
         message_writer() << tr("\"balance\" - Show balance.");
+        message_writer() << tr("\"address\" - Show address.");
+        message_writer() << tr("\"show_transfers\" - Show transfers.");
+        message_writer() << tr("\"fake_txs\" - TEMPORARY for creating mock txs.");
         message_writer() << tr("\"save_viewbalance\" - Save view-balance wallet.");
     }
     return true;
 }
+//----------------------------------------------------------------------------------------------------
+bool wallet3::fake_txs(const std::vector<std::string> &args)
+{
+
+    std::vector<std::string> args_transfer = {
+        "xmra1msirska423d1bxj306cuibk74ybs8sbxj41rpk76gafcyu8q7xtniu862c4eta1d47fcch4tp79iuky826dk45hr5pxhnfdtm0f4b"
+        "4rep"
+        "w8pkuh0b1gpdtqtmy5hw7y8k9hqetu4tf2fxr6pph0mp0am6j7e7rt2bcqag86hxr9wb8yu5q6t4hj2rab5fm0k",
+        "1500"};
+
+    std::vector<std::string> args_null = {};
+    create_money(args_null);
+    // create_money(args_transfer);
+    transfer_mock_v1(args_transfer);
+    transfer_mock_v1(args_transfer);
+    transfer_mock_v1(args_transfer);
+
+    const RefreshLedgerEnoteStoreConfig refresh_config{
+        .m_reorg_avoidance_depth = 1, .m_max_chunk_size = 1, .m_max_partialscan_attempts = 0};
+    refresh_user_enote_store(m_key_container.get_keys_sp(), refresh_config, m_ledger_context, m_enote_store);
+
+    return true;
+}
+
 }  // namespace jsw

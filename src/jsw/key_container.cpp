@@ -151,23 +151,21 @@ void key_container_base::get_destination_from_str(const std::string &address, Ja
 {
     std::string main_address = address.substr(6, address.length() - 14);
     std::string checksum = address.substr(address.length() - 8);
+    std::string addr_with_checksum{jamtis_add_checksum(address.substr(0,address.length() - 8))};
 
-    // CHECK_AND_ASSERT_THROW_MES(add_checksum(main_address) == (main_address+checksum), "get_destination_from_str:
-    // Invalid checksum.");
-    // Throw wallet message
+    if (addr_with_checksum != address)
+    {
+        std::cout << "Address mismatch at get_destination_from_str!" << std::endl;
+    }
 
     std::string serialized_address;
-    tools::base32::decode(serialized_address, main_address);
+    tools::base32::decode(main_address,serialized_address);
     // tools::base58::decode(main_address,serialized_address);
     serialization::ser_JamtisDestinationV1 serializable_destination_recovered;
     serialization::try_get_serializable(epee::strspan<std::uint8_t>(serialized_address),
                                         serializable_destination_recovered);
     serialization::recover_sp_destination_v1(serializable_destination_recovered, dest_out);
 
-    // std::cout << "K_1: " << dest_out.m_addr_K1 << std::endl;
-    // std::cout << "K_2: " << epee::string_tools::pod_to_hex(dest_out.m_addr_K2) << std::endl;
-    // std::cout << "K_3: " << epee::string_tools::pod_to_hex(dest_out.m_addr_K3) << std::endl;
-    // std::cout << "t: " << epee::string_tools::pod_to_hex(dest_out.m_addr_tag) << std::endl;
 }
 //-----------------------------------------------------------------
 size_t key_container_base::get_wallet_type()
@@ -206,7 +204,7 @@ void key_container_base::generate_master(const address_index_t &t)
 void key_container_base::generate_master()
 {
     make_jamtis_mock_keys(m_sp_keys);
-    address_index_t t{make_address_index(0, 0)};
+    address_index_t t{};
     make_jamtis_destination_v1(m_sp_keys.K_1_base, m_sp_keys.xK_ua, m_sp_keys.xK_fr, m_sp_keys.s_ga, t,
                                 m_address_zero);
     make_legacy_mock_keys(m_legacy_keys);

@@ -42,6 +42,8 @@
 #include "serialization/string.h"
 #include "wipeable_string.h"
 
+#include "transaction_history_component.h"
+
 // standard headers
 #include <string>
 #include <vector>
@@ -59,6 +61,8 @@ class wallet3
 {
     private:
     key_container_base m_key_container;  // Class that stores the private/public keys in memory
+    transaction_history_manager m_thm;
+
     uint64_t m_kdf_rounds = 1;
     bool m_is_wallet3;
     std::string m_keys_file;
@@ -161,7 +165,14 @@ class wallet3
     bool save_viewbalance(const std::vector<std::string> &args);
     bool create_money(const std::vector<std::string> &args);
     bool show_balance(const std::vector<std::string> &args);
-    bool transfer(const std::vector<std::string> &args);
+    bool show_address(const std::vector<std::string> &args);
+    bool show_transfer(const std::vector<std::string> &args);
+    bool transfer_mock_v1(const std::vector<std::string> &args);
+    bool fake_txs(const std::vector<std::string> &args);
+
+    void refresh_enote_store();
+    void refresh_transaction_history();
+    bool try_add_tx_to_tx_history(const rct::key &tx_id, const SpTxSquashedV1 tx, const std::vector<std::pair<std::string,rct::xmr_amount>> &dest);
 };
 
 }  // namespace jsw
