@@ -97,6 +97,7 @@ set(unit_tests_sources
   seraphis_tx.cpp
   sha256.cpp
   slow_memmem.cpp
+  sp_wallet_tx_history.cpp
   subaddress.cpp
   tasking_system_demo.cpp
   test_tx_utils.cpp
@@ -145,6 +146,7 @@ target_link_libraries(unit_tests
     seraphis_impl
     seraphis_main
     seraphis_mocks
+    seraphis_wallet
     wallet
     p2p
     version

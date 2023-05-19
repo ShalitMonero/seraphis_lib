@@ -45,6 +45,7 @@
 #include "seraphis_main/tx_component_types_legacy.h"
 #include "seraphis_main/txtype_coinbase_v1.h"
 #include "seraphis_main/txtype_squashed_v1.h"
+#include "seraphis_core/jamtis_destination.h"
 
 //third party headers
 
@@ -354,6 +355,14 @@ void make_serializable_sp_tx_coinbase_v1(const SpTxCoinbaseV1 &tx, ser_SpTxCoinb
     make_serializable_sp_tx_supplement_v1(tx.tx_supplement, serializable_tx_out.tx_supplement);
 }
 //-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out)
+{
+    serializable_dest_out.addr_K1 = dest.addr_K1;
+    serializable_dest_out.addr_K2 = dest.addr_K2;
+    serializable_dest_out.addr_K3 = dest.addr_K3;
+    serializable_dest_out.addr_tag = dest.addr_tag;
+}
+//-------------------------------------------------------------------------------------------------------------------
 void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquashedV1 &serializable_tx_out)
 {
     // semantic rules version
@@ -580,6 +589,14 @@ void recover_sp_tx_coinbase_v1(ser_SpTxCoinbaseV1 &serializable_tx_in, SpTxCoinb
 
     // supplemental data for tx
     recover_sp_tx_supplement_v1(serializable_tx_in.tx_supplement, tx_out.tx_supplement);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out)
+{
+    dest_out.addr_K1 = serializable_destination.addr_K1;
+    dest_out.addr_K2 = serializable_destination.addr_K2;
+    dest_out.addr_K3 = serializable_destination.addr_K3;
+    dest_out.addr_tag = serializable_destination.addr_tag;
 }
 //-------------------------------------------------------------------------------------------------------------------
 void recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,

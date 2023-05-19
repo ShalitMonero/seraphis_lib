@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2023, The Monero Project
+# Copyright (c) 2023, The Monero Project
 #
 # All rights reserved.
 #
@@ -26,65 +26,35 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-include_directories(SYSTEM ${OPENSSL_INCLUDE_DIR})
+set(seraphis_wallet_sources
+  transaction_history.cpp
+  transaction_utils.cpp
+  )
 
-set(common_sources
-  base32.cpp
-  base58.cpp
-  command_line.cpp
-  dns_utils.cpp
-  download.cpp
-  error.cpp
-  expect.cpp
-  util.cpp
-  i18n.cpp
-  notify.cpp
-  password.cpp
-  perf_timer.cpp
-  pruning.cpp
-  spawn.cpp
-  threadpool.cpp
-  updates.cpp
-  aligned.c
-  timings.cc
-  combinator.cpp)
+monero_find_all_headers(seraphis_wallet_headers, "${CMAKE_CURRENT_SOURCE_DIR}")
 
-if (STACK_TRACE)
-  list(APPEND common_sources stack_trace.cpp)
-endif()
+monero_add_library(seraphis_wallet
+  ${seraphis_wallet_sources}
+  ${seraphis_wallet_headers})
 
-if (BACKCOMPAT)
-  list(APPEND common_sources compat/glibc_compat.cpp)
-endif()
-
-set(common_headers)
-
-monero_find_all_headers(common_private_headers "${CMAKE_CURRENT_SOURCE_DIR}")
-
-monero_private_headers(common
-  ${common_private_headers})
-monero_add_library(common
-  ${common_sources}
-  ${common_headers}
-  ${common_private_headers}
-  DEPENDS generate_translations_header)
-target_link_libraries(common
+target_link_libraries(seraphis_wallet
   PUBLIC
     cncrypto
-    ${UNBOUND_LIBRARIES}
-    ${LIBUNWIND_LIBRARIES}
-    ${Boost_DATE_TIME_LIBRARY}
-    ${Boost_FILESYSTEM_LIBRARY}
-    ${Boost_SYSTEM_LIBRARY}
-    ${Boost_THREAD_LIBRARY}
-    ${Boost_REGEX_LIBRARY}
-    ${Boost_CHRONO_LIBRARY}
+    common
+    cryptonote_basic
+    device
+    epee
+    ringct
+    seraphis_core
+    seraphis_crypto
+    seraphis_impl
+    seraphis_main
+    seraphis_mocks
   PRIVATE
-    ${OPENSSL_LIBRARIES}
     ${EXTRA_LIBRARIES})
-target_include_directories(common
+
+target_include_directories(seraphis_wallet
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}"
   PRIVATE
     ${Boost_INCLUDE_DIRS})
-
-#monero_install_headers(common
-#  ${common_headers})
