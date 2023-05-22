@@ -98,6 +98,7 @@ set(unit_tests_sources
   sha256.cpp
   slow_memmem.cpp
   sp_wallet_tx_history.cpp
+  sp_wallet_encrypt_keys.cpp
   subaddress.cpp
   tasking_system_demo.cpp
   test_tx_utils.cpp

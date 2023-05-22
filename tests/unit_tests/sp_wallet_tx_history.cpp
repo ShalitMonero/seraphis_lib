@@ -37,6 +37,7 @@
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "cryptonote_basic/subaddress_index.h"
+#include "encrypt_file.h"
 #include "enote_store.h"
 #include "gtest/gtest.h"
 #include "legacy_mock_keys.h"
@@ -82,6 +83,9 @@
 #include "seraphis_main/txtype_squashed_v1.h"
 #include "seraphis_mocks/seraphis_mocks.h"
 #include "seraphis_wallet/transaction_history.h"
+#include "seraphis_wallet/transaction_utils.h"
+#include "serialization_demo_utils.h"
+#include "serialization_types.h"
 
 using namespace sp;
 using namespace jamtis;
@@ -91,7 +95,7 @@ using namespace sp::knowledge_proofs;
 
 static void fill_tx_store(const SpTxSquashedV1 &single_tx,
                           const std::pair<JamtisDestinationV1, rct::xmr_amount> &outlays, SpTxStatus status,
-                          SpEnoteStore &enote_store_in_out, SpTransactionStoreV1 &tx_store_in_out)
+                          SpEnoteStore &enote_store_in_out, SpTransactionStore &tx_store_in_out)
 {
     /// 1. prepare variables of tx_store
     rct::key tx_id;
@@ -141,7 +145,7 @@ static void fill_tx_store(const SpTxSquashedV1 &single_tx,
 }
 //-------------------------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------------------------
-static void make_transfers(SpEnoteStore &enote_store_in_out, SpTransactionStoreV1 &tx_store_in_out)
+static void make_transfers(SpEnoteStore &enote_store_in_out, SpTransactionStore &tx_store_in_out)
 {
     /// config
     const std::size_t max_inputs{1000};
@@ -175,9 +179,17 @@ static void make_transfers(SpEnoteStore &enote_store_in_out, SpTransactionStoreV
     legacy_mock_keys legacy_user_keys_A;
     jamtis_mock_keys user_keys_A;
     jamtis_mock_keys user_keys_B;
+
     make_legacy_mock_keys(legacy_user_keys_A);
-    make_jamtis_mock_keys(user_keys_A);
-    make_jamtis_mock_keys(user_keys_B);
+
+    CHECK_AND_ASSERT_THROW_MES(read_master_wallet("masterA.wallet", "passwordA", user_keys_A),
+                                   "Reading master wallet failed.");
+
+    CHECK_AND_ASSERT_THROW_MES(read_master_wallet("masterB.wallet", "passwordB", user_keys_B),
+                                   "Reading master wallet failed.");
+
+    // make_jamtis_mock_keys(user_keys_A);
+    // make_jamtis_mock_keys(user_keys_B);
 
     // b. destination address
     JamtisDestinationV1 destination_A;
@@ -228,7 +240,7 @@ static void make_transfers(SpEnoteStore &enote_store_in_out, SpTransactionStoreV
     // Send 1 unconfirmed_txs
     // TODO: Verify how to make multiple unconfirmed txs.
     // Maybe the input selector is choosing the same enotes and it generates an error.
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 1; i++)
     {
         // 1. make one tx
         construct_tx_for_mock_ledger_v1(legacy_user_keys_A, user_keys_A, input_selector_A, fee_calculator,
@@ -247,6 +259,7 @@ static void make_transfers(SpEnoteStore &enote_store_in_out, SpTransactionStoreV
 
         // 4. add tx to tx_records
         fill_tx_store(single_tx, outlays, SpTxStatus::UNCONFIRMED, enote_store_in_out, tx_store_in_out);
+
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -257,49 +270,62 @@ TEST(seraphis_wallet, show_transfers)
 
     // 1. generate enote_store and tx_store
     SpEnoteStore enote_store_A{0, 0, 0};
-    SpTransactionStoreV1 tx_store_A;
+    SpTransactionStore tx_store_A;
 
     // 2. make transfers to fill enote_store and tx_store
     make_transfers(enote_store_A, tx_store_A);
 
-    // 3. example of block to show info from tx_store
-    std::cout << "Block | Direction | Timestamp | Amount | Tx id | Fee | Destination " << std::endl;
-    std::cout << " ----------- Confirmed ----------- " << std::endl;
+    // 3. example of block to show info from tx_store (using the enote store)
+    tx_store_A.show_tx_hashes(3);
 
-    // a. print last 3 confirmed txs
-    const auto range_confirmed{tx_store_A.get_last_N_txs(SpTxStatus::CONFIRMED, 3)};
-    if (!range_confirmed.empty())
-    {
-        std::pair<std::vector<LegacyContextualEnoteRecordV1>, std::vector<SpContextualEnoteRecordV1>> enotes_selected;
-        ContextualRecordVariant contextual_record;
-        TxView tx_view;
-        for (auto it_range : range_confirmed)
-        {
-            tx_store_A.get_enotes_from_tx(it_range.second, enote_store_A, enotes_selected);
-            if (tx_store_A.get_representing_enote_from_tx(enotes_selected, contextual_record))
-            {
-                tx_store_A.get_tx_view(contextual_record, tx_view);
-                tx_store_A.print_tx_view(tx_view);
-            }
-        }
-    }
+}
 
-    // b. print last 3 unconfirmed txs
-    std::cout << " ----------- Unconfirmed ----------- " << std::endl;
-    const auto range_unconfirmed{tx_store_A.get_last_N_txs(SpTxStatus::UNCONFIRMED, 3)};
-    if (!range_unconfirmed.empty())
-    {
-        std::pair<std::vector<LegacyContextualEnoteRecordV1>, std::vector<SpContextualEnoteRecordV1>> enotes_selected;
-        ContextualRecordVariant contextual_record;
-        TxView tx_view;
-        for (auto it_range : range_unconfirmed)
-        {
-            tx_store_A.get_enotes_from_tx(it_range.second, enote_store_A, enotes_selected);
-            if (tx_store_A.get_representing_enote_from_tx(enotes_selected, contextual_record))
-            {
-                tx_store_A.get_tx_view(contextual_record, tx_view);
-                tx_store_A.print_tx_view(tx_view);
-            }
-        }
-    }
+TEST(seraphis_wallet, read_write_history)
+{
+    // 1. generate enote_store and tx_store
+    SpEnoteStore enote_store_A{0, 0, 0};
+    SpTransactionStore tx_store_A;
+
+    // 2. make transfers to fill enote_store and tx_store
+    make_transfers(enote_store_A, tx_store_A);
+
+    // 3. save to file 
+    if (!tx_store_A.write_sp_tx_history("wallet.history", "UserA"))
+        std::cout << "Error writing tx_history" << std::endl;
+
+    // 4. read from file
+    SpTransactionStore tx_store_recovered;
+    if (!tx_store_A.read_sp_tx_history("wallet.history", "UserA", tx_store_recovered.m_sp_tx_store))
+        std::cout << "Error reading tx_history" << std::endl;
+
+
+    CHECK_AND_ASSERT_THROW_MES(tx_store_A.m_sp_tx_store == tx_store_recovered.m_sp_tx_store,"Tx stores are not the same.");
+
+    // 5. show info from tx_store (using the enote store)
+    std::cout << "tx_hist A: " << std::endl;
+    tx_store_A.show_tx_hashes(3);
+    std::cout << "tx_hist recovered: " << std::endl;
+    tx_store_recovered.show_tx_hashes(3);
+}
+
+
+
+TEST(seraphis_wallet, read_write_serialization)
+{
+    // 1. generate enote_store and tx_store
+    SpEnoteStore enote_store_A{0, 0, 0};
+    SpTransactionStore tx_store_A;
+
+    // 2. make transfers to fill enote_store and tx_store
+    make_transfers(enote_store_A, tx_store_A);
+
+    // 3. Get serializable of structure
+    ser_SpTransactionStoreV1 ser_tx_store;
+    make_serializable_sp_transaction_store_v1(tx_store_A.m_sp_tx_store, ser_tx_store);
+
+    // 4. Recover struct from serializable
+    SpTransactionStore tx_store_recovered;
+    recover_sp_transaction_store_v1(ser_tx_store,tx_store_recovered.m_sp_tx_store);
+
+    CHECK_AND_ASSERT_THROW_MES(tx_store_A.m_sp_tx_store == tx_store_recovered.m_sp_tx_store,"Tx stores are not the same.");
 }

@@ -36,7 +36,12 @@
 #include "jamtis_support_types.h"
 #include "ringct/rctTypes.h"
 
+#include "serialization/keyvalue_serialization.h"
+#include "serialization/containers.h"
+#include "serialization/serialization.h"
+#include "serialization/binary_archive.h"
 //third party headers
+#include <boost/range.hpp>
 
 //standard headers
 

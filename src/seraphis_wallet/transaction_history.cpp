@@ -26,7 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#pragma once
 
 // paired header
 #include "transaction_history.h"
@@ -35,6 +34,7 @@
 #include "common/container_helpers.h"
 #include "common/util.h"
 #include "crypto/crypto.h"
+#include "file_io_utils.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/jamtis_destination.h"
@@ -43,7 +43,12 @@
 #include "seraphis_main/contextual_enote_record_types.h"
 #include "seraphis_main/sp_knowledge_proof_types.h"
 #include "seraphis_main/sp_knowledge_proof_utils.h"
+#include "seraphis_wallet/encrypt_file.h"
+#include "seraphis_wallet/serialization_types.h"
+#include "serialization/binary_utils.h"
+#include "serialization/containers.h"
 #include "transaction_utils.h"
+#include "serialization_types.h"
 
 // third party headers
 #include <boost/range.hpp>
@@ -58,38 +63,88 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <string>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-using namespace sp;
+// #include <boost/program_options/variables_map.hpp>
+#if BOOST_VERSION >= 107400
+#include <boost/serialization/library_version_type.hpp>
+#endif
 
-void SpTransactionStoreV1::add_entry_to_tx_records(const rct::key &txid, const TransactionRecordV1 &record)
+
+///
+
+#include <boost/program_options/options_description.hpp>
+#include <boost/program_options/variables_map.hpp>
+#include <boost/serialization/list.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/deque.hpp>
+#include <boost/thread/lock_guard.hpp>
+#include "cryptonote_basic/account_boost_serialization.h"
+#include "common/unordered_containers_boost_serialization.h"
+#include "common/util.h"
+#include "crypto/chacha.h"
+#include "crypto/hash.h"
+#include "ringct/rctTypes.h"
+#include "ringct/rctOps.h"
+#include "checkpoints/checkpoints.h"
+#include "serialization/crypto.h"
+#include "serialization/string.h"
+#include "serialization/pair.h"
+#include "serialization/tuple.h"
+#include "serialization/containers.h"
+
+
+
+
+bool operator==(const SpTransactionStoreV1 &a, const SpTransactionStoreV1 &b)
 {
-    m_tx_records[txid] = record;
+    
+    return a.tx_records == b.tx_records &&
+        a.confirmed_txids == b.confirmed_txids &&
+        a.unconfirmed_txids == b.unconfirmed_txids &&
+        a.offchain_txids == b.offchain_txids;
 }
 //-------------------------------------------------------------------------------------------------------------------
-std::multimap<std::uint64_t, rct::key, std::greater<std::uint64_t>> *SpTransactionStoreV1::get_pointer_to_tx_status(
+bool operator==(const TransactionRecordV1 &a, const TransactionRecordV1 &b)
+{
+    return a.legacy_spent_enotes == b.legacy_spent_enotes &&
+        a.sp_spent_enotes == b.sp_spent_enotes &&
+        a.outlays == b.outlays &&
+        a.amount_sent == b.amount_sent &&
+        a.fee_sent == b.fee_sent;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void SpTransactionStore::add_entry_to_tx_records(const rct::key &txid, const TransactionRecordV1 &record)
+{
+    m_sp_tx_store.tx_records[txid] = record;
+}
+//-------------------------------------------------------------------------------------------------------------------
+// std::multimap<std::uint64_t, rct::key, std::greater<std::uint64_t>> *SpTransactionStore::get_pointer_to_tx_status(
+serializable_multimap<std::uint64_t, rct::key, std::greater<std::uint64_t>> *SpTransactionStore::get_pointer_to_tx_status(
     const SpTxStatus tx_status)
 {
     // get pointer to corresponding multimap
-    std::multimap<std::uint64_t, rct::key, std::greater<std::uint64_t>> *ptr = nullptr;
+    // std::multimap<std::uint64_t, rct::key, std::greater<std::uint64_t>> *ptr = nullptr;
+    serializable_multimap<std::uint64_t, rct::key, std::greater<std::uint64_t>> *ptr = nullptr;
     switch (tx_status)
     {
         case SpTxStatus::CONFIRMED:
         {
-            ptr = &m_confirmed_txids;
+            ptr = &m_sp_tx_store.confirmed_txids;
             break;
         }
         case SpTxStatus::UNCONFIRMED:
         {
-            ptr = &m_unconfirmed_txids;
+            ptr = &m_sp_tx_store.unconfirmed_txids;
             break;
         }
         case SpTxStatus::OFFCHAIN:
         {
-            ptr = &m_offchain_txids;
+            ptr = &m_sp_tx_store.offchain_txids;
             break;
         }
         default:
@@ -98,7 +153,7 @@ std::multimap<std::uint64_t, rct::key, std::greater<std::uint64_t>> *SpTransacti
     return ptr;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpTransactionStoreV1::add_entry_txs(const SpTxStatus tx_status, const uint64_t block_or_timestamp,
+void SpTransactionStore::add_entry_txs(const SpTxStatus tx_status, const uint64_t block_or_timestamp,
                                          const rct::key &txid)
 {
     // add entry to corresponding variable
@@ -106,7 +161,7 @@ void SpTransactionStoreV1::add_entry_txs(const SpTxStatus tx_status, const uint6
     ptr_status->emplace(block_or_timestamp, txid);
 }
 //-------------------------------------------------------------------------------------------------------------------
-const range_txids_by_block_or_time SpTransactionStoreV1::get_last_N_txs(const SpTxStatus tx_status, const uint64_t N)
+const range_txids_by_block_or_time SpTransactionStore::get_last_N_txs(const SpTxStatus tx_status, const uint64_t N)
 {
     // 1. get pointer
     auto ptr_status = get_pointer_to_tx_status(tx_status);
@@ -128,20 +183,20 @@ const range_txids_by_block_or_time SpTransactionStoreV1::get_last_N_txs(const Sp
     return boost::make_iterator_range(it_begin, it_end);
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpTransactionStoreV1::get_enotes_from_tx(
+bool SpTransactionStore::get_enotes_from_tx(
     const rct::key &txid, const SpEnoteStore &enote_store,
     std::pair<std::vector<LegacyContextualEnoteRecordV1>, std::vector<SpContextualEnoteRecordV1>> &enotes_out)
 {
     // 1. get TransactionRecord if txid exists
     TransactionRecordV1 tx_rec{};
-    if (m_tx_records.find(txid) == m_tx_records.end())
+    if (m_sp_tx_store.tx_records.find(txid) == m_sp_tx_store.tx_records.end())
     {
         // TODO: which library to use to show wallet msgs?
         // std::cout << txid << " not found" << std::endl;
         return false;
     }
     else
-        tx_rec = m_tx_records[txid];
+        tx_rec = m_sp_tx_store.tx_records[txid];
 
     // 2. get Sp enotes context
     std::vector<SpContextualEnoteRecordV1> sp_spent;
@@ -162,7 +217,7 @@ bool SpTransactionStoreV1::get_enotes_from_tx(
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpTransactionStoreV1::get_representing_enote_from_tx(
+bool SpTransactionStore::get_representing_enote_from_tx(
     const std::pair<std::vector<LegacyContextualEnoteRecordV1>, std::vector<SpContextualEnoteRecordV1>> &enotes_in_tx,
     ContextualRecordVariant &contextual_enote_out)
 {
@@ -184,14 +239,14 @@ bool SpTransactionStoreV1::get_representing_enote_from_tx(
     }
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpTransactionStoreV1::get_tx_view(const ContextualRecordVariant &contextual_enote, TxView &tx_view_out)
+bool SpTransactionStore::get_tx_view(const ContextualRecordVariant &contextual_enote, TxViewV1 &tx_view_out)
 {
     // Only a draft. Very simple version.
 
     // 1. get SpEnoteSpentContext and TransactionRecord from contextual_enote
     SpEnoteSpentContextV1 spent_context{spent_context_ref(contextual_enote)};
     rct::key tx_id{spent_context.transaction_id};
-    TransactionRecordV1 tx_record{m_tx_records[tx_id]};
+    TransactionRecordV1 tx_record{m_sp_tx_store.tx_records[tx_id]};
 
     // 2. fill TxView with info available
     tx_view_out.block = spent_context.block_index == static_cast<std::uint64_t>(-1)
@@ -213,7 +268,7 @@ bool SpTransactionStoreV1::get_tx_view(const ContextualRecordVariant &contextual
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
-void SpTransactionStoreV1::print_tx_view(const TxView tx_view)
+void SpTransactionStore::print_tx_view(const TxViewV1 tx_view)
 {
     // Only a draft. Very simple version.
 
@@ -226,7 +281,64 @@ void SpTransactionStoreV1::print_tx_view(const TxView tx_view)
     << tx_view.destinations << std::endl;
 }
 //-------------------------------------------------------------------------------------------------------------------
-bool SpTransactionStoreV1::get_tx_funded_proof(const rct::key &txid, const SpEnoteStore &enote_store,
+void SpTransactionStore::show_txs(SpEnoteStore &enote_store, uint64_t N)
+{
+    std::cout << "Block | Direction | Timestamp | Amount | Tx id | Fee | Destination " << std::endl;
+    std::cout << " ----------- Confirmed ----------- " << std::endl;
+
+    // a. print last 3 confirmed txs
+    const auto range_confirmed{get_last_N_txs(SpTxStatus::CONFIRMED,N)};
+    if (!range_confirmed.empty())
+    {
+        std::pair<std::vector<LegacyContextualEnoteRecordV1>, std::vector<SpContextualEnoteRecordV1>> enotes_selected;
+        ContextualRecordVariant contextual_record;
+        TxViewV1 tx_view;
+        for (auto it_range : range_confirmed)
+        {
+            get_enotes_from_tx(it_range.second, enote_store, enotes_selected);
+            if (get_representing_enote_from_tx(enotes_selected, contextual_record))
+            {
+                get_tx_view(contextual_record, tx_view);
+                print_tx_view(tx_view);
+            }
+        }
+    }
+
+    // b. print last 3 unconfirmed txs
+    std::cout << " ----------- Unconfirmed ----------- " << std::endl;
+    const auto range_unconfirmed{get_last_N_txs(SpTxStatus::UNCONFIRMED, N)};
+    if (!range_unconfirmed.empty())
+    {
+        std::pair<std::vector<LegacyContextualEnoteRecordV1>, std::vector<SpContextualEnoteRecordV1>> enotes_selected;
+        ContextualRecordVariant contextual_record;
+        TxViewV1 tx_view;
+        for (auto it_range : range_unconfirmed)
+        {
+            get_enotes_from_tx(it_range.second, enote_store, enotes_selected);
+            if (get_representing_enote_from_tx(enotes_selected, contextual_record))
+            {
+                get_tx_view(contextual_record, tx_view);
+                print_tx_view(tx_view);
+            }
+        }
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void SpTransactionStore::show_tx_hashes(uint64_t N)
+{
+    // a. print last N confirmed txs
+    const auto range_confirmed{get_last_N_txs(SpTxStatus::CONFIRMED,N)};
+    if (!range_confirmed.empty())
+    {
+        for (auto it_range : range_confirmed)
+        {
+        std::cout << "Height: " << it_range.first << " Hash: " << it_range.second << std::endl;
+        }
+
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool SpTransactionStore::get_tx_funded_proof(const rct::key &txid, const SpEnoteStore &enote_store,
                                                const crypto::secret_key &sp_spend_privkey,
                                                const crypto::secret_key &k_view_balance)
 {
@@ -252,3 +364,24 @@ bool SpTransactionStoreV1::get_tx_funded_proof(const rct::key &txid, const SpEno
     return true;
 }
 //-------------------------------------------------------------------------------------------------------------------
+bool SpTransactionStore::write_sp_tx_history(std::string path, const epee::wipeable_string &password)
+{
+    // 1. Get serializable of structure
+    ser_SpTransactionStoreV1 ser_tx_store;
+    make_serializable_sp_transaction_store_v1(m_sp_tx_store, ser_tx_store);
+
+    // 3. Save serializable struct to file
+    return write_encrypted_file(path, password, ser_tx_store);
+}
+// //-------------------------------------------------------------------------------------------------------------------
+bool SpTransactionStore::read_sp_tx_history(std::string path, const epee::wipeable_string &password, SpTransactionStoreV1 &sp_tx_store)
+{
+    // 1. Read file into serializable
+    ser_SpTransactionStoreV1 ser_tx_store;
+    read_encrypted_file(path, password, ser_tx_store);
+    
+    // 2. Recover struct from serializable
+    recover_sp_transaction_store_v1(ser_tx_store,sp_tx_store);
+    
+    return true;
+}

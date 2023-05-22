@@ -29,6 +29,8 @@
 set(seraphis_wallet_sources
   transaction_history.cpp
   transaction_utils.cpp
+  encrypt_file.cpp
+  serialization_types.cpp
   )
 
 monero_find_all_headers(seraphis_wallet_headers, "${CMAKE_CURRENT_SOURCE_DIR}")

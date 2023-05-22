@@ -26,27 +26,38 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#pragma once
 
-// local headers
-#include "seraphis_core/jamtis_destination.h"
+#include <gtest/gtest.h>
+
+#include "jamtis_mock_keys.h"
+#include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
-
-//third party headers
-
-//standard headers
-
-// forward declarations
-
-using namespace sp::jamtis;
-using namespace sp;
+#include "seraphis_wallet/encrypt_file.h"
+#include "string_tools.h"
 
 
 
-// These should not be here -> src/common/checksum_jamtis is a better place
-std::string jamtis_add_checksum(const std::string &addr_without_checksum);
-bool jamtis_verify_checksum(const std::string &data);
-int64_t jamtis_polymod(const std::vector<int> &data);
+TEST(encrypt_wallet, read_write) {
+  std::string secret{"secret"};
+  std::string data1{"data1"};
+  std::string data2;
 
-void get_destination_from_str(const std::string &address, JamtisDestinationV1 &dest_out);
-void get_str_from_destination(const JamtisDestinationV1 &dest, std::string &address_out);
+  bool r1 = write_encrypted_file("test.wallet", secret, data1);
+  bool r2 = read_encrypted_file("test.wallet", secret, data2);
+
+  ASSERT_TRUE(r1 && r2);
+
+}
+
+TEST(encrypt_wallet, read_write_master_wallet) {
+
+  std::string passwordA = "passwordA";
+  std::string passwordB = "passwordB";
+
+  bool r1 = generate_master_wallet("masterA.wallet",passwordA);
+  bool r2 = generate_master_wallet("masterB.wallet", passwordB);
+  jamtis_mock_keys master_keys;
+  bool r3 = read_master_wallet("masterA.wallet", passwordA,master_keys);
+
+  ASSERT_TRUE(r1 && r2 && r3);
+}

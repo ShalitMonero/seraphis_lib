@@ -32,6 +32,7 @@
 #include "jamtis_mock_keys.h"
 
 //local headers
+#include "crypto/chacha.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "ringct/rctOps.h"

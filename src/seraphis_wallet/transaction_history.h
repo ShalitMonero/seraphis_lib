@@ -26,7 +26,6 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Supporting types for Jamtis (address index, address tag hint, address tag, etc.).
 
 #pragma once
 
@@ -38,10 +37,14 @@
 #include "seraphis_main/sp_knowledge_proof_utils.h"
 #include "seraphis_main/sp_knowledge_proof_types.h"
 #include "ringct/rctTypes.h"
+#include "seraphis_impl/serialization_demo_types.h"
 
 //third party headers
 #include "boost/range/iterator_range.hpp"
+#include "serialization/containers.h"
+#include "serialization/serialization.h"
 #include <boost/range.hpp>
+#include "serialization/binary_archive.h"
 
 //standard headers
 #include <cstddef>
@@ -85,7 +88,7 @@ enum class SpTxStatus
     OFFCHAIN
 };
 
-struct TxView
+struct TxViewV1
 {
     std::string block;
     std::string direction;
@@ -111,22 +114,48 @@ struct TransactionRecordV1
     // useful to store here also instead of looking directly at the enotes and blockchain
     rct::xmr_amount amount_sent;
     rct::xmr_amount fee_sent;
+
 };
 
-class SpTransactionStoreV1
+struct SpTransactionStoreV1
 {
     // quickly find TransactionRecordV1 from txid
-    std::unordered_map<rct::key, TransactionRecordV1> m_tx_records;
+    serializable_unordered_map<rct::key, TransactionRecordV1> tx_records;
+    // std::unordered_map<rct::key, TransactionRecordV1> tx_records;
 
     // sort by blockheight to find last transactions or txs 
     // in a specific time range
-    std::multimap<std::uint64_t,rct::key, std::greater<std::uint64_t>> m_confirmed_txids;
+    // std::multimap<std::uint64_t,rct::key, std::greater<std::uint64_t>> confirmed_txids;
+    serializable_multimap<std::uint64_t,rct::key, std::greater<std::uint64_t>> confirmed_txids;
 
     // sort by timestamp instead of blockheight
-    std::multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>> m_unconfirmed_txids;
-    std::multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>> m_offchain_txids;
+    // std::multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>> unconfirmed_txids;
+    // std::multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>> offchain_txids;
 
+    serializable_multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>> unconfirmed_txids;
+    serializable_multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>> offchain_txids;
+
+    // BEGIN_SERIALIZE_OBJECT()
+    //     FIELD(tx_records)
+    //     FIELD(confirmed_txids)
+    //     FIELD(unconfirmed_txids)
+    //     FIELD(offchain_txids)
+    // END_SERIALIZE()
+
+};
+//-----------------------------------------------------------------
+/// Operators
+    bool operator==(const SpTransactionStoreV1 &a, const SpTransactionStoreV1 &b);
+    bool operator==(const TransactionRecordV1 &a, const TransactionRecordV1 &b);
+
+
+
+//-----------------------------------------------------------------
+class SpTransactionStore
+{
     public:
+    SpTransactionStoreV1 m_sp_tx_store;
+
     // add entry to m_tx_records
     void add_entry_to_tx_records(const rct::key &txid, const TransactionRecordV1 &record);
 
@@ -134,7 +163,8 @@ class SpTransactionStoreV1
     void add_entry_txs(const SpTxStatus tx_status, const uint64_t block_or_timestamp, const rct::key &txid);
     
     // get pointer to m_confirmed_txids/m_unconfirmed_txids/m_offchain_txids
-    std::multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>>* get_pointer_to_tx_status(const SpTxStatus tx_status);
+    serializable_multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>>* get_pointer_to_tx_status(const SpTxStatus tx_status);
+    // std::multimap<std::uint64_t, rct::key,std::greater<std::uint64_t>>* get_pointer_to_tx_status(const SpTxStatus tx_status);
 
 //-----------------------------------------------------------------
 /// Update
@@ -161,11 +191,18 @@ class SpTransactionStoreV1
 /// Show transfers
 
     // Exhibit txs chronologically
-    bool get_tx_view(const ContextualRecordVariant &contextual_enote, TxView &tx_view_out);
+    bool get_tx_view(const ContextualRecordVariant &contextual_enote, TxViewV1 &tx_view_out);
     
     // Print transactions to screen
-    void print_tx_view(const TxView tx_view);
+    void show_txs(SpEnoteStore &enote_store, uint64_t N);
+    void show_tx_hashes(uint64_t N);
+    void print_tx_view(const TxViewV1 tx_view);
 
+//-----------------------------------------------------------------
+/// Save/read data to/from file 
+
+    bool write_sp_tx_history(std::string path, const epee::wipeable_string &password);
+    bool read_sp_tx_history(std::string path, const epee::wipeable_string &password, SpTransactionStoreV1 &sp_tx_store);
 
 //-----------------------------------------------------------------
 /// Get Knowledge proofs
@@ -175,4 +212,8 @@ class SpTransactionStoreV1
         const SpEnoteStore &enote_store,
         const crypto::secret_key &sp_spend_privkey,
         const crypto::secret_key &k_view_balance);
+
+
+
+
 };
