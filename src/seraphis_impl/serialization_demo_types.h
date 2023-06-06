@@ -42,6 +42,7 @@
 #include "serialization/serialization.h"
 #include "seraphis_main/txtype_coinbase_v1.h"
 #include "seraphis_main/txtype_squashed_v1.h"
+#include "seraphis_core/jamtis_destination.h"
 
 //third party headers
 
@@ -367,6 +368,26 @@ struct ser_SpTxCoinbaseV1 final
     END_SERIALIZE()
 };
 
+/// serializable JamtisDestinationV1
+struct ser_JamtisDestinationV1 final
+{
+    /// K_1 (address spend key)
+    rct::key addr_K1;
+    /// xK_2 (address view key)
+    crypto::x25519_pubkey addr_K2;
+    /// xK_3 (DH base key)
+    crypto::x25519_pubkey addr_K3;
+    /// addr_tag
+    jamtis::address_tag_t addr_tag;
+
+    BEGIN_SERIALIZE()
+        FIELD(addr_K1)
+        FIELD(addr_K2)
+        FIELD(addr_K3)
+        FIELD(addr_tag)    
+    END_SERIALIZE()
+};
+
 /// serializable SpTxSquashedV1
 struct ser_SpTxSquashedV1 final
 {
@@ -410,4 +431,5 @@ struct ser_SpTxSquashedV1 final
 } //namespace sp
 
 BLOB_SERIALIZER(sp::serialization::ser_encrypted_address_tag_t);
+BLOB_SERIALIZER(sp::jamtis::address_tag_t);
 BLOB_SERIALIZER(sp::serialization::ser_encoded_amount_t);
