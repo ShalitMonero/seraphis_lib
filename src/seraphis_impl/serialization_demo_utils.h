@@ -1,4 +1,4 @@
-// Copyright (c) 2022, The Monero Project
+// Copyright (c) 2023, The Monero Project
 //
 // All rights reserved.
 //
@@ -134,9 +134,9 @@ void make_serializable_sp_tx_supplement_v1(const SpTxSupplementV1 &supplement,
     ser_SpTxSupplementV1 &serializable_supplement_out);
 void make_serializable_discretized_fee(const DiscretizedFee discretized_fee,
     unsigned char &serializable_discretized_fee_out);
-void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out); 
 void make_serializable_sp_tx_coinbase_v1(const SpTxCoinbaseV1 &tx, ser_SpTxCoinbaseV1 &serializable_tx_out);
 void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquashedV1 &serializable_tx_out);
+void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out); 
 /**
 * brief: recover_* - convert a serializable object back into its normal object parent
 * param: serializable_object_in - serializable object to be consumed (destructive: may be left in an unusable state)
@@ -175,7 +175,6 @@ void recover_sp_membership_proof_v1(ser_SpMembershipProofV1_PARTIAL &serializabl
 void recover_sp_image_proof_v1(const ser_SpImageProofV1 &serializable_image_proof, SpImageProofV1 &image_proof_out);
 void recover_sp_tx_supplement_v1(ser_SpTxSupplementV1 &serializable_supplement_in, SpTxSupplementV1 &supplement_out);
 void recover_discretized_fee(const unsigned char serializable_discretized_fee, DiscretizedFee &discretized_fee_out);
-void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out);
 void recover_sp_tx_coinbase_v1(ser_SpTxCoinbaseV1 &serializable_tx_in, SpTxCoinbaseV1 &tx_out);
 void recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,
     const SpBinnedReferenceSetConfigV1 &sp_refset_bin_config,
@@ -189,6 +188,7 @@ bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,
     const std::size_t sp_ref_set_decomp_m,
     SpTxSquashedV1 &tx_out);
 bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxSquashedV1 &tx_out);
+void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out);
 
 } //namespace serialization
 } //namespace sp

@@ -1,4 +1,4 @@
-// Copyright (c) 2022, The Monero Project
+// Copyright (c) 2023, The Monero Project
 //
 // All rights reserved.
 //
@@ -36,6 +36,7 @@
 #include "ringct/rctTypes.h"
 #include "seraphis_core/binned_reference_set.h"
 #include "seraphis_core/discretized_fee.h"
+#include "seraphis_core/jamtis_destination.h"
 #include "seraphis_crypto/bulletproofs_plus2.h"
 #include "seraphis_crypto/grootle.h"
 #include "seraphis_crypto/sp_composition_proof.h"
@@ -45,7 +46,6 @@
 #include "seraphis_main/tx_component_types_legacy.h"
 #include "seraphis_main/txtype_coinbase_v1.h"
 #include "seraphis_main/txtype_squashed_v1.h"
-#include "seraphis_core/jamtis_destination.h"
 
 //third party headers
 
@@ -355,16 +355,6 @@ void make_serializable_sp_tx_coinbase_v1(const SpTxCoinbaseV1 &tx, ser_SpTxCoinb
     make_serializable_sp_tx_supplement_v1(tx.tx_supplement, serializable_tx_out.tx_supplement);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out)
-{
-    serializable_dest_out.addr_K1  = dest.addr_K1;
-    serializable_dest_out.addr_K2  = dest.addr_K2;
-    serializable_dest_out.addr_K3  = dest.addr_K3;
-    memcpy(serializable_dest_out.addr_tag.bytes,
-        dest.addr_tag.bytes,
-        sizeof(dest.addr_tag));
-}
-//-------------------------------------------------------------------------------------------------------------------
 void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquashedV1 &serializable_tx_out)
 {
     // semantic rules version
@@ -398,6 +388,16 @@ void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquas
 
     // the transaction fee (discretized representation)
     make_serializable_discretized_fee(tx.tx_fee, serializable_tx_out.tx_fee);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out)
+{
+    serializable_dest_out.addr_K1  = dest.addr_K1;
+    serializable_dest_out.addr_K2  = dest.addr_K2;
+    serializable_dest_out.addr_K3  = dest.addr_K3;
+    memcpy(serializable_dest_out.addr_tag.bytes,
+        dest.addr_tag.bytes,
+        sizeof(dest.addr_tag));
 }
 //-------------------------------------------------------------------------------------------------------------------
 
@@ -593,16 +593,6 @@ void recover_sp_tx_coinbase_v1(ser_SpTxCoinbaseV1 &serializable_tx_in, SpTxCoinb
     recover_sp_tx_supplement_v1(serializable_tx_in.tx_supplement, tx_out.tx_supplement);
 }
 //-------------------------------------------------------------------------------------------------------------------
-void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out)
-{
-    dest_out.addr_K1  = serializable_destination.addr_K1;
-    dest_out.addr_K2  = serializable_destination.addr_K2;
-    dest_out.addr_K3  = serializable_destination.addr_K3;
-    memcpy(dest_out.addr_tag.bytes,
-        serializable_destination.addr_tag.bytes,
-        sizeof(serializable_destination.addr_tag));
-}
-//-------------------------------------------------------------------------------------------------------------------
 void recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,
     const SpBinnedReferenceSetConfigV1 &sp_refset_bin_config,
     const std::size_t sp_ref_set_decomp_n,
@@ -699,6 +689,16 @@ bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxS
     catch (...) { return false; }
 
     return true;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out)
+{
+    dest_out.addr_K1  = serializable_destination.addr_K1;
+    dest_out.addr_K2  = serializable_destination.addr_K2;
+    dest_out.addr_K3  = serializable_destination.addr_K3;
+    memcpy(dest_out.addr_tag.bytes,
+        serializable_destination.addr_tag.bytes,
+        sizeof(serializable_destination.addr_tag));
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace serialization
