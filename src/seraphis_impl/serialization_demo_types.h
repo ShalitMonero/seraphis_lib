@@ -36,13 +36,13 @@
 #include "ringct/rctTypes.h"
 #include "seraphis_core/binned_reference_set.h"
 #include "seraphis_core/discretized_fee.h"
+#include "seraphis_core/jamtis_destination.h"
 #include "seraphis_core/jamtis_support_types.h"
 #include "serialization/containers.h"
 #include "serialization/crypto.h"
 #include "serialization/serialization.h"
 #include "seraphis_main/txtype_coinbase_v1.h"
 #include "seraphis_main/txtype_squashed_v1.h"
-#include "seraphis_core/jamtis_destination.h"
 
 //third party headers
 
