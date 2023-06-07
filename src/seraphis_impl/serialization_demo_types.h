@@ -69,6 +69,12 @@ struct ser_encoded_amount_t final
     unsigned char bytes[sizeof(jamtis::encoded_amount_t)];
 };
 
+/// serializable jamtis::address_tag_t
+struct ser_address_tag_t final
+{
+    unsigned char bytes[sizeof(jamtis::address_tag_t)];
+};
+
 /// serializable SpCoinbaseEnoteCore
 struct ser_SpCoinbaseEnoteCore final
 {
@@ -378,13 +384,13 @@ struct ser_JamtisDestinationV1 final
     /// xK_3 (DH base key)
     crypto::x25519_pubkey addr_K3;
     /// addr_tag
-    jamtis::address_tag_t addr_tag;
+    ser_address_tag_t addr_tag;
 
     BEGIN_SERIALIZE()
         FIELD(addr_K1)
         FIELD(addr_K2)
         FIELD(addr_K3)
-        FIELD(addr_tag)    
+        FIELD(addr_tag)    static_assert(sizeof(addr_tag) == sizeof(jamtis::address_tag_t), "");
     END_SERIALIZE()
 };
 
@@ -431,5 +437,5 @@ struct ser_SpTxSquashedV1 final
 } //namespace sp
 
 BLOB_SERIALIZER(sp::serialization::ser_encrypted_address_tag_t);
-BLOB_SERIALIZER(sp::jamtis::address_tag_t);
+BLOB_SERIALIZER(sp::serialization::ser_address_tag_t);
 BLOB_SERIALIZER(sp::serialization::ser_encoded_amount_t);

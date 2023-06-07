@@ -37,16 +37,10 @@
 #pragma once
 
 //local headers
-#include "crypto/chacha.h"
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/jamtis_destination.h"
-#include "serialization/keyvalue_serialization.h"
-#include "serialization/binary_archive.h"
-#include "serialization/containers.h"
-#include "serialization/serialization.h"
-#include "serialization/string.h"
 
 //third party headers
 
@@ -77,21 +71,6 @@ struct jamtis_mock_keys
     rct::key K_1_base;                //jamtis spend base     = k_vb X + k_m U
     crypto::x25519_pubkey xK_ua;      //unlock-amounts pubkey = xk_ua xG
     crypto::x25519_pubkey xK_fr;      //find-received pubkey  = xk_fr xk_ua xG
-
-    crypto::chacha_iv m_encryption_iv;
-
-    BEGIN_SERIALIZE()
-    FIELD(k_m)
-    FIELD(k_vb)
-    FIELD(xk_ua)
-    FIELD(xk_fr)
-    FIELD(s_ga)
-    FIELD(s_ct)
-    FIELD(K_1_base)
-    FIELD(xK_ua)
-    FIELD(xK_fr)
-    END_SERIALIZE()
-
 };
 
 /// make a set of mock jamtis keys (for mock-ups/unit testing)
@@ -102,5 +81,3 @@ void make_random_address_for_user(const jamtis_mock_keys &user_keys, JamtisDesti
 } //namespace mocks
 } //namespace jamtis
 } //namespace sp
-
-BLOB_SERIALIZER(crypto::x25519_secret_key);

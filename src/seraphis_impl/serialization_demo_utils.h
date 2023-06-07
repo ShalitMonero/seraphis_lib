@@ -175,9 +175,8 @@ void recover_sp_membership_proof_v1(ser_SpMembershipProofV1_PARTIAL &serializabl
 void recover_sp_image_proof_v1(const ser_SpImageProofV1 &serializable_image_proof, SpImageProofV1 &image_proof_out);
 void recover_sp_tx_supplement_v1(ser_SpTxSupplementV1 &serializable_supplement_in, SpTxSupplementV1 &supplement_out);
 void recover_discretized_fee(const unsigned char serializable_discretized_fee, DiscretizedFee &discretized_fee_out);
-void recover_sp_tx_coinbase_v1(ser_SpTxCoinbaseV1 &serializable_tx_in, SpTxCoinbaseV1 &tx_out);
-
 void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out);
+void recover_sp_tx_coinbase_v1(ser_SpTxCoinbaseV1 &serializable_tx_in, SpTxCoinbaseV1 &tx_out);
 void recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,
     const SpBinnedReferenceSetConfigV1 &sp_refset_bin_config,
     const std::size_t sp_ref_set_decomp_n,
