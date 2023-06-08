@@ -392,9 +392,9 @@ void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquas
 //-------------------------------------------------------------------------------------------------------------------
 void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out)
 {
-    serializable_dest_out.addr_K1  = dest.addr_K1;
-    serializable_dest_out.addr_K2  = dest.addr_K2;
-    serializable_dest_out.addr_K3  = dest.addr_K3;
+    serializable_dest_out.addr_K1 = dest.addr_K1;
+    serializable_dest_out.addr_K2 = dest.addr_K2;
+    serializable_dest_out.addr_K3 = dest.addr_K3;
     memcpy(serializable_dest_out.addr_tag.bytes,
         dest.addr_tag.bytes,
         sizeof(dest.addr_tag));
@@ -693,9 +693,9 @@ bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxS
 //-------------------------------------------------------------------------------------------------------------------
 void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out)
 {
-    dest_out.addr_K1  = serializable_destination.addr_K1;
-    dest_out.addr_K2  = serializable_destination.addr_K2;
-    dest_out.addr_K3  = serializable_destination.addr_K3;
+    dest_out.addr_K1 = serializable_destination.addr_K1;
+    dest_out.addr_K2 = serializable_destination.addr_K2;
+    dest_out.addr_K3 = serializable_destination.addr_K3;
     memcpy(dest_out.addr_tag.bytes,
         serializable_destination.addr_tag.bytes,
         sizeof(serializable_destination.addr_tag));
