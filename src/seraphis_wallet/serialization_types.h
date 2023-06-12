@@ -58,6 +58,39 @@
 #include <vector>
 
 
+struct ser_EnoteStoreV1
+{
+        /// legacy intermediate enotes: [ legacy identifier : legacy intermediate record ]
+    serializable_unordered_map<rct::key, ser_LegacyContextualIntermediateEnoteRecordV1>
+        m_legacy_intermediate_contextual_enote_records;
+    /// legacy enotes: [ legacy identifier : legacy record ]
+    serializable_unordered_map<rct::key, ser_LegacyContextualEnoteRecordV1> m_legacy_contextual_enote_records;
+    /// seraphis enotes: [ seraphis KI : seraphis record ]
+    serializable_unordered_map<crypto::key_image, ser_SpContextualEnoteRecordV1> m_sp_contextual_enote_records;
+
+    /// saved legacy key images from txs with seraphis selfsends (i.e. from txs we created)
+    /// [ legacy KI : spent context ]
+    serializable_unordered_map<crypto::key_image, ser_SpEnoteSpentContextV1> m_legacy_key_images_in_sp_selfsends;
+    /// legacy duplicate tracker for dealing with enotes that have duplicated key images
+    /// note: the user can receive multiple legacy enotes with the same identifier, but those are treated as equivalent,
+    ///       which should only cause problems for users if the associated tx memos are different (very unlikely scenario)
+    /// [ Ko : [ legacy identifier ] ]
+    serializable_unordered_map<rct::key, std::unordered_set<rct::key>> m_tracked_legacy_onetime_address_duplicates;
+    /// legacy onetime addresses attached to known legacy enotes
+    /// note: might not include all entries in 'm_legacy_key_images_in_sp_selfsends' if some corresponding enotes are
+    //        unknown
+    /// [ legacy KI : legacy Ko ]
+    std::unordered_map<crypto::key_image, rct::key> m_legacy_key_images;
+
+    BEGIN_SERIALIZE_OBJECT()
+        FIELD(m_legacy_intermediate_contextual_enote_records)
+        FIELD(m_legacy_contextual_enote_records)
+        FIELD(m_sp_contextual_enote_records)
+        FIELD(m_legacy_key_images_in_sp_selfsends)
+        FIELD(m_tracked_legacy_onetime_address_duplicates)
+        FIELD(m_legacy_key_images)
+    END_SERIALIZE()
+};
 
 struct ser_TransactionRecordV1
 {
@@ -115,3 +148,6 @@ void make_serializable_sp_transaction_store_v1(const SpTransactionStoreV1 &tx_st
 
 void recover_transaction_record_v1(const ser_TransactionRecordV1 &ser_tx_rec,TransactionRecordV1 &tx_rec);
 void recover_sp_transaction_store_v1(const ser_SpTransactionStoreV1 &ser_tx_store,SpTransactionStoreV1 &tx_store);
+
+void make_serializable_enote_store(const SpEnoteStore* enote, const ser_EnoteStoreV1* ser_enote);
+void recover_serializable_enote_store(const SpEnoteStore* enote, const ser_EnoteStoreV1* ser_enote);

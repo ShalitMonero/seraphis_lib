@@ -110,6 +110,34 @@ struct SpEnoteOriginContextV1 final
     TxExtra memo{};
 };
 
+struct ser_SpEnoteOriginContextV1 final
+{
+    /// block index of tx (-1 if index is unknown)
+    std::uint64_t block_index{static_cast<std::uint64_t>(-1)};
+    /// timestamp of tx's block (-1 if timestamp is unknown)
+    std::uint64_t block_timestamp{static_cast<std::uint64_t>(-1)};
+    /// tx id of the tx (0 if tx is unknown)
+    rct::key transaction_id{rct::zero()};
+    /// index of the enote in the tx's output set (-1 if index is unknown)
+    std::uint64_t enote_tx_index{static_cast<std::uint16_t>(-1)};
+    /// ledger index of the enote (-1 if index is unknown)
+    std::uint64_t enote_ledger_index{static_cast<std::uint64_t>(-1)};
+    /// origin status (off-chain by default)
+    SpEnoteOriginStatus origin_status{SpEnoteOriginStatus::OFFCHAIN};
+
+    /// associated memo field (none by default)
+    TxExtra memo{};
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(block_index);
+        FIELD(block_timestamp);
+        FIELD(transaction_id);
+        FIELD(enote_tx_index);
+        FIELD(enote_ledger_index);
+        FIELD(origin_status);
+    END_SERIALIZE();
+};
+
 ////
 // SpEnoteSpentContextV1
 // - info related to where an enote was spent
@@ -126,6 +154,26 @@ struct SpEnoteSpentContextV1 final
     /// spent status (unspent by default)
     SpEnoteSpentStatus spent_status{SpEnoteSpentStatus::UNSPENT};
 };
+
+struct ser_SpEnoteSpentContextV1 final
+{
+    /// block index of tx where it was spent (-1 if unspent or index is unknown)
+    std::uint64_t block_index{static_cast<std::uint64_t>(-1)};
+    /// timestamp of tx's block (-1 if timestamp is unknown)
+    std::uint64_t block_timestamp{static_cast<std::uint64_t>(-1)};
+    /// tx id of the tx where it was spent (0 if unspent or tx is unknown)
+    rct::key transaction_id{rct::zero()};
+    /// spent status (unspent by default)
+    SpEnoteSpentStatus spent_status{SpEnoteSpentStatus::UNSPENT};
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(block_index);
+        FIELD(block_timestamp);
+        FIELD(transaction_id);
+        FIELD(spent_status);
+    END_SERIALIZE();
+};
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////// Legacy ////////////////////////////////////////////////////
@@ -156,6 +204,19 @@ struct LegacyContextualIntermediateEnoteRecordV1 final
     SpEnoteOriginContextV1 origin_context;
 };
 
+struct ser_LegacyContextualIntermediateEnoteRecordV1 final
+{
+    /// intermediate info about the enote
+    ser_LegacyIntermediateEnoteRecord record;
+    /// info about where the enote was found
+    ser_SpEnoteOriginContextV1 origin_context;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(record);
+        FIELD(origin_context);
+    END_SERIALIZE();
+};
+
 /// get the record's onetime address
 const rct::key& onetime_address_ref(const LegacyContextualIntermediateEnoteRecordV1 &record);
 /// get the record's amount
@@ -173,6 +234,22 @@ struct LegacyContextualEnoteRecordV1 final
     SpEnoteOriginContextV1 origin_context;
     /// info about where the enote was spent
     SpEnoteSpentContextV1 spent_context;
+};
+
+struct ser_LegacyContextualEnoteRecordV1 final
+{
+    /// info about the enote
+    ser_LegacyEnoteRecord record;
+    /// info about where the enote was found
+    ser_SpEnoteOriginContextV1 origin_context;
+    /// info about where the enote was spent
+    ser_SpEnoteSpentContextV1 spent_context;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(record);
+        FIELD(origin_context);
+        FIELD(spent_context);
+    END_SERIALIZE();
 };
 
 /// get the record's key image
@@ -226,6 +303,22 @@ struct SpContextualEnoteRecordV1 final
     SpEnoteOriginContextV1 origin_context;
     /// info about where the enote was spent
     SpEnoteSpentContextV1 spent_context;
+};
+
+struct ser_SpContextualEnoteRecordV1 final
+{
+    /// info about the enote
+    ser_SpEnoteRecordV1 record;
+    /// info about where the enote was found
+    ser_SpEnoteOriginContextV1 origin_context;
+    /// info about where the enote was spent
+    ser_SpEnoteSpentContextV1 spent_context;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(record);
+        FIELD(origin_context);
+        FIELD(spent_context);
+    END_SERIALIZE();
 };
 
 /// get the record's key image

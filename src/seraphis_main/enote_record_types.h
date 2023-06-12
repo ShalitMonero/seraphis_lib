@@ -97,6 +97,38 @@ struct LegacyIntermediateEnoteRecord final
     std::uint64_t unlock_time;
 };
 
+struct ser_LegacyIntermediateEnoteRecord final
+{
+    /// original enote
+    LegacyEnoteVariant enote;
+    /// the enote's ephemeral pubkey
+    rct::key enote_ephemeral_pubkey;
+    /// enote view privkey = [address: Hn(r K^v, t)] [subaddress (i): Hn(r K^{v,i}, t) + Hn(k^v, i)]
+    crypto::secret_key enote_view_extension;
+    /// a: amount
+    rct::xmr_amount amount;
+    /// x: amount blinding factor
+    crypto::secret_key amount_blinding_factor;
+    /// i: legacy address index (if true, then it's owned by a subaddress)
+    boost::optional<cryptonote::subaddress_index> address_index;
+    /// t: the enote's index in its transaction
+    std::uint64_t tx_output_index;
+    /// u: the enote's unlock time
+    std::uint64_t unlock_time;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(enote);
+        FIELD(enote_ephemeral_pubkey);
+        FIELD(enote_view_extension);
+        FIELD(amount);
+        FIELD(amount_blinding_factor);
+        FIELD(address_index);
+        FIELD(tx_output_index);
+        FIELD(unlock_time);
+    END_SERIALIZE();
+
+};
+
 ////
 // LegacyEnoteRecord
 // - a cryptonote/ringct enote that has been view-key scanned + key image computed
@@ -121,6 +153,40 @@ struct LegacyEnoteRecord final
     std::uint64_t tx_output_index;
     /// u: the enote's unlock time
     std::uint64_t unlock_time;
+};
+
+struct ser_LegacyEnoteRecord final
+{
+    /// original enote
+    LegacyEnoteVariant enote;
+    /// the enote's ephemeral pubkey
+    rct::key enote_ephemeral_pubkey;
+    /// enote view privkey = [address: Hn(r K^v, t)] [subaddress (i): Hn(r K^{v,i}, t) + Hn(k^v, i)]
+    crypto::secret_key enote_view_extension;
+    /// a: amount
+    rct::xmr_amount amount;
+    /// x: amount blinding factor
+    crypto::secret_key amount_blinding_factor;
+    /// KI: key image
+    crypto::key_image key_image;
+    /// i: legacy address index (if true, then it's owned by a subaddress)
+    boost::optional<cryptonote::subaddress_index> address_index;
+    /// t: the enote's index in its transaction
+    std::uint64_t tx_output_index;
+    /// u: the enote's unlock time
+    std::uint64_t unlock_time;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(enote);
+        FIELD(enote_ephemeral_pubkey);
+        FIELD(enote_view_extension);
+        FIELD(amount);
+        FIELD(amount_blinding_factor);
+        FIELD(key_image);
+        FIELD(address_index);
+        FIELD(tx_output_index);
+        FIELD(unlock_time);
+    END_SERIALIZE();
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,6 +257,46 @@ struct SpEnoteRecordV1 final
     jamtis::address_index_t address_index;
     /// jamtis enote type
     jamtis::JamtisEnoteType type;
+};
+
+struct ser_SpEnoteRecordV1 final
+{
+    /// original enote
+    SpEnoteVariant enote;
+    /// the enote's ephemeral pubkey
+    crypto::x25519_pubkey enote_ephemeral_pubkey;
+    /// context of the tx input(s) associated with this enote
+    rct::key input_context;
+    /// k_{g, sender} + k_{g, address}: enote view extension for G component
+    crypto::secret_key enote_view_extension_g;
+    /// k_{x, sender} + k_{x, address}: enote view extension for X component (excludes k_vb)
+    crypto::secret_key enote_view_extension_x;
+    /// k_{u, sender} + k_{u, address}: enote view extension for U component (excludes k_m)
+    crypto::secret_key enote_view_extension_u;
+    /// a: amount
+    rct::xmr_amount amount;
+    /// x: amount blinding factor
+    crypto::secret_key amount_blinding_factor;
+    /// KI: key image
+    crypto::key_image key_image;
+    /// j: jamtis address index
+    jamtis::address_index_t address_index;
+    /// jamtis enote type
+    jamtis::JamtisEnoteType type;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(enote);
+        FIELD(enote_ephemeral_pubkey);
+        FIELD(input_context);
+        FIELD(enote_view_extention_g);
+        FIELD(enote_view_extension_x);
+        FIELD(enote_view_extension_u);
+        FIELD(amount);
+        FIELD(amount_blinding_factor);
+        FIELD(key_image);
+        FIELD(address_index);
+        FIELD(type);
+    END_SERIALIZE();
 };
 
 } //namespace sp

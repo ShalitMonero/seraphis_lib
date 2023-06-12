@@ -39,6 +39,7 @@
 #include "seraphis_main/sp_knowledge_proof_types.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_impl/serialization_demo_types.h"
+#include "encrypt_file.h"
 
 //third party headers
 #include "boost/range/iterator_range.hpp"
@@ -121,4 +122,38 @@ void recover_sp_transaction_store_v1(const ser_SpTransactionStoreV1 &ser_tx_stor
     tx_store.confirmed_txids = ser_tx_store.confirmed_txids;
     tx_store.unconfirmed_txids = ser_tx_store.unconfirmed_txids;
     tx_store.offchain_txids = ser_tx_store.offchain_txids;
+}
+
+void make_serializable_enote_store(const SpEnoteStore* enote, ser_EnoteStoreV1* ser_enote) {
+    const std::unordered_map<rct::key, sp::LegacyContextualEnoteRecordV1> contextual_enote_records = enote->legacy_records();
+
+    for(auto record : contextual_enote_records) { 
+        ser_enote->m_legacy_contextual_enote_records.emplace(record);
+    }
+
+    for(auto record : enote->legacy_intermediate_records()) {
+        ser_enote->m_legacy_intermediate_contextual_enote_records.emplace(record);
+    }
+
+    for(auto record : enote->legacy_intermediate_records()) {
+        ser_enote->m_legacy_intermediate_contextual_enote_records.emplace(record);
+    }  
+
+    for(auto record : enote->legacy_key_images()) {
+        ser_enote->m_legacy_key_images.emplace(record);
+    }
+    
+    for(auto record : enote->sp_records()) {
+        ser_enote->m_sp_contextual_enote_records.emplace(record);
+    }
+
+    for(auto record : enote->legacy_onetime_address_identifier_map()) {
+        ser_enote->m_tracked_legacy_onetime_address_duplicates.emplace(record);
+    }
+
+    write_encrypted_file("enote_store", "enote_store1", ser_enote);
+}
+
+void recover_serializable_enote_store(const SpEnoteStore* enote, const ser_EnoteStoreV1* ser_enote) {
+    
 }
